@@ -1,5 +1,5 @@
-import { ByteOrder, type Schema } from "./schemas/type";
-import { gif } from "./schemas/app/gif";
+import { ByteOrder, type ParseSchema } from "./type";
+import { gif_ps } from "../app/gif/parse";
 
 type Numeric = number;
 
@@ -17,7 +17,7 @@ type ParseState = {
   breakLoop: boolean;
 };
 
-function createState(buffer: ArrayBuffer, schema: Schema): ParseState {
+function createState(buffer: ArrayBuffer, schema: ParseSchema): ParseState {
   return {
     view: new DataView(buffer),
     offset: 0,
@@ -105,13 +105,13 @@ function evalRef(state: ParseState, id: string): any {
   const scope = getCurrentScope(state);
   const inScope = resolvePath(scope, id);
   if (inScope !== undefined) return inScope;
+  // 再次尝试从模板参数栈解析（统一 ref 语义可引用模板参数）
+  if (state.paramsStack.length > 0) {
+    const topParams = state.paramsStack[state.paramsStack.length - 1];
+    const inParams = topParams[id];
+    if (inParams !== undefined) return inParams;
+  }
   return resolvePath(state.root, id);
-}
-
-function evalParamRef(state: ParseState, id: string): any {
-  if (state.paramsStack.length === 0) return undefined;
-  const top = state.paramsStack[state.paramsStack.length - 1];
-  return top[id];
 }
 
 function ensureNumber(value: any): number {
@@ -123,7 +123,6 @@ function ensureNumber(value: any): number {
 
 type ExpressionTerm =
   | { type: "ref"; id: string }
-  | { type: "param_ref"; id: string }
   | { type: "uint_literal"; value: number }
   | { type: "op"; value: "pow" | "+" | "eq" }
   | { type: "expr"; expr: ExpressionTerm[] };
@@ -132,8 +131,6 @@ function evalTerm(state: ParseState, term: ExpressionTerm): any {
   switch (term.type) {
     case "ref":
       return evalRef(state, term.id);
-    case "param_ref":
-      return evalParamRef(state, term.id);
     case "uint_literal":
       return term.value;
     case "expr":
@@ -204,7 +201,7 @@ function parseBitfieldToObject(byteValue: number, spec: Array<any>): any {
   return result;
 }
 
-function parseSpecList(state: ParseState, targetObj: any, specList: any[], schema: Schema): void {
+function parseSpecList(state: ParseState, targetObj: any, specList: any[], schema: ParseSchema): void {
   for (const node of specList) {
     if (state.breakLoop) return;
     switch (node.type) {
@@ -283,11 +280,10 @@ function parseSpecList(state: ParseState, targetObj: any, specList: any[], schem
         if (node.params) {
           const entries = Object.entries(node.params) as Array<[
             string,
-            { type: "ref" | "param_ref"; id: string }
+            { type: "ref"; id: string }
           ]>;
           for (const [k, v] of entries) {
             if (v.type === "ref") params[k] = ensureNumber(evalRef(state, v.id));
-            else if (v.type === "param_ref") params[k] = ensureNumber(evalParamRef(state, v.id));
           }
         }
         state.paramsStack.push(params);
@@ -347,7 +343,7 @@ function parseSpecList(state: ParseState, targetObj: any, specList: any[], schem
   }
 }
 
-export function parseWithSchema(buffer: ArrayBuffer, schema: Schema): any {
+export function parseWithSchema(buffer: ArrayBuffer, schema: ParseSchema): any {
   const state = createState(buffer, schema);
   // 读取 GIF 签名跳过，由 schema 自身控制
   const spec = schema.spec;
@@ -356,7 +352,7 @@ export function parseWithSchema(buffer: ArrayBuffer, schema: Schema): any {
 }
 
 export function parseGif(buffer: ArrayBuffer): any {
-  return parseWithSchema(buffer, gif);
+  return parseWithSchema(buffer, gif_ps);
 }
 
  

@@ -1,6 +1,7 @@
-import { ByteOrder, type Schema } from "../type";
+import { type ParseSchema, ByteOrder } from "../../parse/type";
 
-export const gif: Schema = {
+
+export const gif_ps: ParseSchema = {
   config: {
     byte_order: ByteOrder.LittleEndian,
   },
@@ -43,7 +44,7 @@ export const gif: Schema = {
                 type: "expr",
                 expr: [
                   {
-                    type: "param_ref",
+                    type: "ref",
                     id: "size_flag_id",
                   },
                   {
@@ -208,6 +209,7 @@ export const gif: Schema = {
                     { type: "skip", length: 1 }, // Block Size (固定为 11)
                     { type: "ascii", id: "app_identifier", length: 8 }, // e.g., "NETSCAPE"
                     { type: "ascii", id: "app_auth_code", length: 3 }, // e.g., "2.0"
+
                     // Data Sub-blocks for loop count
                     { type: "skip", length: 1 }, // Sub-block Size (固定为 3)
                     { type: "skip", length: 1 }, // Sub-block Index (固定为 1)
@@ -218,7 +220,30 @@ export const gif: Schema = {
                     },
                     { type: "skip", length: 1 }, // Block Terminator (0x00)
                   ],
-                  // 其他扩展 (Comment, Plain Text) 可以类似定义，或直接跳过
+                  // 注释扩展 (Comment Extension)
+                  0xfe: [
+                    {
+                      type: "template_ref",
+                      id: "data_sub_blocks",
+                    },
+                  ],
+                  // 纯文本扩展 (Plain Text Extension)
+                  0x01: [
+                    { type: "skip", length: 1 }, // Block Size (12)
+                    { type: "uint", id: "text_grid_left", length: 2 },
+                    { type: "uint", id: "text_grid_top", length: 2 },
+                    { type: "uint", id: "text_grid_width", length: 2 },
+                    { type: "uint", id: "text_grid_height", length: 2 },
+                    { type: "uint", id: "char_cell_width", length: 1 },
+                    { type: "uint", id: "char_cell_height", length: 1 },
+                    { type: "uint", id: "text_fg_color_index", length: 1 },
+                    { type: "uint", id: "text_bg_color_index", length: 1 },
+                    {
+                      type: "template_ref",
+                      id: "data_sub_blocks",
+                    },
+                  ],
+                  // 其他扩展可以类似定义，或直接跳过
                   default: [
                     {
                       type: "template_ref",

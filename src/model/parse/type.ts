@@ -2,13 +2,7 @@
 // Expressions
 // =================================================================
 
-type Ref = { type: "ref"; id: string };
-type ParamRef = { type: "param_ref"; id: string };
-type UintLiteral = { type: "uint_literal"; value: number };
-type Operator = { type: "op"; value: "pow" | "+" | "eq" };
-
-type ExpressionTerm = Ref | ParamRef | UintLiteral | Operator | Expression;
-type Expression = { type: "expr"; expr: ExpressionTerm[] };
+import type { Ref, Expression } from "../base";
 
 // =================================================================
 // Base Spec Nodes
@@ -69,7 +63,7 @@ type TemplateRefNode = {
   type: "template_ref";
   id: string;
   params?: {
-    [key: string]: Ref | ParamRef;
+    [key: string]: Ref;
   };
 };
 
@@ -125,7 +119,7 @@ type Template = {
   spec: SpecNode[] | SpecNode;
 };
 
-export type Schema = {
+export type ParseSchema = {
   config: {
     byte_order: number;
   };
