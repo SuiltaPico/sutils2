@@ -1,15 +1,8 @@
 import { For, onMount, createEffect } from "solid-js";
 import type { JSX } from "solid-js";
 import type { DisplayNode, DisplaySchema } from "./type";
-import type {
-  ExpressionTerm,
-  Expression,
-  Ref,
-  UintLiteral,
-  TextLiteral,
-  Operator,
-  Call,
-} from "../base";
+import { type ExpressionTerm, type Expression, type Ref, type Operator, type Call, ExpressionType, type UintLiteral, type TextLiteral } from "../base";
+import { ensureNumber, resolvePath, applyOp, evalExpressionWith } from "../expr";
 
 // ============================
 // 显示层表达式求值（与解析层分离）
@@ -43,13 +36,6 @@ export function registerFunction(name: string, fn: (...args: any[]) => any) {
   functionRegistry[name] = fn;
 }
 
-function ensureNumber(value: any): number {
-  if (typeof value === "number") return value;
-  if (typeof value === "boolean") return value ? 1 : 0;
-  if (typeof value === "string") return Number(value);
-  return Number(value);
-}
-
 function evalRef(ctx: EvalContext, ref: Ref): any {
   const id = ref.id;
   if (id.startsWith("$.")) {
@@ -60,47 +46,22 @@ function evalRef(ctx: EvalContext, ref: Ref): any {
   return resolvePath(ctx.variables, id);
 }
 
-function resolvePath(obj: any, path: string): any {
-  if (!obj) return undefined;
-  const parts = path.split(".").filter(Boolean);
-  let cur = obj;
-  for (const p of parts) {
-    if (cur == null) return undefined;
-    cur = (cur as any)[p];
-  }
-  return cur;
-}
-
-function applyOp(op: Operator["value"], left: any, right: any): any {
-  if (op === "+") return ensureNumber(left) + ensureNumber(right);
-  if (op === "*") return ensureNumber(left) * ensureNumber(right);
-  if (op === "pow") return Math.pow(ensureNumber(left), ensureNumber(right));
-  if (op === "eq") return ensureNumber(left) === ensureNumber(right);
-  if (op === "access") {
-    // 访问对象属性
-    if (right == null) return undefined;
-    const key = typeof right === "string" ? right : String(right);
-    if (left == null) return undefined;
-    return (left as any)[key];
-  }
-  throw new Error(`不支持的操作符: ${op}`);
-}
 
 export function evalTerm(ctx: EvalContext, term: ExpressionTerm): any {
   switch (term.type) {
-    case "ref":
+    case ExpressionType.Ref:
       return evalRef(ctx, term as Ref);
-    case "uint_literal":
+    case ExpressionType.UintLiteral:
       return (term as UintLiteral).value;
-    case "text_literal":
+    case ExpressionType.TextLiteral:
       return (term as TextLiteral).value;
-    case "boolean_literal":
+    case ExpressionType.BooleanLiteral:
       return (term as any).value as boolean;
-    case "expr":
+    case ExpressionType.Expression:
       return evalExpression(ctx, (term as Expression).expr);
-    case "op":
+    case ExpressionType.Operator:
       return (term as Operator).value; // 由上层处理
-    case "match": {
+    case ExpressionType.MatchExpr: {
       const cond = evalTerm(ctx, (term as any).condition);
       const cases = (term as any).cases as any[];
       for (const c of cases || []) {
@@ -135,32 +96,24 @@ function evalCall(ctx: EvalContext, callee: any, call: Call): any {
   return undefined;
 }
 
-export function evalExpression(
-  ctx: EvalContext,
-  expr: Expression["expr"]
-): any {
-  if (!expr || expr.length === 0) return undefined;
-  let acc = evalTerm(ctx, expr[0] as ExpressionTerm);
-  let i = 1;
-  while (i < expr.length) {
-    const term: any = expr[i];
-    if (term.type === "op") {
-      const rightTerm = expr[i + 1] as ExpressionTerm;
-      const op = (term as Operator).value;
-      const right = evalTerm(ctx, rightTerm);
-      acc = applyOp(op, acc, right);
-      i += 2;
-      continue;
-    }
-    if (term.type === "call") {
-      acc = evalCall(ctx, acc, term as Call);
-      i += 1;
-      continue;
-    }
-    // 遇到非操作符且非调用，语法不支持（避免静默错误）
-    throw new Error("表达式语法错误，未知项: " + String(term?.type));
-  }
-  return acc;
+export function evalExpression(ctx: EvalContext, expr: Expression["expr"]): any {
+  return evalExpressionWith(
+    {
+      getRef: (id: string) => resolvePath(ctx.variables, id.startsWith("$.") ? id.slice(2) : id),
+      call: (callee: any, call: Call, _evalTerm, _evalExpr) => {
+        const args = (call.children || []).map((child) =>
+          (child as any).type === "expr" ? _evalExpr((child as Expression).expr) : _evalTerm(child as ExpressionTerm)
+        );
+        if (typeof callee === "function") return callee(...args);
+        if (typeof callee === "string") {
+          const fn = (ctx.variables as any)[callee];
+          if (typeof fn === "function") return fn(...args);
+        }
+        return undefined;
+      },
+    },
+    expr
+  );
 }
 
 function clampToByte(n: any): number {
@@ -189,7 +142,7 @@ function renderNode(
   }
   if (node.type === "if") {
     const cond =
-      node.condition.type === "expr"
+      node.condition.type === ExpressionType.Expression
         ? evalExpression(ctx, (node.condition as Expression).expr)
         : evalTerm(ctx, node.condition as ExpressionTerm);
     if (cond) {
@@ -205,7 +158,7 @@ function renderNode(
   }
   if (node.type === "text_map") {
     const value =
-      node.provider.type === "expr"
+      node.provider.type === ExpressionType.Expression
         ? evalExpression(ctx, (node.provider as Expression).expr)
         : evalTerm(ctx, node.provider as ExpressionTerm);
     return <span class={node.class ?? ""}>{String(value ?? "")}</span>;
@@ -215,15 +168,15 @@ function renderNode(
   }
   if (node.type === "rgb_color_map") {
     const r =
-      node.r_provider.type === "expr"
+      node.r_provider.type === ExpressionType.Expression
         ? evalExpression(ctx, (node.r_provider as Expression).expr)
         : evalTerm(ctx, node.r_provider as ExpressionTerm);
     const g =
-      node.g_provider.type === "expr"
+      node.g_provider.type === ExpressionType.Expression
         ? evalExpression(ctx, (node.g_provider as Expression).expr)
         : evalTerm(ctx, node.g_provider as ExpressionTerm);
     const b =
-      node.b_provider.type === "expr"
+      node.b_provider.type === ExpressionType.Expression
         ? evalExpression(ctx, (node.b_provider as Expression).expr)
         : evalTerm(ctx, node.b_provider as ExpressionTerm);
     const hex = `#${toHex2(clampToByte(r))}${toHex2(clampToByte(g))}${toHex2(
@@ -233,7 +186,7 @@ function renderNode(
   }
   if (node.type === "list_map") {
     const listValue =
-      node.provider.type === "expr"
+      node.provider.type === ExpressionType.Expression
         ? evalExpression(ctx, (node.provider as Expression).expr)
         : evalTerm(ctx, node.provider as ExpressionTerm);
     const items = Array.isArray(listValue) ? listValue : [];
@@ -262,7 +215,7 @@ function renderNode(
   }
   if (node.type === "text_match_map") {
     const value =
-      node.provider.type === "expr"
+      node.provider.type === ExpressionType.Expression
         ? evalExpression(ctx, (node.provider as Expression).expr)
         : evalTerm(ctx, node.provider as ExpressionTerm);
     let text: string | undefined = undefined;
@@ -281,7 +234,7 @@ function renderNode(
   }
   if (node.type === "check_box_map") {
     const value =
-      node.provider.type === "expr"
+      node.provider.type === ExpressionType.Expression
         ? evalExpression(ctx, (node.provider as Expression).expr)
         : evalTerm(ctx, node.provider as ExpressionTerm);
     const checked = Boolean(value);

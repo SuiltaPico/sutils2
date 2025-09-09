@@ -1,3 +1,4 @@
+import { ExpressionType } from "../../base";
 import type { DisplaySchema, Template } from "../../display/type";
 
 export const enum GifBlock {
@@ -20,14 +21,14 @@ const color_table_template: Template = {
       children: [
         {
           type: "list_map",
-          provider: { type: "ref", id: "color_table" },
+          provider: { type: ExpressionType.Ref, id: "color_table" },
           item_param: "item",
           children: [
             {
               type: "rgb_color_map",
-              r_provider: { type: "ref", id: "item.r" },
-              g_provider: { type: "ref", id: "item.g" },
-              b_provider: { type: "ref", id: "item.b" },
+              r_provider: { type: ExpressionType.Ref, id: "item.r" },
+              g_provider: { type: ExpressionType.Ref, id: "item.g" },
+              b_provider: { type: ExpressionType.Ref, id: "item.b" },
             },
           ],
         },
@@ -50,7 +51,7 @@ const app_extension_template: Template = {
         {
           type: "text_map",
           provider: {
-            type: "ref",
+            type: ExpressionType.Ref,
             id: "item.app_identifier",
           },
         },
@@ -63,7 +64,7 @@ const app_extension_template: Template = {
         {
           type: "text_map",
           provider: {
-            type: "ref",
+            type: ExpressionType.Ref,
             id: "item.app_auth_code",
           },
         },
@@ -75,7 +76,7 @@ const app_extension_template: Template = {
         { type: "text", value: "循环次数：" },
         {
           type: "text_match_map",
-          provider: { type: "ref", id: "item.loop_count" },
+          provider: { type: ExpressionType.Ref, id: "item.loop_count" },
           text_matcher: { 0: "无限" },
         },
       ],
@@ -101,7 +102,7 @@ const graphic_control_extension_template: Template = {
         {
           type: "text_match_map",
           provider: {
-            type: "ref",
+            type: ExpressionType.Ref,
             id: "item.disposal_method",
           },
           text_matcher: {
@@ -120,7 +121,7 @@ const graphic_control_extension_template: Template = {
         {
           type: "check_box_map",
           provider: {
-            type: "ref",
+            type: ExpressionType.Ref,
             id: "item.user_input_flag",
           },
         },
@@ -133,7 +134,7 @@ const graphic_control_extension_template: Template = {
         {
           type: "check_box_map",
           provider: {
-            type: "ref",
+            type: ExpressionType.Ref,
             id: "item.transparent_color_flag",
           },
         },
@@ -146,11 +147,11 @@ const graphic_control_extension_template: Template = {
         {
           type: "text_map",
           provider: {
-            type: "expr",
+            type: ExpressionType.Expression,
             expr: [
-              { type: "ref", id: "item.delay_time" },
-              { type: "op", value: "*" },
-              { type: "uint_literal", value: 10 },
+              { type: ExpressionType.Ref, id: "item.delay_time" },
+              { type: ExpressionType.Operator, value: "*" },
+              { type: ExpressionType.UintLiteral, value: 10 },
             ],
           },
         },
@@ -164,7 +165,7 @@ const graphic_control_extension_template: Template = {
         {
           type: "text_map",
           provider: {
-            type: "ref",
+            type: ExpressionType.Ref,
             id: "item.transparent_color_index",
           },
         },
@@ -203,22 +204,22 @@ const plain_text_extension_template: Template = {
         { type: "text", value: "文本网格：" },
         {
           type: "text_map",
-          provider: { type: "ref", id: "item.text_grid_width" },
+          provider: { type: ExpressionType.Ref, id: "item.text_grid_width" },
         },
         { type: "text", value: "x" },
         {
           type: "text_map",
-          provider: { type: "ref", id: "item.text_grid_height" },
+          provider: { type: ExpressionType.Ref, id: "item.text_grid_height" },
         },
         { type: "text", value: " @ (" },
         {
           type: "text_map",
-          provider: { type: "ref", id: "item.text_grid_left" },
+          provider: { type: ExpressionType.Ref, id: "item.text_grid_left" },
         },
         { type: "text", value: ", " },
         {
           type: "text_map",
-          provider: { type: "ref", id: "item.text_grid_top" },
+          provider: { type: ExpressionType.Ref, id: "item.text_grid_top" },
         },
         { type: "text", value: ")" },
       ],
@@ -229,12 +230,12 @@ const plain_text_extension_template: Template = {
         { type: "text", value: "字符网格：" },
         {
           type: "text_map",
-          provider: { type: "ref", id: "item.char_cell_width" },
+          provider: { type: ExpressionType.Ref, id: "item.char_cell_width" },
         },
         { type: "text", value: "x" },
         {
           type: "text_map",
-          provider: { type: "ref", id: "item.char_cell_height" },
+          provider: { type: ExpressionType.Ref, id: "item.char_cell_height" },
         },
       ],
     },
@@ -244,7 +245,10 @@ const plain_text_extension_template: Template = {
         { type: "text", value: "前景颜色索引：" },
         {
           type: "text_map",
-          provider: { type: "ref", id: "item.text_fg_color_index" },
+          provider: {
+            type: ExpressionType.Ref,
+            id: "item.text_fg_color_index",
+          },
         },
       ],
     },
@@ -254,7 +258,10 @@ const plain_text_extension_template: Template = {
         { type: "text", value: "背景颜色索引：" },
         {
           type: "text_map",
-          provider: { type: "ref", id: "item.text_bg_color_index" },
+          provider: {
+            type: ExpressionType.Ref,
+            id: "item.text_bg_color_index",
+          },
         },
       ],
     },
@@ -275,7 +282,7 @@ const image_data_template: Template = {
         {
           type: "text_map",
           provider: {
-            type: "ref",
+            type: ExpressionType.Ref,
             id: "item.image_width",
           },
         },
@@ -283,7 +290,7 @@ const image_data_template: Template = {
         {
           type: "text_map",
           provider: {
-            type: "ref",
+            type: ExpressionType.Ref,
             id: "item.image_height",
           },
         },
@@ -296,7 +303,7 @@ const image_data_template: Template = {
         {
           type: "text_map",
           provider: {
-            type: "ref",
+            type: ExpressionType.Ref,
             id: "item.image_left",
           },
         },
@@ -304,7 +311,7 @@ const image_data_template: Template = {
         {
           type: "text_map",
           provider: {
-            type: "ref",
+            type: ExpressionType.Ref,
             id: "item.image_top",
           },
         },
@@ -318,7 +325,7 @@ const image_data_template: Template = {
         {
           type: "check_box_map",
           provider: {
-            type: "ref",
+            type: ExpressionType.Ref,
             id: "item.local_color_table_flag",
           },
         },
@@ -331,7 +338,7 @@ const image_data_template: Template = {
         {
           type: "check_box_map",
           provider: {
-            type: "ref",
+            type: ExpressionType.Ref,
             id: "item.sort_flag",
           },
         },
@@ -344,7 +351,7 @@ const image_data_template: Template = {
         {
           type: "text_map",
           provider: {
-            type: "ref",
+            type: ExpressionType.Ref,
             id: "item.size_of_local_color_table",
           },
         },
@@ -352,14 +359,17 @@ const image_data_template: Template = {
     },
     {
       type: "if",
-      condition: { type: "ref", id: "item.local_color_table_flag" },
+      condition: {
+        type: ExpressionType.Ref,
+        id: "item.local_color_table_flag",
+      },
       children: [
         { type: "text", value: "局部颜色表：" },
         {
           type: "template_ref",
           id: "color_table",
           params: {
-            color_table: { type: "ref", id: "item.color_table" },
+            color_table: { type: ExpressionType.Ref, id: "item.color_table" },
           },
         },
       ],
@@ -371,7 +381,7 @@ const image_data_template: Template = {
         {
           type: "check_box_map",
           provider: {
-            type: "ref",
+            type: ExpressionType.Ref,
             id: "item.interlace_flag",
           },
         },
@@ -383,7 +393,10 @@ const image_data_template: Template = {
         { type: "text", value: "最小码字长度：" },
         {
           type: "text_map",
-          provider: { type: "ref", id: "item.lzw_minimum_code_size" },
+          provider: {
+            type: ExpressionType.Ref,
+            id: "item.lzw_minimum_code_size",
+          },
         },
       ],
     },
@@ -394,12 +407,12 @@ const image_data_template: Template = {
         {
           type: "text_map",
           provider: {
-            type: "expr",
+            type: ExpressionType.Expression,
             expr: [
-              { type: "ref", id: "list::size" },
+              { type: ExpressionType.Ref, id: "list::size" },
               {
-                type: "call",
-                children: [{ type: "ref", id: "item.sub_blocks" }],
+                type: ExpressionType.Call,
+                children: [{ type: ExpressionType.Ref, id: "item.sub_blocks" }],
               },
             ],
           },
@@ -415,41 +428,59 @@ const image_data_template: Template = {
       children: [
         {
           type: "gif_image_map",
-          width_provider: { type: "ref", id: "item.image_width" },
-          height_provider: { type: "ref", id: "item.image_height" },
-          interlace_provider: { type: "ref", id: "item.interlace_flag" },
+          width_provider: { type: ExpressionType.Ref, id: "item.image_width" },
+          height_provider: {
+            type: ExpressionType.Ref,
+            id: "item.image_height",
+          },
+          interlace_provider: {
+            type: ExpressionType.Ref,
+            id: "item.interlace_flag",
+          },
           lzw_min_code_size_provider: {
-            type: "ref",
+            type: ExpressionType.Ref,
             id: "item.lzw_minimum_code_size",
           },
-          sub_blocks_provider: { type: "ref", id: "item.sub_blocks" },
+          sub_blocks_provider: {
+            type: ExpressionType.Ref,
+            id: "item.sub_blocks",
+          },
           transparent_index_provider: {
-            type: "expr",
+            type: ExpressionType.Expression,
             expr: [
-              { type: "ref", id: "gif::find_gce_prop" },
+              { type: ExpressionType.Ref, id: "gif::find_gce_prop" },
               {
-                type: "call",
+                type: ExpressionType.Call,
                 children: [
-                  { type: "ref", id: "input.blocks" },
-                  { type: "ref", id: "idx" },
-                  { type: "text_literal", value: "transparent_color_index" },
+                  { type: ExpressionType.Ref, id: "input.blocks" },
+                  { type: ExpressionType.Ref, id: "idx" },
+                  {
+                    type: ExpressionType.TextLiteral,
+                    value: "transparent_color_index",
+                  },
                 ],
               },
             ],
           },
           palette_provider: {
-            type: "match",
-            condition: { type: "ref", id: "item.local_color_table_flag" },
+            type: ExpressionType.MatchExpr,
+            condition: {
+              type: ExpressionType.Ref,
+              id: "item.local_color_table_flag",
+            },
             cases: [
               {
-                type: "case",
-                item: { type: "boolean_literal", value: true },
-                children: { type: "ref", id: "item.color_table" },
+                type: ExpressionType.MatchCase,
+                item: { type: ExpressionType.BooleanLiteral, value: true },
+                children: { type: ExpressionType.Ref, id: "item.color_table" },
               },
               {
-                type: "case",
-                item: { type: "boolean_literal", value: false },
-                children: { type: "ref", id: "global_color_table" },
+                type: ExpressionType.MatchCase,
+                item: { type: ExpressionType.BooleanLiteral, value: false },
+                children: {
+                  type: ExpressionType.Ref,
+                  id: "global_color_table",
+                },
               },
             ],
           },
@@ -478,7 +509,7 @@ const block_template: Template = {
               type: "text_match_map",
               class: "font-bold",
               provider: {
-                type: "ref",
+                type: ExpressionType.Ref,
                 id: "item.block_introducer",
               },
               text_matcher: {
@@ -491,11 +522,14 @@ const block_template: Template = {
         {
           type: "if",
           condition: {
-            type: "expr",
+            type: ExpressionType.Expression,
             expr: [
-              { type: "ref", id: "item.extension_label" },
-              { type: "op", value: "eq" },
-              { type: "uint_literal", value: GifExtension.Application },
+              { type: ExpressionType.Ref, id: "item.extension_label" },
+              { type: ExpressionType.Operator, value: "eq" },
+              {
+                type: ExpressionType.UintLiteral,
+                value: GifExtension.Application,
+              },
             ],
           },
           children: [
@@ -504,7 +538,7 @@ const block_template: Template = {
               id: "app_extension",
               params: {
                 item: {
-                  type: "ref",
+                  type: ExpressionType.Ref,
                   id: "item",
                 },
               },
@@ -514,11 +548,14 @@ const block_template: Template = {
         {
           type: "if",
           condition: {
-            type: "expr",
+            type: ExpressionType.Expression,
             expr: [
-              { type: "ref", id: "item.extension_label" },
-              { type: "op", value: "eq" },
-              { type: "uint_literal", value: GifExtension.GraphicControl },
+              { type: ExpressionType.Ref, id: "item.extension_label" },
+              { type: ExpressionType.Operator, value: "eq" },
+              {
+                type: ExpressionType.UintLiteral,
+                value: GifExtension.GraphicControl,
+              },
             ],
           },
           children: [
@@ -526,7 +563,7 @@ const block_template: Template = {
               type: "template_ref",
               id: "graphic_control_extension",
               params: {
-                item: { type: "ref", id: "item" },
+                item: { type: ExpressionType.Ref, id: "item" },
               },
             },
           ],
@@ -534,11 +571,11 @@ const block_template: Template = {
         {
           type: "if",
           condition: {
-            type: "expr",
+            type: ExpressionType.Expression,
             expr: [
-              { type: "ref", id: "item.extension_label" },
-              { type: "op", value: "eq" },
-              { type: "uint_literal", value: GifExtension.Comment },
+              { type: ExpressionType.Ref, id: "item.extension_label" },
+              { type: ExpressionType.Operator, value: "eq" },
+              { type: ExpressionType.UintLiteral, value: GifExtension.Comment },
             ],
           },
           children: [
@@ -546,7 +583,7 @@ const block_template: Template = {
               type: "template_ref",
               id: "comment_extension",
               params: {
-                item: { type: "ref", id: "item" },
+                item: { type: ExpressionType.Ref, id: "item" },
               },
             },
           ],
@@ -554,11 +591,14 @@ const block_template: Template = {
         {
           type: "if",
           condition: {
-            type: "expr",
+            type: ExpressionType.Expression,
             expr: [
-              { type: "ref", id: "item.extension_label" },
-              { type: "op", value: "eq" },
-              { type: "uint_literal", value: GifExtension.PlainText },
+              { type: ExpressionType.Ref, id: "item.extension_label" },
+              { type: ExpressionType.Operator, value: "eq" },
+              {
+                type: ExpressionType.UintLiteral,
+                value: GifExtension.PlainText,
+              },
             ],
           },
           children: [
@@ -566,7 +606,7 @@ const block_template: Template = {
               type: "template_ref",
               id: "plain_text_extension",
               params: {
-                item: { type: "ref", id: "item" },
+                item: { type: ExpressionType.Ref, id: "item" },
               },
             },
           ],
@@ -574,11 +614,11 @@ const block_template: Template = {
         {
           type: "if",
           condition: {
-            type: "expr",
+            type: ExpressionType.Expression,
             expr: [
-              { type: "ref", id: "item.block_introducer" },
-              { type: "op", value: "eq" },
-              { type: "uint_literal", value: GifBlock.Image },
+              { type: ExpressionType.Ref, id: "item.block_introducer" },
+              { type: ExpressionType.Operator, value: "eq" },
+              { type: ExpressionType.UintLiteral, value: GifBlock.Image },
             ],
           },
           children: [
@@ -586,9 +626,12 @@ const block_template: Template = {
               type: "template_ref",
               id: "image_data",
               params: {
-                item: { type: "ref", id: "item" },
-                global_color_table: { type: "ref", id: "global_color_table" },
-                idx: { type: "ref", id: "idx" },
+                item: { type: ExpressionType.Ref, id: "item" },
+                global_color_table: {
+                  type: ExpressionType.Ref,
+                  id: "global_color_table",
+                },
+                idx: { type: ExpressionType.Ref, id: "idx" },
               },
             },
           ],
@@ -628,7 +671,7 @@ export const gif_ds: DisplaySchema = {
                 { type: "text", value: "版本：" },
                 {
                   type: "text_map",
-                  provider: { type: "ref", id: "input.version" },
+                  provider: { type: ExpressionType.Ref, id: "input.version" },
                 },
               ],
             },
@@ -638,12 +681,12 @@ export const gif_ds: DisplaySchema = {
                 { type: "text", value: "尺寸：" },
                 {
                   type: "text_map",
-                  provider: { type: "ref", id: "input.width" },
+                  provider: { type: ExpressionType.Ref, id: "input.width" },
                 },
                 { type: "text", value: "x" },
                 {
                   type: "text_map",
-                  provider: { type: "ref", id: "input.height" },
+                  provider: { type: ExpressionType.Ref, id: "input.height" },
                 },
               ],
             },
@@ -654,7 +697,7 @@ export const gif_ds: DisplaySchema = {
                 {
                   type: "check_box_map",
                   provider: {
-                    type: "ref",
+                    type: ExpressionType.Ref,
                     id: "input.global_color_table_flag",
                   },
                 },
@@ -666,7 +709,10 @@ export const gif_ds: DisplaySchema = {
                 { type: "text", value: "背景色索引：" },
                 {
                   type: "text_map",
-                  provider: { type: "ref", id: "input.background_color_index" },
+                  provider: {
+                    type: ExpressionType.Ref,
+                    id: "input.background_color_index",
+                  },
                 },
               ],
             },
@@ -676,7 +722,10 @@ export const gif_ds: DisplaySchema = {
                 { type: "text", value: "像素纵横比：" },
                 {
                   type: "text_match_map",
-                  provider: { type: "ref", id: "input.pixel_aspect_ratio" },
+                  provider: {
+                    type: ExpressionType.Ref,
+                    id: "input.pixel_aspect_ratio",
+                  },
                   text_matcher: { 0: "未指定" } as any,
                 },
               ],
@@ -688,11 +737,14 @@ export const gif_ds: DisplaySchema = {
                 {
                   type: "text_map",
                   provider: {
-                    type: "expr",
+                    type: ExpressionType.Expression,
                     expr: [
-                      { type: "ref", id: "input.color_resolution_flag" },
-                      { type: "op", value: "+" },
-                      { type: "uint_literal", value: 1 },
+                      {
+                        type: ExpressionType.Ref,
+                        id: "input.color_resolution_flag",
+                      },
+                      { type: ExpressionType.Operator, value: "+" },
+                      { type: ExpressionType.UintLiteral, value: 1 },
                     ],
                   },
                 },
@@ -705,7 +757,10 @@ export const gif_ds: DisplaySchema = {
                 { type: "text", value: "全局颜色表排序：" },
                 {
                   type: "check_box_map",
-                  provider: { type: "ref", id: "input.sorted_flag" },
+                  provider: {
+                    type: ExpressionType.Ref,
+                    id: "input.sorted_flag",
+                  },
                 },
               ],
             },
@@ -716,16 +771,19 @@ export const gif_ds: DisplaySchema = {
                 {
                   type: "text_map",
                   provider: {
-                    type: "expr",
+                    type: ExpressionType.Expression,
                     expr: [
-                      { type: "uint_literal", value: 2 },
-                      { type: "op", value: "pow" },
+                      { type: ExpressionType.UintLiteral, value: 2 },
+                      { type: ExpressionType.Operator, value: "pow" },
                       {
-                        type: "expr",
+                        type: ExpressionType.Expression,
                         expr: [
-                          { type: "ref", id: "input.color_table_size_flag" },
-                          { type: "op", value: "+" },
-                          { type: "uint_literal", value: 1 },
+                          {
+                            type: ExpressionType.Ref,
+                            id: "input.color_table_size_flag",
+                          },
+                          { type: ExpressionType.Operator, value: "+" },
+                          { type: ExpressionType.UintLiteral, value: 1 },
                         ],
                       },
                     ],
@@ -738,7 +796,10 @@ export const gif_ds: DisplaySchema = {
         },
         {
           type: "if",
-          condition: { type: "ref", id: "input.global_color_table_flag" },
+          condition: {
+            type: ExpressionType.Ref,
+            id: "input.global_color_table_flag",
+          },
           children: [
             {
               type: "column",
@@ -750,7 +811,10 @@ export const gif_ds: DisplaySchema = {
                   type: "template_ref",
                   id: "color_table",
                   params: {
-                    color_table: { type: "ref", id: "input.color_table" },
+                    color_table: {
+                      type: ExpressionType.Ref,
+                      id: "input.color_table",
+                    },
                   },
                 },
               ],
@@ -769,7 +833,7 @@ export const gif_ds: DisplaySchema = {
               children: [
                 {
                   type: "list_map",
-                  provider: { type: "ref", id: "input.blocks" },
+                  provider: { type: ExpressionType.Ref, id: "input.blocks" },
                   item_param: "item",
                   index_param: "idx",
                   children: [
@@ -777,10 +841,10 @@ export const gif_ds: DisplaySchema = {
                       type: "template_ref",
                       id: "block",
                       params: {
-                        item: { type: "ref", id: "item" },
-                        idx: { type: "ref", id: "idx" },
+                        item: { type: ExpressionType.Ref, id: "item" },
+                        idx: { type: ExpressionType.Ref, id: "idx" },
                         global_color_table: {
-                          type: "ref",
+                          type: ExpressionType.Ref,
                           id: "input.color_table",
                         },
                       },

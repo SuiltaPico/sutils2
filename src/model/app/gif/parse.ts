@@ -1,5 +1,5 @@
+import { ExpressionType } from "../../base";
 import { type ParseSchema, ByteOrder } from "../../parse/type";
-
 
 export const gif_ps: ParseSchema = {
   config: {
@@ -30,29 +30,29 @@ export const gif_ps: ParseSchema = {
             },
           ],
           count: {
-            type: "expr",
+            type: ExpressionType.Expression,
             expr: [
               {
-                type: "uint_literal",
+                type: ExpressionType.UintLiteral,
                 value: 2,
               },
               {
-                type: "op",
+                type: ExpressionType.Operator,
                 value: "pow",
               },
               {
-                type: "expr",
+                type: ExpressionType.Expression,
                 expr: [
                   {
-                    type: "ref",
+                    type: ExpressionType.Ref,
                     id: "size_flag_id",
                   },
                   {
-                    type: "op",
+                    type: ExpressionType.Operator,
                     value: "+",
                   },
                   {
-                    type: "uint_literal",
+                    type: ExpressionType.UintLiteral,
                     value: 1,
                   },
                 ],
@@ -68,11 +68,11 @@ export const gif_ps: ParseSchema = {
         type: "list",
         id: "sub_blocks",
         read_until: {
-          type: "expr",
+          type: ExpressionType.Expression,
           expr: [
-            { type: "ref", id: "$.size" },
-            { type: "op", value: "eq" },
-            { type: "uint_literal", value: 0 },
+            { type: ExpressionType.Ref, id: "$.size" },
+            { type: ExpressionType.Operator, value: "eq" },
+            { type: ExpressionType.UintLiteral, value: 0 },
           ],
         },
         items: [
@@ -80,7 +80,7 @@ export const gif_ps: ParseSchema = {
           {
             type: "bytes",
             id: "data",
-            length: { type: "ref", id: "size" },
+            length: { type: ExpressionType.Ref, id: "size" },
           },
         ],
       },
@@ -147,13 +147,16 @@ export const gif_ps: ParseSchema = {
     // ---- 全局颜色表 ----
     {
       type: "if",
-      condition: { type: "ref", id: "global_color_table_flag" },
+      condition: { type: ExpressionType.Ref, id: "global_color_table_flag" },
       spec: [
         {
           type: "template_ref",
           id: "color_table",
           params: {
-            size_flag_id: { type: "ref", id: "color_table_size_flag" },
+            size_flag_id: {
+              type: ExpressionType.Ref,
+              id: "color_table_size_flag",
+            },
           },
         },
       ],
@@ -170,14 +173,14 @@ export const gif_ps: ParseSchema = {
         },
         {
           type: "switch",
-          on: { type: "ref", id: "block_introducer" },
+          on: { type: ExpressionType.Ref, id: "block_introducer" },
           cases: {
             // Case 1: 扩展块 (Extension Block)
             0x21: [
               { type: "uint", id: "extension_label", length: 1 },
               {
                 type: "switch",
-                on: { type: "ref", id: "extension_label" },
+                on: { type: ExpressionType.Ref, id: "extension_label" },
                 cases: {
                   // 图形控制扩展 (Graphics Control Extension)
                   0xf9: [
@@ -290,14 +293,17 @@ export const gif_ps: ParseSchema = {
               // ---- 局部颜色表 (Local Color Table) - 可选 ----
               {
                 type: "if",
-                condition: { type: "ref", id: "local_color_table_flag" },
+                condition: {
+                  type: ExpressionType.Ref,
+                  id: "local_color_table_flag",
+                },
                 spec: [
                   {
                     type: "template_ref",
                     id: "color_table",
                     params: {
                       size_flag_id: {
-                        type: "ref",
+                        type: ExpressionType.Ref,
                         id: "size_of_local_color_table",
                       },
                     },

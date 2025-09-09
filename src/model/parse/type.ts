@@ -57,6 +57,7 @@ type ListNode = {
   items: SpecNode[];
   count?: Expression;
   read_until?: Expression;
+  push_condition?: Expression;
 };
 
 type TemplateRefNode = {
@@ -69,7 +70,8 @@ type TemplateRefNode = {
 
 type IfNode = {
   type: "if";
-  condition: Ref;
+  // 升级为支持表达式条件
+  condition: Ref | Expression;
   spec: SpecNode[];
 };
 
@@ -85,6 +87,33 @@ type LoopListNode = {
   type: "loop_list";
   id: string;
   spec: SpecNode[];
+  push_condition?: Expression;
+};
+
+// 自定义节点：读取扫描数据直到遇到下一个真正的标记（0xFF 后跟非 0x00 且非 RSTn）
+type ReadUntilMarkerNode = {
+  type: "read_until_marker";
+  id: string;
+};
+
+// 更通用：读取直到遇到指定前缀，且前缀后的下一个字节不在“透传集合/区间”中；
+// 满足终止条件时停在前缀处（不消耗）。
+type ReadUntilPrefixedNode = {
+  type: "read_until_prefixed";
+  id: string;
+  prefix: number;
+  // 若遇到 prefix 后的 next 字节命中以下集合或区间，则将 (prefix,next) 作为数据吞掉并继续；
+  // 例如 JPEG 的 0x00 stuffed、0xD0..0xD7 RSTn
+  next_passthrough_values?: number[];
+  next_passthrough_ranges?: Array<{ from: number; to: number }>;
+};
+
+// 在进入该循环时记录起始 offset，重复解析子 spec，直到消费的字节数 >= length_expr
+type LoopUntilConsumedNode = {
+  type: "loop_until_consumed";
+  id: string;
+  spec: SpecNode[];
+  length_expr: Expression;
 };
 
 // =================================================================
@@ -103,7 +132,10 @@ type SpecNode =
   | IfNode
   | SwitchNode
   | LoopListNode
-  | BreakLoopNode;
+  | BreakLoopNode
+  | ReadUntilMarkerNode
+  | ReadUntilPrefixedNode
+  | LoopUntilConsumedNode;
 
 // =================================================================
 // Template and Schema structure
