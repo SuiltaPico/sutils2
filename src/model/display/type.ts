@@ -81,6 +81,13 @@ export type TableOfRows = {
   columns: Array<{ key: string; title: string; width?: string }>;
 };
 
+export type PreBlockMap = {
+  type: "pre_block_map";
+  class?: string;
+  provider: ExpressionTerm; // string
+  max_height?: string; // e.g., '320px'
+};
+
 export type Collapse = {
   type: "collapse";
   class?: string;
@@ -112,6 +119,14 @@ export type GIFImageMap = {
   transparent_index_provider?: ExpressionTerm;
 };
 
+export type PDFImageMap = {
+  type: "pdf_image_map";
+  class?: string;
+  /** 表达式求值为 data URL 字符串 */
+  url_provider: ExpressionTerm;
+  style?: string;
+};
+
 export type DisplayNode =
   | Text
   | Row
@@ -125,6 +140,8 @@ export type DisplayNode =
   | RGBColorMap
   | TemplateRef
   | GIFImageMap
+  | PDFImageMap
+  | PreBlockMap
   | TableMap
   | TableOfRows
   | Collapse;

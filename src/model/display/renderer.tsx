@@ -242,6 +242,17 @@ function renderNode(
         : evalTerm(ctx, node.provider as ExpressionTerm);
     return <span class={node.class ?? ""}>{String(value ?? "")}</span>;
   }
+  if (node.type === "pre_block_map") {
+    const value =
+      (node as any).provider?.type === ExpressionType.Expression
+        ? evalExpression(ctx, ((node as any).provider as any).expr)
+        : evalTerm(ctx, (node as any).provider);
+    const text = String(value ?? "");
+    const mh = (node as any).max_height || "320px";
+    return (
+      <pre class={(node as any).class ?? "text-xs p-2 bg-[#fafafa] border rounded"} style={`max-height:${mh}; overflow:auto; white-space:pre-wrap; word-break:break-word;`}>{text}</pre>
+    );
+  }
   if (node.type === "info_text") {
     return renderNode(node.value, ctx, schema);
   }

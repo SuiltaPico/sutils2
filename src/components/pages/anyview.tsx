@@ -19,6 +19,9 @@ import { png_ps } from "../../model/app/png/parse";
 import { jpeg_ps } from "../../model/app/jpeg/parse";
 import { wav_ps } from "../../model/app/wav/parse";
 import { mp4_ps } from "../../model/app/mp4/parse";
+import { pdf_ds } from "../../model/app/pdf/display";
+import { register_pdf } from "../../model/app/pdf/register";
+import { pdf_ps } from "../../model/app/pdf/parse";
 
 register_gif();
 register_png();
@@ -26,6 +29,7 @@ register_jpeg();
 register_wav();
 register_mp4();
 register_mkv();
+register_pdf();
 
 export function parseGif(buffer: ArrayBuffer): any {
   return parseWithSchema(buffer, gif_ps);
@@ -59,6 +63,13 @@ const AnyViewPage = () => {
 
   const parseBufferByMagic = (buf: ArrayBuffer) => {
     const bytes = new Uint8Array(buf);
+    const isPdf =
+      bytes.length >= 5 &&
+      bytes[0] === 0x25 && // '%'
+      bytes[1] === 0x50 && // 'P'
+      bytes[2] === 0x44 && // 'D'
+      bytes[3] === 0x46 && // 'F'
+      bytes[4] === 0x2d; // '-'
     const isPng =
       bytes.length >= 8 &&
       bytes[0] === 0x89 &&
@@ -99,6 +110,13 @@ const AnyViewPage = () => {
       bytes[2] === 0xdf &&
       bytes[3] === 0xa3;
 
+    if (isPdf) {
+      const parsed = parseWithSchema(buf, pdf_ps);
+      console.log("[AnyView] PDF 解析结果:", parsed);
+      setSchema(pdf_ds);
+      setResult(parsed);
+      return;
+    }
     if (isPng) {
       const parsed = parsePng(buf);
       console.log("[AnyView] PNG 解析结果:", parsed);
@@ -173,7 +191,7 @@ const AnyViewPage = () => {
       <div style="display: flex; align-items: baseline; justify-content: space-between;">
         <div>
           <h2 style="margin: 0; font-size: 18px; font-weight: 600;">AnyView 文件查看器</h2>
-          <div style="opacity: 0.7; font-size: 12px;">支持 PNG / GIF / JPEG / WAV / MP4 / WebM / MKV</div>
+          <div style="opacity: 0.7; font-size: 12px;">支持 PDF / PNG / GIF / JPEG / WAV / MP4 / WebM / MKV</div>
         </div>
         <button
           type="button"
@@ -218,7 +236,7 @@ const AnyViewPage = () => {
             ref={(el: HTMLInputElement) => (fileInputRef = el)}
             type="file"
             onChange={onFileChange}
-            accept=".png,.gif,.jpg,.jpeg,.wav,.mp4,.m4a,.webm,.mkv"
+            accept=".pdf,.png,.gif,.jpg,.jpeg,.wav,.mp4,.m4a,.webm,.mkv"
             style="display: none;"
           />
           <button
