@@ -2,6 +2,7 @@ export const enum ExpressionType {
   Ref = 0x0000,
   UintLiteral,
   TextLiteral,
+  NilLiteral,
   BooleanLiteral,
   Operator,
   Call,
@@ -13,13 +14,26 @@ export const enum ExpressionType {
 export type Ref = { type: ExpressionType.Ref; id: string };
 export type UintLiteral = { type: ExpressionType.UintLiteral; value: number };
 export type TextLiteral = { type: ExpressionType.TextLiteral; value: string };
+export type NilLiteral = { type: ExpressionType.NilLiteral };
 export type BooleanLiteral = {
   type: ExpressionType.BooleanLiteral;
   value: boolean;
 };
 export type Operator = {
   type: ExpressionType.Operator;
-  value: "pow" | "+" | "-" | "*" | "/" | "eq" | "gt" | "lt" | "ge" | "le" | "access";
+  value:
+    | "pow"
+    | "+"
+    | "-"
+    | "*"
+    | "/"
+    | "eq"
+    | "ne"
+    | "gt"
+    | "lt"
+    | "ge"
+    | "le"
+    | "access";
 };
 export type Call = { type: ExpressionType.Call; children: ExpressionTerm[] };
 export type MatchCase = {
@@ -40,6 +54,7 @@ export type ExpressionTerm =
   | Ref
   | UintLiteral
   | TextLiteral
+  | NilLiteral
   | BooleanLiteral
   | Operator
   | Expression

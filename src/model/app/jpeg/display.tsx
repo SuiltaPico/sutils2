@@ -20,10 +20,13 @@ const segment_template: Template = {
                 type: ExpressionType.Expression,
                 expr: [
                   { type: ExpressionType.Ref, id: "jpeg::to_hex" },
-                  { type: ExpressionType.Call, children: [
-                    { type: ExpressionType.Ref, id: "seg.marker" },
-                    { type: ExpressionType.UintLiteral, value: 2 },
-                  ] },
+                  {
+                    type: ExpressionType.Call,
+                    children: [
+                      { type: ExpressionType.Ref, id: "seg.marker" },
+                      { type: ExpressionType.UintLiteral, value: 2 },
+                    ],
+                  },
                 ],
               },
             },
@@ -34,9 +37,10 @@ const segment_template: Template = {
                 type: ExpressionType.Expression,
                 expr: [
                   { type: ExpressionType.Ref, id: "jpeg::marker_name" },
-                  { type: ExpressionType.Call, children: [
-                    { type: ExpressionType.Ref, id: "seg.marker" },
-                  ] },
+                  {
+                    type: ExpressionType.Call,
+                    children: [{ type: ExpressionType.Ref, id: "seg.marker" }],
+                  },
                 ],
               },
             },
@@ -86,7 +90,10 @@ const segment_template: Template = {
                 { type: "text", value: "分量：" },
                 {
                   type: "text_map",
-                  provider: { type: ExpressionType.Ref, id: "seg.num_components" },
+                  provider: {
+                    type: ExpressionType.Ref,
+                    id: "seg.num_components",
+                  },
                 },
               ],
             },
@@ -107,26 +114,66 @@ const segment_template: Template = {
                     { type: "text", value: "  id=" },
                     {
                       type: "text_map",
-                      provider: { type: ExpressionType.Ref, id: "c.component_id" },
+                      provider: {
+                        type: ExpressionType.Ref,
+                        id: "c.component_id",
+                      },
+                    },
+                    { type: "text", value: "  名称=" },
+                    {
+                      type: "text_map",
+                      provider: {
+                        type: ExpressionType.Expression,
+                        expr: [
+                          {
+                            type: ExpressionType.Ref,
+                            id: "jpeg::component_name",
+                          },
+                          {
+                            type: ExpressionType.Call,
+                            children: [
+                              {
+                                type: ExpressionType.Ref,
+                                id: "c.component_id",
+                              },
+                            ],
+                          },
+                        ],
+                      },
                     },
                     { type: "text", value: "  采样=" },
                     {
                       type: "text_map",
-                      provider: { type: ExpressionType.Ref, id: "c.h_sampling" },
+                      provider: {
+                        type: ExpressionType.Ref,
+                        id: "c.h_sampling",
+                      },
                     },
                     { type: "text", value: "x" },
                     {
                       type: "text_map",
-                      provider: { type: ExpressionType.Ref, id: "c.v_sampling" },
+                      provider: {
+                        type: ExpressionType.Ref,
+                        id: "c.v_sampling",
+                      },
                     },
                     { type: "text", value: "  QTbl=" },
                     {
                       type: "text_map",
-                      provider: { type: ExpressionType.Ref, id: "c.quant_table_id" },
+                      provider: {
+                        type: ExpressionType.Ref,
+                        id: "c.quant_table_id",
+                      },
                     },
                   ],
                 },
               ],
+            },
+            {
+              type: "text",
+              class: "text-xs text-gray-600",
+              value:
+                "提示：通常亮度(Y)组件使用量化表 ID=0，色度(Cb/Cr)组件使用 ID=1（但不绝对，以 SOF 中各组件的 QTbl 字段为准）。",
             },
           ],
         },
@@ -172,18 +219,31 @@ const segment_template: Template = {
                 { type: "text", value: "版本：" },
                 {
                   type: "text_map",
-                  provider: { type: ExpressionType.Ref, id: "seg.version_major" },
+                  provider: {
+                    type: ExpressionType.Ref,
+                    id: "seg.version_major",
+                  },
                 },
                 { type: "text", value: "." },
                 {
                   type: "text_map",
-                  provider: { type: ExpressionType.Ref, id: "seg.version_minor" },
+                  provider: {
+                    type: ExpressionType.Ref,
+                    id: "seg.version_minor",
+                  },
                 },
                 { type: "text", value: "  密度单位：" },
                 {
                   type: "text_match_map",
-                  provider: { type: ExpressionType.Ref, id: "seg.density_units" },
-                  text_matcher: { 0: "无单位", 1: "每英寸", 2: "每厘米" } as any,
+                  provider: {
+                    type: ExpressionType.Ref,
+                    id: "seg.density_units",
+                  },
+                  text_matcher: {
+                    0: "无单位",
+                    1: "每英寸",
+                    2: "每厘米",
+                  } as any,
                 },
                 { type: "text", value: "  像素密度：" },
                 {
@@ -243,34 +303,70 @@ const segment_template: Template = {
                     { type: "text", value: " ID: " },
                     {
                       type: "text_map",
-                      provider: { type: ExpressionType.Ref, id: "tbl.table_id" },
+                      provider: {
+                        type: ExpressionType.Ref,
+                        id: "tbl.table_id",
+                      },
                     },
                     { type: "text", value: " 精度: " },
                     {
                       type: "text_match_map",
-                      provider: { type: ExpressionType.Ref, id: "tbl.precision" },
+                      provider: {
+                        type: ExpressionType.Ref,
+                        id: "tbl.precision",
+                      },
                       text_matcher: { 0: "8-bit", 1: "16-bit" } as any,
                     },
-                  ],
-                },
-                {
-                  type: "row",
-                  children: [
-                    { type: "text", value: "值(前16): " },
+                    { type: "text", value: "  被引用于组件: " },
                     {
                       type: "text_map",
                       provider: {
                         type: ExpressionType.Expression,
                         expr: [
-                          { type: ExpressionType.Ref, id: "jpeg::bytes_preview_hex" },
-                          { type: ExpressionType.Call, children: [
-                            { type: ExpressionType.Ref, id: "tbl.values" },
-                            { type: ExpressionType.UintLiteral, value: 16 },
-                          ] },
+                          {
+                            type: ExpressionType.Ref,
+                            id: "jpeg::components_using_qtbl",
+                          },
+                          {
+                            type: ExpressionType.Call,
+                            children: [
+                              {
+                                type: ExpressionType.Ref,
+                                id: "input.segments",
+                              },
+                              { type: ExpressionType.Ref, id: "tbl.table_id" },
+                            ],
+                          },
                         ],
                       },
                     },
                   ],
+                },
+                {
+                  type: "text",
+                  class: "text-sm text-gray-600",
+                  value:
+                    "下表为 8×8 频率分量的量化步长（左上低频 → 右下高频，值越大压缩越强）。列/行头为频率索引 0..7。",
+                },
+                {
+                  type: "table_map",
+                  class: "mt-1",
+                  auto_headers: true,
+                  heatmap: true,
+                  axis_labels: { row: "v", col: "u" } as any,
+                  show_coord_title: true,
+                  provider: {
+                    type: ExpressionType.Expression,
+                    expr: [
+                      { type: ExpressionType.Ref, id: "jpeg::dezigzag" },
+                      {
+                        type: ExpressionType.Call,
+                        children: [
+                          { type: ExpressionType.Ref, id: "tbl.values" },
+                        ],
+                      },
+                    ],
+                  },
                 },
               ],
             },
@@ -316,21 +412,49 @@ const segment_template: Template = {
                   ],
                 },
                 {
-                  type: "row",
-                  children: [
-                    { type: "text", value: "码长统计: " },
+                  type: "collapse",
+                  title: "展开查看完整哈夫曼码表",
+                  summary: [
                     {
-                      type: "text_map",
+                      type: "row",
+                      children: [
+                        { type: "text", value: "码长统计: " },
+                        {
+                          type: "text_map",
+                          provider: {
+                            type: ExpressionType.Expression,
+                            expr: [
+                              { type: ExpressionType.Ref, id: "jpeg::bytes_preview_hex" },
+                              { type: ExpressionType.Call, children: [
+                                { type: ExpressionType.Ref, id: "tbl.counts" },
+                                { type: ExpressionType.UintLiteral, value: 16 },
+                              ] },
+                            ],
+                          },
+                        },
+                      ],
+                    },
+                  ],
+                  details: [
+                    { type: "text", class: "text-sm text-gray-600", value: "根据 BITS/HUFFVAL 生成的码表：" },
+                    {
+                      type: "table_of_rows",
+                      class: "mt-1",
                       provider: {
                         type: ExpressionType.Expression,
                         expr: [
-                          { type: ExpressionType.Ref, id: "jpeg::bytes_preview_hex" },
+                          { type: ExpressionType.Ref, id: "jpeg::generate_huffman_codes" },
                           { type: ExpressionType.Call, children: [
-                            { type: ExpressionType.Ref, id: "tbl.counts" },
-                            { type: ExpressionType.UintLiteral, value: 16 },
+                            { type: ExpressionType.Ref, id: "tbl" },
                           ] },
                         ],
                       },
+                      columns: [
+                        { key: "length", title: "码长" } as any,
+                        { key: "code", title: "哈夫曼码" } as any,
+                        { key: "symbol_hex", title: "符号值" } as any,
+                        { key: "meaning", title: "含义", width: "240px" } as any,
+                      ] as any,
                     },
                   ],
                 },
@@ -362,7 +486,9 @@ const segment_template: Template = {
                       { type: ExpressionType.Ref, id: "jpeg::payload_len" },
                       {
                         type: ExpressionType.Call,
-                        children: [{ type: ExpressionType.Ref, id: "seg.payload" }],
+                        children: [
+                          { type: ExpressionType.Ref, id: "seg.payload" },
+                        ],
                       },
                     ],
                   },
@@ -383,7 +509,9 @@ const segment_template: Template = {
                       { type: ExpressionType.Ref, id: "jpeg::bytes_to_ascii" },
                       {
                         type: ExpressionType.Call,
-                        children: [{ type: ExpressionType.Ref, id: "seg.payload" }],
+                        children: [
+                          { type: ExpressionType.Ref, id: "seg.payload" },
+                        ],
                       },
                     ],
                   },
@@ -419,17 +547,23 @@ const segment_template: Template = {
                     type: ExpressionType.Expression,
                     expr: [
                       { type: ExpressionType.Ref, id: "jpeg::to_hex" },
-                      { type: ExpressionType.Call, children: [
-                        { type: ExpressionType.Ref, id: "seg.tiff_magic" },
-                        { type: ExpressionType.UintLiteral, value: 4 },
-                      ] },
+                      {
+                        type: ExpressionType.Call,
+                        children: [
+                          { type: ExpressionType.Ref, id: "seg.tiff_magic" },
+                          { type: ExpressionType.UintLiteral, value: 4 },
+                        ],
+                      },
                     ],
                   },
                 },
                 { type: "text", value: "  IFD0 偏移：" },
                 {
                   type: "text_map",
-                  provider: { type: ExpressionType.Ref, id: "seg.tiff_ifd0_offset" },
+                  provider: {
+                    type: ExpressionType.Ref,
+                    id: "seg.tiff_ifd0_offset",
+                  },
                 },
               ],
             },
@@ -453,7 +587,10 @@ const segment_template: Template = {
                 { type: "text", value: "扫描数据长度：" },
                 {
                   type: "text_map",
-                  provider: { type: ExpressionType.Ref, id: "seg.scan_data.length" },
+                  provider: {
+                    type: ExpressionType.Ref,
+                    id: "seg.scan_data.length",
+                  },
                 },
                 { type: "text", value: " 字节" },
               ],
@@ -486,7 +623,9 @@ const segment_template: Template = {
                       { type: ExpressionType.Ref, id: "jpeg::payload_len" },
                       {
                         type: ExpressionType.Call,
-                        children: [{ type: ExpressionType.Ref, id: "seg.payload" }],
+                        children: [
+                          { type: ExpressionType.Ref, id: "seg.payload" },
+                        ],
                       },
                     ],
                   },
@@ -502,7 +641,10 @@ const segment_template: Template = {
                   provider: {
                     type: ExpressionType.Expression,
                     expr: [
-                      { type: ExpressionType.Ref, id: "jpeg::bytes_preview_hex" },
+                      {
+                        type: ExpressionType.Ref,
+                        id: "jpeg::bytes_preview_hex",
+                      },
                       {
                         type: ExpressionType.Call,
                         children: [
@@ -538,10 +680,13 @@ export const jpeg_ds: DisplaySchema = {
             type: ExpressionType.Expression,
             expr: [
               { type: ExpressionType.Ref, id: "jpeg::to_hex" },
-              { type: ExpressionType.Call, children: [
-                { type: ExpressionType.Ref, id: "input.soi_ff" },
-                { type: ExpressionType.UintLiteral, value: 2 },
-              ] },
+              {
+                type: ExpressionType.Call,
+                children: [
+                  { type: ExpressionType.Ref, id: "input.soi_ff" },
+                  { type: ExpressionType.UintLiteral, value: 2 },
+                ],
+              },
             ],
           },
         },
@@ -552,10 +697,13 @@ export const jpeg_ds: DisplaySchema = {
             type: ExpressionType.Expression,
             expr: [
               { type: ExpressionType.Ref, id: "jpeg::to_hex" },
-              { type: ExpressionType.Call, children: [
-                { type: ExpressionType.Ref, id: "input.soi_d8" },
-                { type: ExpressionType.UintLiteral, value: 2 },
-              ] },
+              {
+                type: ExpressionType.Call,
+                children: [
+                  { type: ExpressionType.Ref, id: "input.soi_d8" },
+                  { type: ExpressionType.UintLiteral, value: 2 },
+                ],
+              },
             ],
           },
         },

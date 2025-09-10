@@ -1,4 +1,5 @@
 import { For, onMount, createEffect } from "solid-js";
+import { createSignal, Show } from "solid-js";
 import type { JSX } from "solid-js";
 import type { DisplayNode, DisplaySchema } from "./type";
 import { type ExpressionTerm, type Expression, type Ref, type Operator, type Call, ExpressionType, type UintLiteral, type TextLiteral } from "../base";
@@ -139,6 +140,84 @@ function renderNode(
   if (external) return external(node, ctx, schema);
   if (node.type === "text") {
     return <span class={node.class ?? ""}>{node.value}</span>;
+  }
+  if (node.type === "table_map") {
+    const matrix =
+      (node as any).provider?.type === ExpressionType.Expression
+        ? evalExpression(ctx, ((node as any).provider as any).expr)
+        : evalTerm(ctx, (node as any).provider);
+    const rows: any[] = Array.isArray(matrix) ? matrix : [];
+    const auto = Boolean((node as any).auto_headers);
+    const cols = rows.length > 0 && Array.isArray(rows[0]) ? (rows[0] as any[]).length : 0;
+    const heatmap = Boolean((node as any).heatmap);
+    const axisLabels = (node as any).axis_labels || {};
+    const showCoordTitle = Boolean((node as any).show_coord_title);
+    // 计算 heatmap 范围
+    let minV = Infinity;
+    let maxV = -Infinity;
+    if (heatmap) {
+      for (const r of rows) {
+        if (!Array.isArray(r)) continue;
+        for (const v of r) {
+          const n = Number(v);
+          if (!Number.isFinite(n)) continue;
+          if (n < minV) minV = n;
+          if (n > maxV) maxV = n;
+        }
+      }
+      if (!Number.isFinite(minV)) minV = 0;
+      if (!Number.isFinite(maxV)) maxV = 1;
+      if (maxV === minV) maxV = minV + 1;
+    }
+    const colorFor = (n: any) => {
+      if (!heatmap) return undefined as any;
+      const v = Number(n);
+      const t = (v - minV) / (maxV - minV);
+      // 黑白灰度：高值更暗（突出强量化区域）
+      const lum = Math.round(255 * (1 - t));
+      const textColor = lum < 80 ? '#fff' : '#000';
+      return `background-color: rgb(${lum},${lum},${lum}); color: ${textColor};`;
+    };
+    return (
+      <table class={node.class ?? "border-collapse text-xs"} style="border: 1px solid #ccc;">
+        <tbody>
+          {auto && (
+            <tr>
+              <td></td>
+              <For each={[...Array(cols).keys()] as any}>
+                {(ci: number) => {
+                  const label = axisLabels.col ? `${axisLabels.col} ${ci}` : String(ci);
+                  return (
+                    <td style="border:1px solid #ddd;padding:2px 4px;min-width:20px;text-align:center;font-weight:600;">{label}</td>
+                  );
+                }}
+              </For>
+            </tr>
+          )}
+          <For each={rows}>
+            {(r: any[], ri) => {
+              const rowIndex = typeof ri === "function" ? ri() : (ri as any);
+              return (
+                <tr>
+                  {auto && (
+                    <td style="border:1px solid #ddd;padding:2px 4px;min-width:20px;text-align:center;font-weight:600;">{axisLabels.row ? `${axisLabels.row} ${rowIndex}` : String(rowIndex)}</td>
+                  )}
+                  <For each={Array.isArray(r) ? r : []}>
+                    {(cell, ci) => {
+                      const colIndex = typeof ci === "function" ? ci() : (ci as any);
+                      const title = showCoordTitle ? `${rowIndex},${colIndex}: ${String(cell)}` : undefined;
+                      return (
+                        <td title={title} style={`border:1px solid #ddd;padding:2px 4px;min-width:20px;text-align:right;${colorFor(cell) || ""}`}>{String(cell)}</td>
+                      );
+                    }}
+                  </For>
+                </tr>
+              );
+            }}
+          </For>
+        </tbody>
+      </table>
+    );
   }
   if (node.type === "if") {
     const cond =
@@ -286,6 +365,61 @@ function renderNode(
           {(child) => renderNode(child, tplCtx, schema)}
         </For>
       </>
+    );
+  }
+  if (node.type === "table_of_rows") {
+    const list =
+      (node as any).provider?.type === ExpressionType.Expression
+        ? evalExpression(ctx, ((node as any).provider as any).expr)
+        : evalTerm(ctx, (node as any).provider);
+    const rows = Array.isArray(list) ? list : [];
+    const cols = (node as any).columns || [];
+    return (
+      <table class={node.class ?? "border-collapse text-xs"} style="border: 1px solid #ccc;">
+        <thead>
+          <tr>
+            <For each={cols}>
+              {(c: any) => (
+                <th style={`border:1px solid #ddd;padding:2px 4px;text-align:left;${c.width ? `width:${c.width};` : ""}`}>{c.title}</th>
+              )}
+            </For>
+          </tr>
+        </thead>
+        <tbody>
+          <For each={rows}>
+            {(r: any) => (
+              <tr>
+                <For each={cols}>
+                  {(c: any) => (
+                    <td style="border:1px solid #ddd;padding:2px 4px;">{String((r ?? {})[c.key] ?? "")}</td>
+                  )}
+                </For>
+              </tr>
+            )}
+          </For>
+        </tbody>
+      </table>
+    );
+  }
+  if (node.type === "collapse") {
+    const [open, setOpen] = createSignal(Boolean((node as any).default_open));
+    return (
+      <div class={node.class ?? "flex flex-col gap-2"}>
+        <div class="flex items-center gap-2">
+          <button class="px-2 py-1 border rounded text-xs" onClick={() => setOpen(!open())}>
+            {open() ? "收起" : "展开"}
+          </button>
+          {node.title && <span class="text-sm text-gray-700">{node.title}</span>}
+        </div>
+        <div>
+          <For each={node.summary}>{(child) => renderNode(child, ctx, schema)}</For>
+        </div>
+        <Show when={open()}>
+          <div>
+            <For each={node.details}>{(child) => renderNode(child, ctx, schema)}</For>
+          </div>
+        </Show>
+      </div>
     );
   }
   // 其他类型返回空

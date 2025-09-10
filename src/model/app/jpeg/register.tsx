@@ -152,6 +152,99 @@ export function register_jpeg() {
     });
     return chars.join("");
   });
+
+  // 返回使用指定量化表 ID 的组件列表（基于最近一次 SOF 段）
+  registerFunction(
+    "jpeg::components_using_qtbl",
+    (segments: any[], tableId: number): string => {
+      if (!Array.isArray(segments)) return "未知";
+      // 找到最后一个 SOF0/SOF2 段（通常 SOF 只出现一次）
+      const sof = [...segments].reverse().find((seg) => {
+        const m = Number(seg?.marker) >>> 0;
+        return m === 0xc0 || m === 0xc2;
+      });
+      if (!sof || !Array.isArray(sof.components)) return "未知";
+      const id = Number(tableId) >>> 0;
+      const nameOf = (cid: number) => (cid === 1 ? "Y" : cid === 2 ? "Cb" : cid === 3 ? "Cr" : `C${cid}`);
+      const hits = sof.components
+        .filter((c: any) => Number(c?.quant_table_id) === id)
+        .map((c: any) => `${nameOf(Number(c?.component_id) >>> 0)}(${Number(c?.component_id) >>> 0})`);
+      return hits.length > 0 ? hits.join(", ") : "无";
+    }
+  );
+
+  // 组件 ID 到常见名称的映射
+  registerFunction("jpeg::component_name", (componentId: number): string => {
+    const cid = Number(componentId) >>> 0;
+    if (cid === 1) return "Y";
+    if (cid === 2) return "Cb";
+    if (cid === 3) return "Cr";
+    return `C${cid}`;
+  });
+
+  // 生成哈夫曼码表：根据 counts(16) 和 values 列表，按 JPEG 规范构造码字
+  registerFunction("jpeg::generate_huffman_codes", (tbl: any): any[] => {
+    if (!tbl) return [];
+    const counts: number[] = toBytes((tbl as any).counts);
+    const values: number[] = toBytes((tbl as any).values);
+    const tableClass = Number((tbl as any).table_class) >>> 0; // 0: DC, 1: AC
+    const BITS: number[] = new Array(17).fill(0);
+    for (let i = 1; i <= 16; i++) BITS[i] = counts[i - 1] >>> 0;
+    // 生成码字
+    let code = 0;
+    let k = 0;
+    const rows: any[] = [];
+    for (let i = 1; i <= 16; i++) {
+      const numCodes = BITS[i] >>> 0;
+      for (let j = 0; j < numCodes; j++) {
+        const sym = values[k] >>> 0;
+        const codeStr = code.toString(2).padStart(i, "0");
+        const symbolHex = `0x${sym.toString(16).toUpperCase().padStart(2, "0")}`;
+        let meaning = "";
+        if (tableClass === 0) {
+          // DC: 符号即类别（后随类别个比特）
+          const cat = sym;
+          meaning = cat === 0 ? "DC 差值=0 (无附加比特)" : `幅度类别=${cat} (随后 ${cat} 比特)`;
+        } else {
+          // AC: 符号高 4 位=零游程 Run，低 4 位=尺寸 Size
+          const run = (sym >>> 4) & 0x0f;
+          const size = sym & 0x0f;
+          if (sym === 0x00) meaning = "EOB（块尾，余下系数为 0）";
+          else if (sym === 0xF0) meaning = "ZRL（连续 16 个 0）";
+          else meaning = `Run=${run}, Size=${size} (随后 ${size} 比特)`;
+        }
+        rows.push({ length: i, code: codeStr, symbol_hex: symbolHex, meaning });
+        code += 1;
+        k += 1;
+      }
+      code <<= 1; // 增加码长
+    }
+    return rows;
+  });
+
+  // 将 ZigZag 顺序的一维 64 长度数组还原为 8x8 矩阵
+  registerFunction("jpeg::dezigzag", (values: any): number[][] => {
+    const bytes = toBytes(values); // 可能是 8/16-bit，这里按 number 接收
+    const out: number[][] = Array.from({ length: 8 }, () => Array(8).fill(0));
+    const order: number[] = [
+      0, 1, 8, 16, 9, 2, 3, 10,
+      17, 24, 32, 25, 18, 11, 4, 5,
+      12, 19, 26, 33, 40, 48, 41, 34,
+      27, 20, 13, 6, 7, 14, 21, 28,
+      35, 42, 49, 56, 57, 50, 43, 36,
+      29, 22, 15, 23, 30, 37, 44, 51,
+      58, 59, 52, 45, 38, 31, 39, 46,
+      53, 60, 61, 54, 47, 55, 62, 63,
+    ];
+    for (let k = 0; k < 64; k++) {
+      const pos = order[k] >>> 0;
+      const r = (pos / 8) | 0;
+      const c = pos % 8;
+      const v = bytes[k] != null ? Number(bytes[k]) : 0;
+      out[r][c] = v >>> 0;
+    }
+    return out;
+  });
 }
 
 

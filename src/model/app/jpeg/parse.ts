@@ -38,9 +38,15 @@ export const jpeg_ps: ParseSchema = {
           type: "list",
           id: "values",
           items: [
-            // 根据精度决定是读 8-bit 还是 16-bit 值
-            // 这里简化为统一读 8-bit，因为 16-bit 不常用且需改动较多
-            { type: "uint", id: "v", length: 1 },
+            {
+              type: "switch",
+              on: { type: ExpressionType.Ref, id: "precision" },
+              cases: {
+                0: [{ type: "uint", id: "v", length: 1 }],
+                1: [{ type: "uint", id: "v", length: 2 }],
+                default: [{ type: "uint", id: "v", length: 1 }],
+              },
+            },
           ],
           count: {
             type: ExpressionType.Expression,
@@ -188,15 +194,15 @@ export const jpeg_ps: ParseSchema = {
     { type: "uint", id: "soi_ff", length: 1 },
     { type: "uint", id: "soi_d8", length: 1 },
     {
-      type: "loop_list",
+      type: "list",
       id: "segments",
       // 仅在成功读取了 marker 且 marker 非 0 的情况下收集该段
       // （prefix!=0xFF 时不会读取 marker；marker==0 表示 0xFF00 的 stuffed 字节，不收集）
-      push_condition: {
+      emit_when: {
         type: ExpressionType.Expression,
         expr: [{ type: ExpressionType.Ref, id: "length" }],
       },
-      spec: [
+      items: [
         // 读取前缀，只有等于 0xFF 才继续读取 marker，否则本轮跳过（用于容错/对齐）
         { type: "uint", id: "prefix", length: 1 },
         {
@@ -210,7 +216,7 @@ export const jpeg_ps: ParseSchema = {
                 on: { type: ExpressionType.Ref, id: "marker" },
                 cases: {
                   // EOI: FFD9 -> 停止
-                  0xd9: [{ type: "break_loop" }],
+                  0xd9: [],
                   // Stuffed: FF00，忽略本项，不作为段
                   0x00: [],
                   // RSTn: FFD0..FFD7，无长度，忽略（在扫描区内被 read_until_marker 吞噬）
@@ -230,7 +236,7 @@ export const jpeg_ps: ParseSchema = {
                   0xc4: [
                     { type: "uint", id: "length", length: 2 },
                     {
-                      type: "loop_until_consumed",
+                      type: "bounded",
                       id: "tables",
                       length_expr: {
                         type: ExpressionType.Expression,
@@ -240,16 +246,14 @@ export const jpeg_ps: ParseSchema = {
                           { type: ExpressionType.UintLiteral, value: -2 },
                         ],
                       },
-                      spec: [
-                        { type: "template_ref", id: "dht_table" },
-                      ],
+                      spec: [{ type: "template_ref", id: "dht_table" }],
                     },
                   ],
                   // DQT (Define Quantization Table) - 支持按段长度解析多表（暂按 8-bit 值读取）
                   0xdb: [
                     { type: "uint", id: "length", length: 2 },
                     {
-                      type: "loop_until_consumed",
+                      type: "bounded",
                       id: "tables",
                       length_expr: {
                         type: ExpressionType.Expression,
@@ -259,9 +263,7 @@ export const jpeg_ps: ParseSchema = {
                           { type: ExpressionType.UintLiteral, value: -2 },
                         ],
                       },
-                      spec: [
-                        { type: "template_ref", id: "dqt_table" },
-                      ],
+                      spec: [{ type: "template_ref", id: "dqt_table" }],
                     },
                   ],
                   // SOS（扫描数据起始）：读取 SOS 头部（length-2），随后读取扫描数据直到下一个真正的段标记
@@ -271,18 +273,16 @@ export const jpeg_ps: ParseSchema = {
                       type: "template_ref",
                       id: "raw_payload",
                       params: {
-                        payload_length: {
-                          type: ExpressionType.Ref,
-                          id: "length",
-                        },
+                        payload_length: { type: ExpressionType.Ref, id: "length" },
                       },
                     },
+                    // 扫描数据：以 0xFF 为前缀，吞掉 0xFF00 和 0xFFD0..0xFFD7，直到遇到其他 0xFFxx 终止
                     {
-                      type: "read_until_prefixed",
+                      type: "bytes_until_prefixed",
                       id: "scan_data",
                       prefix: 0xff,
-                      next_passthrough_values: [0x00],
-                      next_passthrough_ranges: [{ from: 0xd0, to: 0xd7 }],
+                      passthrough_values: [0x00],
+                      passthrough_ranges: [{ from: 0xd0, to: 0xd7 }],
                     },
                   ],
                   // APP0（常见为 JFIF\0）
@@ -395,6 +395,15 @@ export const jpeg_ps: ParseSchema = {
           },
         },
       ],
+      // 终止条件：遇到 EOI (FFD9)
+      stop_when: {
+        type: ExpressionType.Expression,
+        expr: [
+          { type: ExpressionType.Ref, id: "marker" },
+          { type: ExpressionType.Operator, value: "eq" },
+          { type: ExpressionType.UintLiteral, value: 0xd9 },
+        ],
+      },
     },
   ],
 };

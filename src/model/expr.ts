@@ -25,11 +25,7 @@ export function resolvePath(obj: any, path: string): any {
   return cur;
 }
 
-export function applyOp(
-  op: Operator["value"],
-  left: any,
-  right: any
-): any {
+export function applyOp(op: Operator["value"], left: any, right: any): any {
   if (op === "+") return ensureNumber(left) + ensureNumber(right);
   if (op === "*") return ensureNumber(left) * ensureNumber(right);
   if (op === "/") return ensureNumber(left) / ensureNumber(right);
@@ -46,7 +42,32 @@ export function applyOp(
     if (typeof left === "boolean" || typeof right === "boolean") {
       return Boolean(left) === Boolean(right);
     }
+    const le_is_nil = left === null || left === undefined;
+    const ri_is_nil = right === null || right === undefined;
+    if (le_is_nil && ri_is_nil) {
+      return true;
+    }
+    if (le_is_nil || ri_is_nil) {
+      return false;
+    }
     return ensureNumber(left) === ensureNumber(right);
+  }
+  if (op === "ne") {
+    if (typeof left === "string" || typeof right === "string") {
+      return String(left) !== String(right);
+    }
+    if (typeof left === "boolean" || typeof right === "boolean") {
+      return Boolean(left) !== Boolean(right);
+    }
+    const le_is_nil = left === null || left === undefined;
+    const ri_is_nil = right === null || right === undefined;
+    if (le_is_nil && ri_is_nil) {
+      return false;
+    }
+    if (le_is_nil || ri_is_nil) {
+      return true;
+    }
+    return ensureNumber(left) !== ensureNumber(right);
   }
   if (op === "access") {
     if (right == null) return undefined;
@@ -67,10 +88,7 @@ export type EvalHooks = {
   ) => any;
 };
 
-export function evalTermWith(
-  hooks: EvalHooks,
-  term: ExpressionTerm
-): any {
+export function evalTermWith(hooks: EvalHooks, term: ExpressionTerm): any {
   switch (term.type) {
     case ExpressionType.Ref:
       return hooks.getRef((term as Ref).id);
@@ -78,6 +96,8 @@ export function evalTermWith(
       return (term as any).value as number;
     case ExpressionType.TextLiteral:
       return (term as any).value as string;
+    case ExpressionType.NilLiteral:
+      return null;
     case ExpressionType.BooleanLiteral:
       return (term as any).value as boolean;
     case ExpressionType.Expression:
@@ -125,7 +145,12 @@ export function evalExpressionWith(
     }
     if (term.type === ExpressionType.Call) {
       if (!hooks.call) throw new Error("当前上下文不支持函数调用");
-      acc = hooks.call(acc, term as Call, (t) => evalTermWith(hooks, t), (e) => evalExpressionWith(hooks, e));
+      acc = hooks.call(
+        acc,
+        term as Call,
+        (t) => evalTermWith(hooks, t),
+        (e) => evalExpressionWith(hooks, e)
+      );
       i += 1;
       continue;
     }
@@ -133,5 +158,3 @@ export function evalExpressionWith(
   }
   return acc;
 }
-
-

@@ -8,19 +8,30 @@ export const png_ps: ParseSchema = {
   template: {},
   spec: [
     // PNG signature (8 bytes): 89 50 4E 47 0D 0A 1A 0A
-    { type: "bytes", id: "signature", length: 8 },
+    {
+      type: "bytes",
+      id: "signature",
+      length: {
+        type: ExpressionType.Expression,
+        expr: [{ type: ExpressionType.UintLiteral, value: 8 }],
+      },
+      emit: false, // 魔数不输出
+    },
     // Chunk loop
     {
-      type: "loop_list",
+      type: "list",
       id: "chunks",
-      spec: [
+      items: [
         // length and type
         { type: "uint", id: "length", length: 4 },
         { type: "ascii", id: "type", length: 4 },
         // chunk data by type
         {
           type: "switch",
-          on: { type: ExpressionType.Ref, id: "type" },
+          on: {
+            type: ExpressionType.Expression,
+            expr: [{ type: ExpressionType.Ref, id: "type" }],
+          },
           cases: {
             // Image Header
             IHDR: [
@@ -63,7 +74,10 @@ export const png_ps: ParseSchema = {
               {
                 type: "bytes",
                 id: "data",
-                length: { type: ExpressionType.Ref, id: "length" },
+                length: {
+                  type: ExpressionType.Expression,
+                  expr: [{ type: ExpressionType.Ref, id: "length" }],
+                },
               },
             ],
             // Significant bits
@@ -71,7 +85,10 @@ export const png_ps: ParseSchema = {
               {
                 type: "bytes",
                 id: "data",
-                length: { type: ExpressionType.Ref, id: "length" },
+                length: {
+                  type: ExpressionType.Expression,
+                  expr: [{ type: ExpressionType.Ref, id: "length" }],
+                },
               },
             ],
             // Default: read raw data
@@ -79,22 +96,26 @@ export const png_ps: ParseSchema = {
               {
                 type: "bytes",
                 id: "data",
-                length: { type: ExpressionType.Ref, id: "length" },
+                length: {
+                  type: ExpressionType.Expression,
+                  expr: [{ type: ExpressionType.Ref, id: "length" }],
+                },
               },
             ],
           },
         },
         // CRC (always 4 bytes)
         { type: "uint", id: "crc", length: 4 },
-        // Stop at IEND
-        {
-          type: "switch",
-          on: { type: ExpressionType.Ref, id: "type" },
-          cases: {
-            IEND: [{ type: "break_loop" }],
-          },
-        },
+        // 无需额外节点，list.stop_when 已处理终止
       ],
+      stop_when: {
+        type: ExpressionType.Expression,
+        expr: [
+          { type: ExpressionType.Ref, id: "type" },
+          { type: ExpressionType.Operator, value: "eq" },
+          { type: ExpressionType.TextLiteral, value: "IEND" },
+        ],
+      },
     },
   ],
 };

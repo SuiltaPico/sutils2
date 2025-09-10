@@ -64,6 +64,32 @@ export type RGBColorMap = {
   b_provider: ExpressionTerm;
 };
 
+export type TableMap = {
+  type: "table_map";
+  class?: string;
+  provider: ExpressionTerm; // 二维数组 number[][]
+  auto_headers?: boolean;
+  heatmap?: boolean;
+  axis_labels?: { row?: string; col?: string };
+  show_coord_title?: boolean;
+};
+
+export type TableOfRows = {
+  type: "table_of_rows";
+  class?: string;
+  provider: ExpressionTerm; // 数组，每项为对象
+  columns: Array<{ key: string; title: string; width?: string }>;
+};
+
+export type Collapse = {
+  type: "collapse";
+  class?: string;
+  title?: string;
+  default_open?: boolean;
+  summary: DisplayNode[];
+  details: DisplayNode[];
+};
+
 export type TemplateRef = {
   type: "template_ref";
   id: string;
@@ -98,7 +124,10 @@ export type DisplayNode =
   | If
   | RGBColorMap
   | TemplateRef
-  | GIFImageMap;
+  | GIFImageMap
+  | TableMap
+  | TableOfRows
+  | Collapse;
 
 export type TemplateParam = {
   type: "param";

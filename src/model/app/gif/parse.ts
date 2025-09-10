@@ -162,10 +162,10 @@ export const gif_ps: ParseSchema = {
       ],
     },
     {
-      type: "loop_list",
+      type: "list",
       id: "blocks",
       // 循环读取块，直到遇到文件尾 (0x3B)
-      spec: [
+      items: [
         {
           type: "uint",
           id: "block_introducer", // 读取块的第一个字节，即引导符
@@ -318,10 +318,18 @@ export const gif_ps: ParseSchema = {
               },
             ],
             // Case 3: 文件尾 (Trailer)
-            0x3b: [{ type: "break_loop" }],
+            0x3b: [],
           },
         },
       ],
+      stop_when: {
+        type: ExpressionType.Expression,
+        expr: [
+          { type: ExpressionType.Ref, id: "block_introducer" },
+          { type: ExpressionType.Operator, value: "eq" },
+          { type: ExpressionType.UintLiteral, value: 0x3b },
+        ],
+      },
     },
   ],
 };
