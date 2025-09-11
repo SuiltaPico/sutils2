@@ -175,6 +175,31 @@ type AlignNode = {
   to: number;
   basis?: "scope" | "global" | ExpressionTerm;
 };
+
+// 新增通用词法解析节点
+type SkipWhitespaceNode = {
+  type: "skip_ws";
+};
+
+type PeekBytesNode = {
+  type: "peek_bytes";
+  id: string;
+  length: ExpressionTerm;
+};
+
+type AsciiUntilNode = {
+  type: "ascii_until";
+  id: string;
+  terminators: number[];
+  max_len?: number;
+};
+
+type BytesUntilSeqNode = {
+  type: "bytes_until_seq";
+  id: string;
+  seq: number[];
+  max_len?: number;
+};
 // ----------------------------------------------------------------------
 
 // EBML 可变长整数（VINT）支持 -------------------------------------------
@@ -220,7 +245,11 @@ export type SpecNode =
   | BytesUntilPrefixedNode
   | BytesLenientNode
   | EbmlVintIdNode
-  | EbmlVintSizeNode;
+  | EbmlVintSizeNode
+  | SkipWhitespaceNode
+  | PeekBytesNode
+  | AsciiUntilNode
+  | BytesUntilSeqNode;
 
 // =================================================================
 // Template and Schema structure

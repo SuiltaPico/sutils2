@@ -22,6 +22,7 @@ import { mp4_ps } from "../../model/app/mp4/parse";
 import { pdf_ds } from "../../model/app/pdf/display";
 import { register_pdf } from "../../model/app/pdf/register";
 import { pdf_ps } from "../../model/app/pdf/parse";
+import { buildPdfModel } from "../../model/app/pdf/syntax";
 
 register_gif();
 register_png();
@@ -111,10 +112,12 @@ const AnyViewPage = () => {
       bytes[3] === 0xa3;
 
     if (isPdf) {
-      const parsed = parseWithSchema(buf, pdf_ps);
-      console.log("[AnyView] PDF 解析结果:", parsed);
+      const lexicalResult = parseWithSchema(buf, pdf_ps);
+      console.log("[AnyView] PDF Lexical Analysis:", lexicalResult);
+      const syntaxModel = buildPdfModel(lexicalResult, buf);
+      console.log("[AnyView] PDF Syntax Model:", syntaxModel);
       setSchema(pdf_ds);
-      setResult(parsed);
+      setResult(syntaxModel);
       return;
     }
     if (isPng) {

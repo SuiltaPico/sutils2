@@ -406,9 +406,13 @@ function parseSpecList(
         const itemSpec: any[] = node.items;
         const parseOne = (): any => {
           const item: any = {};
+          const startOffset = state.offset;
           state.scopeStack.push(item);
           parseSpecList(state, item, itemSpec, schema);
           state.scopeStack.pop();
+          // Inject special variables into the item
+          item.__start_offset__ = startOffset;
+          item.__end_offset__ = state.offset;
           return item;
         };
         if ((node as any).count) {
@@ -604,6 +608,87 @@ function parseSpecList(
         setField(targetObj, (node as any).id, val);
         break;
       }
+      // =======================================================
+      // 新增通用词法解析节点实现
+      // =======================================================
+      case "skip_ws": {
+        const view = state.view;
+        const total = view.byteLength;
+        let i = 0;
+        while (state.offset + i < total) {
+          const b = view.getUint8(state.offset + i);
+          // PDF Whitespace: NULL(0), HT(9), LF(10), FF(12), CR(13), SP(32)
+          if (b === 0 || b === 9 || b === 10 || b === 12 || b === 13 || b === 32) {
+            i++;
+          } else {
+            break;
+          }
+        }
+        state.offset += i;
+        break;
+      }
+      case "peek_bytes": {
+        const n = node as any;
+        const len = evalToNumber(state, n.length);
+        const bytes = readBytesLenient({ ...state, offset: state.offset }, len); // Read without advancing state's offset
+        setField(targetObj, n.id, bytes);
+        break;
+      }
+      case "ascii_until": {
+        const n = node as any;
+        const terminators = new Set(n.terminators as number[]);
+        const maxLen = n.max_len ?? 8192;
+        const view = state.view;
+        const total = view.byteLength;
+        const bytes: number[] = [];
+        let i = 0;
+        while (state.offset + i < total && i < maxLen) {
+          const b = view.getUint8(state.offset + i);
+          if (terminators.has(b)) {
+            break; // Terminator found, stop before it
+          }
+          bytes.push(b);
+          i++;
+        }
+        state.offset += i;
+        setField(targetObj, n.id, String.fromCharCode(...bytes));
+        break;
+      }
+      case "bytes_until_seq": {
+        const n = node as any;
+        const seq = n.seq as number[];
+        const maxLen = n.max_len ?? state.view.byteLength; // Limit search range
+        const view = state.view;
+        const start = state.offset;
+        const end = Math.min(view.byteLength, start + maxLen);
+        let found = -1;
+        for (let i = start; i <= end - seq.length; i++) {
+          let match = true;
+          for (let j = 0; j < seq.length; j++) {
+            if (view.getUint8(i + j) !== seq[j]) {
+              match = false;
+              break;
+            }
+          }
+          if (match) {
+            found = i;
+            break;
+          }
+        }
+
+        if (found !== -1) {
+          const len = found - start;
+          const content = readBytes(state, len);
+          setField(targetObj, n.id, content);
+        } else {
+          // Sequence not found, read up to maxLen and stop
+          const len = end - start;
+          const content = readBytes(state, len);
+          setField(targetObj, n.id, content);
+        }
+        break;
+      }
+      // =======================================================
       case "bytes_until_prefixed": {
         const n = node as any;
         const prefix: number = Number(n.prefix) >>> 0;
