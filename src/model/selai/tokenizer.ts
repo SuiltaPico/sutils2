@@ -39,6 +39,9 @@ export class SelaiTokenizer {
     specials.push(specialTokens.stop_generation);
     // pad 专用
     specials.push(specialTokens.pad);
+    // also support 0.05 explicitly
+    specials.push(specialTokens.reward('0.05'));
+    specials.push(specialTokens.penalty('0.05'));
     for (const v of [0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0]) {
       specials.push(specialTokens.reward(v.toFixed(1)));
       specials.push(specialTokens.penalty(v.toFixed(1)));
