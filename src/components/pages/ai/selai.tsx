@@ -1,13 +1,14 @@
 import { createSignal, For, onMount } from "solid-js";
 import * as tf from "@tensorflow/tfjs";
 import "@tensorflow/tfjs-backend-webgpu";
-import { SelaiModel } from "../../model/selai/model";
-import { defaultConfig } from "../../model/selai/config";
-import { SelaiTokenizer, specialTokens } from "../../model/selai/tokenizer";
-import { loadWeightsFromDB, saveWeightsToDB } from "../../model/selai/db";
-import { Message, presetConversations } from "../../model/selai/data";
-
-await tf.setBackend("webgpu");
+import { SelaiModel } from "../../../model/ai/selai/model";
+import { defaultConfig } from "../../../model/ai/selai/config";
+import {
+  SelaiTokenizer,
+  specialTokens,
+} from "../../../model/ai/selai/tokenizer";
+import { loadWeightsFromDB, saveWeightsToDB } from "../../../model/ai/selai/db";
+import { Message, presetConversations } from "../../../model/ai/selai/data";
 
 const MAX_GEN_LEN = 128;
 
@@ -74,6 +75,8 @@ export default function SelaiPage() {
       : `${n}`;
 
   const ensureInit = async () => {
+    await tf.setBackend("webgpu");
+
     if (!tokenizer) {
       tokenizer = new SelaiTokenizer();
     }
@@ -161,7 +164,7 @@ export default function SelaiPage() {
   const ensureWorker = () => {
     if (!worker) {
       worker = new Worker(
-        new URL("../../model/selai/selai.worker.ts", import.meta.url),
+        new URL("../../../model/ai/selai/selai.worker.ts", import.meta.url),
         { type: "module" }
       );
       worker.onmessage = async (ev: MessageEvent<any>) => {
@@ -838,7 +841,7 @@ export default function SelaiPage() {
     setStatus("Learning");
     setSleepProgress({ phase: "mirror", step: 0, total: 1 });
     setTrainLoss(null);
-    
+
     if (initialLogs) {
       // 初始学习
       const payload = await serializeWeights();
@@ -890,7 +893,9 @@ export default function SelaiPage() {
         // 从预设对话生成训练数据
         if (!tokenizer) tokenizer = new SelaiTokenizer();
         const initialLogs: number[][] = [];
-        const shuffledConversations = [...presetConversations].sort(() => Math.random() - 0.5);
+        const shuffledConversations = [...presetConversations].sort(
+          () => Math.random() - 0.5
+        );
         for (const conversation of shuffledConversations) {
           const conversationTokens: number[] = [];
           for (const msg of conversation) {

@@ -20,12 +20,18 @@ importers:
       '@tensorflow/tfjs-backend-webgpu':
         specifier: ^4.22.0
         version: 4.22.0(@tensorflow/tfjs-core@4.22.0)
+      libarchive-wasm:
+        specifier: ^1.2.0
+        version: 1.2.0
       jsonc-parser:
         specifier: ^3.3.1
         version: 3.3.1
       solid-js:
         specifier: ^1.9.8
         version: 1.9.9
+      wabt:
+        specifier: ^1.0.37
+        version: 1.0.37
     devDependencies:
       '@unocss/preset-wind4':
         specifier: ^66.5.0
@@ -909,6 +915,9 @@ packages:
   kolorist@1.8.0:
     resolution: {integrity: sha512-Y+60/zizpJ3HRH8DCss+q95yr6145JXZo46OTpFvDZWLfRCE4qChOyk1b26nMaNpfHHgxagk9dXT5OP0Tfe+dQ==}
 
+  libarchive-wasm@1.2.0:
+    resolution: {integrity: sha512-aunFn8oL9VwGRj+brRvdOv8BRUD4Ea1WxJW45IdiuXE2Vp/m/X+M1UxSU+yPzXfc1mPPC8AARaflg/CtF11u8g==}
+
   local-pkg@1.1.2:
     resolution: {integrity: sha512-arhlxbFRmoQHl33a0Zkle/YWlmNwoyt6QNZEIJcqNbdrsix5Lvc4HyyI3EnwxTYlZYc32EbYrQ8SzEZ7dqgg9A==}
     engines: {node: '>=14'}
@@ -1201,6 +1210,10 @@ packages:
 
   vue-flow-layout@0.2.0:
     resolution: {integrity: sha512-zKgsWWkXq0xrus7H4Mc+uFs1ESrmdTXlO0YNbR6wMdPaFvosL3fMB8N7uTV308UhGy9UvTrGhIY7mVz9eN+L0Q==}
+
+  wabt@1.0.37:
+    resolution: {integrity: sha512-2B/TH4ppwtlkUosLtuIimKsTVnqM8aoXxYHnu/WOxiSqa+CGoZXmG+pQyfDQjEKIAc7GqFlJsuCKuK8rIPL1sg==}
+    hasBin: true
 
   webidl-conversions@3.0.1:
     resolution: {integrity: sha512-2JAn3z8AR6rjK8Sm8orRC0h/bcl/DqL7tRPdGZ4I1CjdF+EaMLmYxBHyXuKL849eucPFhvBoxMsflfOb8kxaeQ==}
@@ -2086,6 +2099,8 @@ snapshots:
 
   kolorist@1.8.0: {}
 
+  libarchive-wasm@1.2.0: {}
+
   local-pkg@1.1.2:
     dependencies:
       mlly: 1.8.0
@@ -2370,6 +2385,8 @@ snapshots:
       vite: 7.1.4(@types/node@24.3.1)(jiti@2.5.1)
 
   vue-flow-layout@0.2.0: {}
+
+  wabt@1.0.37: {}
 
   webidl-conversions@3.0.1: {}
 
