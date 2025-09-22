@@ -7,14 +7,10 @@ import { SelaiTokenizer, specialTokens } from "./tokenizer";
 import { SelaiModel } from "./model";
 import type { SelaiConfig } from "./config";
 
-// const is_webb_gpu_available = await tf.setBackend("webgpu");
-// if (!is_webb_gpu_available) {
-//   console.warn("WebGPU backend is not available");
-const is_webgl_available = await tf.setBackend("webgl");
-if (!is_webgl_available) {
-  console.error("WebGL backend is not available");
-  throw new Error("WebGL backend is not available");
-}
+// const is_webgl_available = await tf.setBackend("webgl");
+// if (!is_webgl_available) {
+//   console.error("WebGL backend is not available");
+//   throw new Error("WebGL backend is not available");
 // }
 
 type WeightPayload = { data: Float32Array; shape: number[]; dtype: "float32" };
