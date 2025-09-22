@@ -15,7 +15,8 @@
     "@tensorflow/tfjs-backend-webgpu": "^4.22.0",
     "libarchive-wasm": "^1.2.0",
     "solid-js": "^1.9.8",
-    "wabt": "^1.0.37"
+    "wabt": "^1.0.37",
+    "jsonc-parser": "^3.3.1"
   },
   "devDependencies": {
     "@unocss/preset-wind4": "^66.5.0",

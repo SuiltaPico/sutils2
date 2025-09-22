@@ -31,4 +31,12 @@ export const routes = [
     path: "/exp/wasm-audio-worklet",
     component: lazy(() => import("./components/pages/exp/wasm-audio-worklet")),
   },
+  {
+    path: "/datamaster",
+    component: lazy(() => import("./components/pages/datamaster/datamaster")),
+  },
+  {
+    path: "/datamaster/json",
+    component: lazy(() => import("./components/pages/datamaster/json")),
+  },
 ];
