@@ -49,9 +49,21 @@ export const routes = [
     path: "/exp/libarchive-wasm",
     component: lazy(() => import("./components/pages/exp/libarchive-wasm")),
   },
+  {
+    path: "/exp/compress/huffman-coding",
+    component: lazy(() => import("./components/pages/exp/compress/huffman-coding")),
+  },
   // {
   //   path: "/exp/ffmpeg-wasm",
   //   component: lazy(() => import("./components/pages/exp/ffmpeg-wasm")),
+  // },
+  // {
+  //   path: "/exp/db/sqlite-wasm",
+  //   component: lazy(() => import("./components/pages/exp/db/sqlite-wasm")),
+  // },
+  // {
+  //   path: "/exp/db/duckdb-wasm",
+  //   component: lazy(() => import("./components/pages/exp/db/duckdb-wasm")),
   // },
   // {
   //   path: "/exp/skia-wasm-text-editor",
@@ -85,9 +97,13 @@ export const routes = [
   //   path: "/exp/data/binary-stats",
   //   component: lazy(() => import("./components/pages/exp/data/binary-stats")),
   // },
+  {
+    path: "/exp/nlp/text-stats",
+    component: lazy(() => import("./components/pages/exp/nlp/text-stats")),
+  },
   // {
-  //   path: "/exp/nlp/text-stats",
-  //   component: lazy(() => import("./components/pages/exp/nlp/text-stats")),
+  //   path: "/exp/coop/yjs",
+  //   component: lazy(() => import("./components/pages/exp/coop/yjs")),
   // },
   // {
   //   path: "/exp/2d-graph-draw",
