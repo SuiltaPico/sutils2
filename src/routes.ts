@@ -44,19 +44,25 @@ export const routes = [
   {
     path: "/exp/wasm-mandelbrot",
     component: lazy(() => import("./components/pages/exp/wasm-mandelbrot")),
+    description: "WASM 多线程 Mandelbrot 集合渲染",
+    done: true,
   },
   {
     path: "/exp/libarchive-wasm",
     component: lazy(() => import("./components/pages/exp/libarchive-wasm")),
+    description: "WASM Libarchive 解压压缩包，展示文件树",
+    done: true,
   },
   // {
   //   path: "/exp/ffmpeg-wasm",
   //   component: lazy(() => import("./components/pages/exp/ffmpeg-wasm")),
   // },
-  // {
-  //   path: "/exp/skia-wasm-text-editor",
-  //   component: lazy(() => import("./components/pages/exp/skia-wasm-text-editor")),
-  // },
+  {
+    path: "/exp/skia-wasm-text-editor",
+    component: lazy(() => import("./components/pages/exp/skia-wasm-text-editor")),
+    description: "CanvasKit WASM 纯文本编辑器（实验）",
+    done: false,
+  },
   // {
   //   path: "/exp/shader-playground",
   //   component: lazy(() => import("./components/pages/exp/shader-playground")),
@@ -74,12 +80,10 @@ export const routes = [
   //   component: lazy(() => import("./components/pages/exp/audio-convolution")),
   // },
   {
-    path: "/exp/wasm-audio-worklet",
-    component: lazy(() => import("./components/pages/exp/wasm-audio-worklet")),
-  },
-  {
     path: "/exp/ua-debug",
     component: lazy(() => import("./components/pages/exp/ua-debug")),
+    description: "浏览器 UA 的信息完整展示",
+    done: true,
   },
   // {
   //   path: "/exp/data/binary-stats",
