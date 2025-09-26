@@ -1,8 +1,11 @@
 import { lazy } from "solid-js";
 
 export const routes = [
+  {
+    path: "/",
+    component: lazy(() => import("./components/pages/Home")),
+  },
   // --- Data ---
-
   {
     path: "/data/anyview",
     component: lazy(() => import("./components/pages/data/anyview")),
@@ -24,12 +27,17 @@ export const routes = [
   {
     path: "/ai/selai",
     component: lazy(() => import("./components/pages/ai/selai")),
+    deprecated: true,
   },
   // {
   //   path: "/ai/chat-with-me",
   //   component: lazy(() => import("./components/pages/ai/chat-with-me")),
   // },
-
+  // --- IMG ---
+  {
+    path: "/img/color-to-transp",
+    component: lazy(() => import("./components/pages/img/color-to-transp")),
+  },
   // --- EXP ---
   {
     path: "/exp/wasm-aot-calc",
@@ -48,10 +56,16 @@ export const routes = [
     done: true,
   },
   {
-    path: "/exp/libarchive-wasm",
-    component: lazy(() => import("./components/pages/exp/libarchive-wasm")),
-    description: "WASM Libarchive 解压压缩包，展示文件树",
-    done: true,
+    path: "/exp/compress/libarchive-wasm",
+    component: lazy(
+      () => import("./components/pages/exp/compress/libarchive-wasm")
+    ),
+  },
+  {
+    path: "/exp/compress/huffman-coding",
+    component: lazy(
+      () => import("./components/pages/exp/compress/huffman-coding")
+    ),
   },
   // {
   //   path: "/exp/ffmpeg-wasm",
@@ -63,6 +77,18 @@ export const routes = [
     description: "CanvasKit WASM 纯文本编辑器（实验）",
     done: false,
   },
+  // {
+  //   path: "/exp/db/sqlite-wasm",
+  //   component: lazy(() => import("./components/pages/exp/db/sqlite-wasm")),
+  // },
+  // {
+  //   path: "/exp/db/duckdb-wasm",
+  //   component: lazy(() => import("./components/pages/exp/db/duckdb-wasm")),
+  // },
+  // {
+  //   path: "/exp/skia-wasm-text-editor",
+  //   component: lazy(() => import("./components/pages/exp/skia-wasm-text-editor")),
+  // },
   // {
   //   path: "/exp/shader-playground",
   //   component: lazy(() => import("./components/pages/exp/shader-playground")),
@@ -85,13 +111,21 @@ export const routes = [
     description: "浏览器 UA 的信息完整展示",
     done: true,
   },
+  {
+    path: "/exp/ui/simple-designer",
+    component: lazy(() => import("./components/pages/exp/ui/simple-designer")),
+  },
   // {
   //   path: "/exp/data/binary-stats",
   //   component: lazy(() => import("./components/pages/exp/data/binary-stats")),
   // },
+  {
+    path: "/exp/nlp/text-stats",
+    component: lazy(() => import("./components/pages/exp/nlp/text-stats")),
+  },
   // {
-  //   path: "/exp/nlp/text-stats",
-  //   component: lazy(() => import("./components/pages/exp/nlp/text-stats")),
+  //   path: "/exp/coop/yjs",
+  //   component: lazy(() => import("./components/pages/exp/coop/yjs")),
   // },
   // {
   //   path: "/exp/2d-graph-draw",
@@ -101,4 +135,8 @@ export const routes = [
   //   path: "/exp/local-file-browser",
   //   component: lazy(() => import("./components/pages/exp/local-file-browser")),
   // },
+  {
+    path: "*",
+    component: lazy(() => import("./components/pages/NotFound")),
+  },
 ];
