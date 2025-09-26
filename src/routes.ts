@@ -1,8 +1,11 @@
 import { lazy } from "solid-js";
 
 export const routes = [
+  {
+    path: "/",
+    component: lazy(() => import("./components/pages/Home")),
+  },
   // --- Data ---
-
   {
     path: "/data/anyview",
     component: lazy(() => import("./components/pages/data/anyview")),
@@ -126,4 +129,8 @@ export const routes = [
   //   path: "/exp/local-file-browser",
   //   component: lazy(() => import("./components/pages/exp/local-file-browser")),
   // },
+  {
+    path: "*",
+    component: lazy(() => import("./components/pages/NotFound")),
+  },
 ];
