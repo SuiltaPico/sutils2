@@ -29,7 +29,11 @@ export const routes = [
   //   path: "/ai/chat-with-me",
   //   component: lazy(() => import("./components/pages/ai/chat-with-me")),
   // },
-
+  // --- IMG ---
+  {
+    path: "/img/color-to-transp",
+    component: lazy(() => import("./components/pages/img/color-to-transp")),
+  },
   // --- EXP ---
   {
     path: "/exp/wasm-aot-calc",
@@ -46,12 +50,16 @@ export const routes = [
     component: lazy(() => import("./components/pages/exp/wasm-mandelbrot")),
   },
   {
-    path: "/exp/libarchive-wasm",
-    component: lazy(() => import("./components/pages/exp/libarchive-wasm")),
+    path: "/exp/compress/libarchive-wasm",
+    component: lazy(
+      () => import("./components/pages/exp/compress/libarchive-wasm")
+    ),
   },
   {
     path: "/exp/compress/huffman-coding",
-    component: lazy(() => import("./components/pages/exp/compress/huffman-coding")),
+    component: lazy(
+      () => import("./components/pages/exp/compress/huffman-coding")
+    ),
   },
   // {
   //   path: "/exp/ffmpeg-wasm",
@@ -93,6 +101,10 @@ export const routes = [
     path: "/exp/ua-debug",
     component: lazy(() => import("./components/pages/exp/ua-debug")),
   },
+  {
+    path: "/exp/ui/simple-designer",
+    component: lazy(() => import("./components/pages/exp/ui/simple-designer")),
+  },
   // {
   //   path: "/exp/data/binary-stats",
   //   component: lazy(() => import("./components/pages/exp/data/binary-stats")),
@@ -101,6 +113,7 @@ export const routes = [
     path: "/exp/nlp/text-stats",
     component: lazy(() => import("./components/pages/exp/nlp/text-stats")),
   },
+
   // {
   //   path: "/exp/coop/yjs",
   //   component: lazy(() => import("./components/pages/exp/coop/yjs")),
