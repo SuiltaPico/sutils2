@@ -27,6 +27,7 @@ export const routes = [
   {
     path: "/ai/selai",
     component: lazy(() => import("./components/pages/ai/selai")),
+    deprecated: true,
   },
   // {
   //   path: "/ai/chat-with-me",
@@ -116,7 +117,6 @@ export const routes = [
     path: "/exp/nlp/text-stats",
     component: lazy(() => import("./components/pages/exp/nlp/text-stats")),
   },
-
   // {
   //   path: "/exp/coop/yjs",
   //   component: lazy(() => import("./components/pages/exp/coop/yjs")),

@@ -1,10 +1,16 @@
 import { For } from "solid-js";
 import { A } from "@solidjs/router";
 import { routes } from "../../routes";
+import pageMetadata from "virtual:page-metadata";
+
+console.log(pageMetadata);
 
 export default function Home() {
   const groupedRoutes = () => {
-    const groups: Record<string, { path: string; name: string }[]> = {};
+    const groups: Record<
+      string,
+      { path: string; name: string; mtime?: string }[]
+    > = {};
     for (const route of routes) {
       if (route.path === "/" || route.path === "*") continue;
       const parts = route.path.split("/").filter(Boolean);
@@ -17,6 +23,7 @@ export default function Home() {
         groups[group].push({
           path: route.path,
           name: name,
+          mtime: pageMetadata[route.path],
         });
       }
     }
@@ -34,10 +41,15 @@ export default function Home() {
               <ul>
                 <For each={group[1]}>
                   {(route) => (
-                    <li>
+                    <li class="flex flex-col">
                       <A href={route.path} class="text-blue-500 hover:underline">
                         {route.name}
                       </A>
+                      {route.mtime && (
+                        <span class="text-gray-500 text-sm">
+                          {new Date(route.mtime).toLocaleString()}
+                        </span>
+                      )}
                     </li>
                   )}
                 </For>

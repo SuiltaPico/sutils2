@@ -136,7 +136,7 @@ export default function BgToTransparent() {
   function ensureWorker() {
     if (worker) return worker;
     try {
-      worker = new Worker(new URL("./bg-to-transp.worker.ts", import.meta.url), {
+      worker = new Worker(new URL("./color-to-transp.worker.ts", import.meta.url), {
         type: "module",
       });
     } catch {
