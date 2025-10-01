@@ -15,12 +15,18 @@
     "@tensorflow/tfjs": "^4.22.0",
     "@tensorflow/tfjs-backend-webgl": "^4.22.0",
     "@tensorflow/tfjs-backend-webgpu": "^4.22.0",
+    "d3": "^7.9.0",
+    "fft.js": "^4.0.4",
     "jsonc-parser": "^3.3.1",
     "libarchive-wasm": "^1.2.0",
+    "plotly.js-dist-min": "^3.1.1",
+    "pyodide": "^0.28.3",
     "solid-js": "^1.9.8",
+    "vite-plugin-static-copy": "^3.1.2",
     "wabt": "^1.0.37"
   },
   "devDependencies": {
+    "@types/d3": "^7.4.3",
     "@unocss/preset-wind4": "^66.5.0",
     "canvaskit-wasm": "^0.39.1",
     "typescript": "~5.8.3",

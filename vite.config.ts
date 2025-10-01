@@ -1,8 +1,40 @@
+import fs from "fs";
+import path, { dirname, join } from "path";
 import unocssPlugin from "unocss/vite";
+import { fileURLToPath } from "url";
 import { defineConfig } from "vite";
 import solid from "vite-plugin-solid";
-import fs from "fs";
-import path from "path";
+import { viteStaticCopy } from "vite-plugin-static-copy";
+
+const PYODIDE_EXCLUDE = [
+  "!**/*.{md,html}",
+  "!**/*.d.ts",
+  "!**/*.whl",
+  "!**/node_modules",
+];
+
+function viteStaticCopyPyodide() {
+  const resolved = fileURLToPath(import.meta.resolve("pyodide"));
+  const pyodideDirRaw = dirname(resolved);
+  const pyodideDirPosix = pyodideDirRaw.split(path.sep).join(path.posix.sep);
+
+  // 使用绝对 POSIX 路径，避免 Windows 反斜杠导致 fast-glob 匹配失败
+  const excludeAbsolute = [
+    `!${pyodideDirPosix}/*.{md,html}`,
+    `!${pyodideDirPosix}/*.d.ts`,
+    `!${pyodideDirPosix}/*.whl`,
+    `!${pyodideDirPosix}/node_modules/**`,
+  ];
+
+  return viteStaticCopy({
+    targets: [
+      {
+        src: [`${pyodideDirPosix}/*`, ...excludeAbsolute],
+        dest: "assets",
+      },
+    ],
+  });
+}
 
 function pageMetadataPlugin() {
   const virtualModuleId = "virtual:page-metadata";
@@ -26,7 +58,8 @@ function pageMetadataPlugin() {
           .replace(/\/\/.*$/gm, "");
 
         // Match route objects capturing both path and lazy import path
-        const routeRegex = /path:\s*"([^"]+)"[\s\S]*?component:\s*lazy\(\s*.*?import\("([^"]+)"\)\s*\)/g;
+        const routeRegex =
+          /path:\s*"([^"]+)"[\s\S]*?component:\s*lazy\(\s*.*?import\("([^"]+)"\)\s*\)/g;
         const routeMatches = [...routesContent.matchAll(routeRegex)];
 
         const metadata: Record<string, string> = {};
@@ -68,7 +101,13 @@ function pageMetadataPlugin() {
 }
 
 export default defineConfig({
-  plugins: [unocssPlugin(), solid(), pageMetadataPlugin()],
+  plugins: [
+    unocssPlugin(),
+    solid(),
+    pageMetadataPlugin(),
+    viteStaticCopyPyodide(),
+  ],
+  optimizeDeps: { exclude: ["pyodide"] },
   server: {
     cors: true,
     headers: {
@@ -76,4 +115,5 @@ export default defineConfig({
       "Cross-Origin-Embedder-Policy": "require-corp",
     },
   },
+  // optimizeDeps: { exclude: ["pyodide"] },
 });

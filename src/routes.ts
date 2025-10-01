@@ -89,14 +89,30 @@ export const routes = [
   //   path: "/exp/skia-wasm-text-editor",
   //   component: lazy(() => import("./components/pages/exp/skia-wasm-text-editor")),
   // },
-  // {
-  //   path: "/exp/shader-playground",
-  //   component: lazy(() => import("./components/pages/exp/shader-playground")),
-  // },
-  // {
-  //   path: "/exp/python-wasm",
-  //   component: lazy(() => import("./components/pages/exp/python-wasm")),
-  // },
+  {
+    path: "/exp/shader-playground",
+    component: lazy(() => import("./components/pages/exp/shader-playground")),
+    description: "Shader Playground: WebGL/WebGL2/WebGPU",
+    done: false,
+  },
+  {
+    path: "/exp/python-wasm",
+    component: lazy(() => import("./components/pages/exp/python-wasm")),
+    description: "Pyodide 在线 Python",
+    done: false,
+  },
+  {
+    path: "/exp/audio-spectrum-corrector",
+    component: lazy(() => import("./components/pages/exp/audio-spectrum-corrector")),
+    description: "音频频谱强制纠正（实验）",
+    done: false,
+  },
+  {
+    path: "/exp/audio-stat",
+    component: lazy(() => import("./components/pages/exp/audio-stat")),
+    description: "音频可视：波形/FFT Spectrogram/CWT Scalogram (d3)",
+    done: false,
+  },
   // {
   //   path: "/exp/img-convolution",
   //   component: lazy(() => import("./components/pages/exp/img-convolution")),
@@ -112,8 +128,20 @@ export const routes = [
     done: true,
   },
   {
+    path: "/exp/file-browser",
+    component: lazy(() => import("./components/pages/exp/file-browser")),
+    description: "File System API 本地文件浏览器（实验）",
+    done: false,
+  },
+  {
     path: "/exp/ui/simple-designer",
     component: lazy(() => import("./components/pages/exp/ui/simple-designer")),
+  },
+  {
+    path: "/exp/game/map-gen",
+    component: lazy(() => import("./components/pages/exp/game/map-gen/index.tsx")),
+    description: "地图生成：Perlin/Simplex 噪声",
+    done: false,
   },
   // {
   //   path: "/exp/data/binary-stats",
