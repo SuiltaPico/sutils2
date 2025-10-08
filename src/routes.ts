@@ -143,6 +143,10 @@ export const routes = [
     description: "地图生成：Perlin/Simplex 噪声",
     done: false,
   },
+  {
+    path: "/exp/mind-map",
+    component: lazy(() => import("./components/pages/exp/mind-map.tsx")),
+  },
   // {
   //   path: "/exp/data/binary-stats",
   //   component: lazy(() => import("./components/pages/exp/data/binary-stats")),
