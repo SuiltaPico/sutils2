@@ -1,4 +1,4 @@
-import { createMemo, createSignal } from "solid-js";
+import { createEffect, createMemo, createSignal } from "solid-js";
 
 // 零宽字符映射：位0/位1 + 起始/结束标记
 const ZWSP = "\u200B"; // Zero Width Space
@@ -45,6 +45,22 @@ const SYMBOL_SETS: SymbolSet[] = [
     end: "⛦",
   },
 ];
+
+// 符号表与模式一句话说明
+const SYMBOL_SET_DESC: Record<string, string> = {
+  zw: "零宽字符：隐蔽性好，但少数平台可能丢失不可见字符",
+  vs: "变体选择符：与 emoji 等组合常见，兼容性一般",
+  heart: "可见符号（爱心）：最不易丢失，但可见",
+  star: "可见符号（星标）：最不易丢失，但可见",
+};
+const MODE_DESC: Record<InjectMode, string> = {
+  dense: "逐间隙密集注入：最稳但体积增长最大",
+  random: "随机跳跃注入：较均匀兼顾体积与稳健",
+  head: "头注入：全部集中在开头",
+  tail: "尾注入：全部集中在结尾",
+  "full-random-one": "全文随机（仅一段）：隐蔽且体积小",
+  "paragraph-random-one": "段落随机（每段一段）：更分散",
+};
 
 function getSymbolSetByKey(key: string): SymbolSet {
   return SYMBOL_SETS.find((s) => s.key === key) ?? SYMBOL_SETS[0];
@@ -591,6 +607,140 @@ export default function UnicodeWatermark() {
     return seg.repeat(Math.max(1, redundancy()));
   });
 
+  // UI：简单/高级 与可用性估算
+  const [simpleMode, setSimpleMode] = createSignal(true);
+  const redundancyForModeMemo = createMemo(() =>
+    mode() === "full-random-one" || mode() === "paragraph-random-one"
+      ? 1
+      : redundancy()
+  );
+  const tokensPreview = createMemo(() =>
+    buildTokenStreamFromWm(wm(), selectedSet(), redundancyForModeMemo())
+  );
+  const estimatedAddedChars = createMemo(() =>
+    tokensPreview().reduce((sum, t) => sum + t.length, 0)
+  );
+  const charCount = createMemo(() => Array.from(input()).length);
+  const isReady = createMemo(() => Boolean(input() && wm()));
+  const [workMode, setWorkMode] = createSignal<"inject" | "extract">("inject");
+  const segmentsCount = createMemo(() => {
+    const text = output() || input();
+    return extractSegmentsForSet(text, selectedSet()).length;
+  });
+  const [copied, setCopied] = createSignal(false);
+  const outputGrowth = createMemo(() => {
+    const inLen = Array.from(input()).length;
+    const outLen = Array.from(output()).length;
+    if (!inLen)
+      return { growthPct: 0, added: outLen, tokens: tokensPreview().length };
+    const added = Math.max(0, outLen - inLen);
+    const growthPct = Math.round((added / inLen) * 100);
+    return { growthPct, added, tokens: tokensPreview().length };
+  });
+
+  async function copyWithFeedback(text: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {}
+  }
+
+  function downloadTxt(filename: string, content: string) {
+    const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  // 通用防抖
+  function debounce<T extends (...args: any[]) => void>(fn: T, wait = 300) {
+    let timer: any;
+    return (...args: Parameters<T>) => {
+      clearTimeout(timer);
+      timer = setTimeout(() => fn(...args), wait);
+    };
+  }
+
+  const debouncedInject = debounce(() => {
+    if (workMode() !== "inject") return;
+    const text = input();
+    const set = selectedSet();
+    const redundancyForMode =
+      mode() === "full-random-one" || mode() === "paragraph-random-one"
+        ? 1
+        : redundancy();
+    const tokens = buildTokenStreamFromWm(wm(), set, redundancyForMode);
+    let res = text;
+    switch (mode()) {
+      case "dense":
+        res = injectTokensDense(text, tokens);
+        break;
+      case "random":
+        res = injectTokensRandom(text, tokens, {
+          minGap: minGap(),
+          maxGap: Math.max(minGap(), maxGap()),
+          minRepeat: minRepeat(),
+          maxRepeat: Math.max(minRepeat(), maxRepeat()),
+        });
+        break;
+      case "head":
+        res = injectTokensHead(text, tokens);
+        break;
+      case "tail":
+        res = injectTokensTail(text, tokens);
+        break;
+      case "full-random-one":
+        res = injectTokensFullRandomOne(text, tokens, {});
+        break;
+      case "paragraph-random-one":
+        res = injectTokensParagraphRandomOne(text, tokens, {});
+        break;
+    }
+    setOutput(res);
+  }, 350);
+
+  // 自动生成：注入模式下监听相关依赖
+  createEffect(() => {
+    // 读取依赖触发追踪
+    input();
+    wm();
+    symbolKey();
+    mode();
+    redundancy();
+    minGap();
+    maxGap();
+    minRepeat();
+    maxRepeat();
+    if (workMode() === "inject") debouncedInject();
+  });
+
+  // 提取模式：自动防抖解码
+  const debouncedDecode = debounce(() => {
+    if (workMode() !== "extract") return;
+    runDecode();
+  }, 300);
+
+  createEffect(() => {
+    // 触发追踪
+    input();
+    symbolKey();
+    if (workMode() === "extract") debouncedDecode();
+  });
+
+  function fillDemo() {
+    if (!input())
+      setInput(
+        "这是一段用于演示的文本。你可以把任何文章粘贴到这里，我会把水印悄悄藏进文字里而不改变肉眼可见效果。"
+      );
+    if (!wm()) setWm("owner=user@example.com; ts=2025-10-09");
+  }
+
   function runInject() {
     const text = input();
     const set = selectedSet();
@@ -650,227 +800,352 @@ export default function UnicodeWatermark() {
 
   return (
     <div class="p-4 space-y-4">
-      <h1 class="text-lg font-600">Unicode 水印机</h1>
-      <div class="text-sm text-gray-600">
-        将水印按 UTF-8 编码为二进制，再映射为符号表的字符，
-        并在随机字符间隙处重复填充同一隐藏段，实现不可见水印。
-      </div>
-      <div class="text-sm text-gray-600">
-        水印格式：段开始标记 + 隐藏段 +
-        段结束标记；支持多符号表、注入策略与冗余纠错。
-      </div>
+      <h1 class="text-lg font-600">文本水印机</h1>
+      <div class="rounded border border-gray-200 bg-white shadow-sm overflow-hidden">
+        <div class="flex items-center gap-1 px-2 pt-2 border-b border-gray-200 bg-gray-50">
+          <button
+            class={
+              "px-3 py-2 rounded-t text-sm " +
+              (workMode() === "inject"
+                ? "bg-white border border-b-transparent border-gray-200 -mb-px text-blue-600"
+                : "text-gray-600 hover:text-gray-900")
+            }
+            onClick={() => setWorkMode("inject")}
+          >
+            注入水印
+          </button>
+          <button
+            class={
+              "px-3 py-2 rounded-t text-sm " +
+              (workMode() === "extract"
+                ? "bg-white border border-b-transparent border-gray-200 -mb-px text-blue-600"
+                : "text-gray-600 hover:text-gray-900")
+            }
+            onClick={() => setWorkMode("extract")}
+          >
+            提取水印
+          </button>
+        </div>
+        <div class="p-4 space-y-4">
+          {workMode() === "inject" && (
+            <div class="space-y-4">
+              <div class="flex items-center gap-3 text-sm">
+                <div class="text-gray-500">
+                  字数：{charCount()}，预计新增字符：{estimatedAddedChars()}
+                </div>
+              </div>
 
-      <div class="grid gap-4 md:grid-cols-2">
-        <div class="space-y-2">
-          <div class="grid gap-2 md:grid-cols-2">
-            <div class="space-y-1">
-              <label class="text-sm text-gray-600">符号表</label>
-              <select
-                class="w-full p-2 rounded border border-gray-200 text-sm bg-white"
-                value={symbolKey()}
-                onInput={(e) =>
-                  setSymbolKey((e.target as HTMLSelectElement).value)
-                }
-              >
-                {SYMBOL_SETS.map((s) => (
-                  <option value={s.key}>{s.name}</option>
-                ))}
-              </select>
-            </div>
-            <div class="space-y-1">
-              <label class="text-sm text-gray-600">注入模式</label>
-              <select
-                class="w-full p-2 rounded border border-gray-200 text-sm bg-white"
-                value={mode()}
-                onInput={(e) =>
-                  setMode((e.target as HTMLSelectElement).value as any)
-                }
-              >
-                <option value="dense">逐间隙密集注入</option>
-                <option value="random">随机跳跃注入</option>
-                <option value="head">头注入</option>
-                <option value="tail">尾注入</option>
-                <option value="full-random-one">全文随机填充（仅一段）</option>
-                <option value="paragraph-random-one">
-                  段落随机填充（每段一段）
-                </option>
-              </select>
-            </div>
-          </div>
+              {/* 步骤 1：贴原文 */}
+              <div class="space-y-2 p-3 rounded border border-gray-200 bg-white/50">
+                <div class="font-600">步骤 1：粘贴或输入原文</div>
+                <textarea
+                  class="w-full h-40 p-2 rounded border border-gray-200 font-mono text-sm"
+                  placeholder="把要加水印的文字放这里"
+                  value={input()}
+                  onInput={(e) =>
+                    setInput((e.target as HTMLTextAreaElement).value)
+                  }
+                />
+              </div>
 
-          {mode() === "random" && (
-            <div class="grid gap-2 md:grid-cols-2">
-              <div class="space-y-1">
-                <label class="text-sm text-gray-600">随机间隔最小</label>
+              {/* 步骤 2：写水印 */}
+              <div class="space-y-2 p-3 rounded border border-gray-200 bg-white/50">
+                <div class="font-600">步骤 2：写入水印</div>
                 <input
-                  type="number"
                   class="w-full p-2 rounded border border-gray-200 text-sm"
-                  min="1"
-                  value={minGap()}
-                  onInput={(e) =>
-                    setMinGap(
-                      parseInt((e.target as HTMLInputElement).value || "1")
-                    )
-                  }
+                  placeholder="输入你想隐式加入的文本"
+                  value={wm()}
+                  onInput={(e) => setWm((e.target as HTMLInputElement).value)}
                 />
+                <div class="text-xs text-gray-500 leading-5">
+                  单段隐藏长度：{singleHidden().length} 字符；
+                </div>
               </div>
-              <div class="space-y-1">
-                <label class="text-sm text-gray-600">随机间隔最大</label>
-                <input
-                  type="number"
-                  class="w-full p-2 rounded border border-gray-200 text-sm"
-                  min={minGap()}
-                  value={maxGap()}
-                  onInput={(e) =>
-                    setMaxGap(
-                      parseInt(
-                        (e.target as HTMLInputElement).value || String(minGap())
-                      )
-                    )
-                  }
-                />
+
+              {/* 高级设置：保留原有功能 */}
+              <div class="space-y-2 p-3 rounded border border-gray-200 bg-white/30">
+                <details open={!simpleMode()}>
+                  <summary class="cursor-pointer select-none text-sm font-600">
+                    高级设置（可选）
+                  </summary>
+                  <div class="mt-2 space-y-3">
+                    <div class="grid gap-2 md:grid-cols-2">
+                      <div class="space-y-1">
+                        <label class="text-sm text-gray-600">符号表</label>
+                        <select
+                          class="w-full p-2 rounded border border-gray-200 text-sm bg-white"
+                          value={symbolKey()}
+                          onInput={(e) =>
+                            setSymbolKey((e.target as HTMLSelectElement).value)
+                          }
+                        >
+                          {SYMBOL_SETS.map((s) => (
+                            <option value={s.key}>{s.name}</option>
+                          ))}
+                        </select>
+                        <div class="text-xs text-gray-500">
+                          说明：{SYMBOL_SET_DESC[symbolKey()] ?? ""}
+                        </div>
+                      </div>
+                      <div class="space-y-1">
+                        <label class="text-sm text-gray-600">注入模式</label>
+                        <select
+                          class="w-full p-2 rounded border border-gray-200 text-sm bg-white"
+                          value={mode()}
+                          onInput={(e) =>
+                            setMode(
+                              (e.target as HTMLSelectElement).value as any
+                            )
+                          }
+                        >
+                          <option value="dense">逐间隙密集注入</option>
+                          <option value="random">随机跳跃注入</option>
+                          <option value="head">头注入</option>
+                          <option value="tail">尾注入</option>
+                          <option value="full-random-one">
+                            全文随机填充（仅一段）
+                          </option>
+                          <option value="paragraph-random-one">
+                            段落随机填充（每段一段）
+                          </option>
+                        </select>
+                        <div class="text-xs text-gray-500">
+                          说明：{MODE_DESC[mode()]}
+                        </div>
+                      </div>
+                    </div>
+
+                    {mode() === "random" && (
+                      <div class="grid gap-2 md:grid-cols-2">
+                        <div class="space-y-1">
+                          <label class="text-sm text-gray-600">
+                            随机间隔最小
+                          </label>
+                          <input
+                            type="number"
+                            class="w-full p-2 rounded border border-gray-200 text-sm"
+                            min="1"
+                            value={minGap()}
+                            onInput={(e) =>
+                              setMinGap(
+                                parseInt(
+                                  (e.target as HTMLInputElement).value || "1"
+                                )
+                              )
+                            }
+                          />
+                        </div>
+                        <div class="space-y-1">
+                          <label class="text-sm text-gray-600">
+                            随机间隔最大
+                          </label>
+                          <input
+                            type="number"
+                            class="w-full p-2 rounded border border-gray-200 text-sm"
+                            min={minGap()}
+                            value={maxGap()}
+                            onInput={(e) =>
+                              setMaxGap(
+                                parseInt(
+                                  (e.target as HTMLInputElement).value ||
+                                    String(minGap())
+                                )
+                              )
+                            }
+                          />
+                        </div>
+                        <div class="space-y-1">
+                          <label class="text-sm text-gray-600">
+                            随机重复最小
+                          </label>
+                          <input
+                            type="number"
+                            class="w-full p-2 rounded border border-gray-200 text-sm"
+                            min="1"
+                            value={minRepeat()}
+                            onInput={(e) =>
+                              setMinRepeat(
+                                parseInt(
+                                  (e.target as HTMLInputElement).value || "1"
+                                )
+                              )
+                            }
+                          />
+                        </div>
+                        <div class="space-y-1">
+                          <label class="text-sm text-gray-600">
+                            随机重复最大
+                          </label>
+                          <input
+                            type="number"
+                            class="w-full p-2 rounded border border-gray-200 text-sm"
+                            min={minRepeat()}
+                            value={maxRepeat()}
+                            onInput={(e) =>
+                              setMaxRepeat(
+                                parseInt(
+                                  (e.target as HTMLInputElement).value ||
+                                    String(minRepeat())
+                                )
+                              )
+                            }
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    <div class="grid gap-2 md:grid-cols-2">
+                      <div class="space-y-1">
+                        <label class="text-sm text-gray-600">
+                          冗余次数（纠错）
+                        </label>
+                        <input
+                          type="number"
+                          class="w-full p-2 rounded border border-gray-200 text-sm"
+                          min="1"
+                          value={redundancy()}
+                          onInput={(e) =>
+                            setRedundancy(
+                              parseInt(
+                                (e.target as HTMLInputElement).value || "1"
+                              )
+                            )
+                          }
+                        />
+                      </div>
+                      <div class="space-y-1">
+                        <label class="text-sm text-gray-600">
+                          按位令牌数（预估）
+                        </label>
+                        <div class="p-2 rounded border border-gray-200 text-xs text-gray-600 bg-gray-50">
+                          {tokensPreview().length} 个
+                        </div>
+                      </div>
+                    </div>
+                    {(mode() === "full-random-one" ||
+                      mode() === "paragraph-random-one") && (
+                      <div class="text-xs text-gray-500 leading-5">
+                        当前模式仅注入一段水印，冗余设置将被忽略。
+                      </div>
+                    )}
+                  </div>
+                </details>
               </div>
-              <div class="space-y-1">
-                <label class="text-sm text-gray-600">随机重复最小</label>
-                <input
-                  type="number"
-                  class="w-full p-2 rounded border border-gray-200 text-sm"
-                  min="1"
-                  value={minRepeat()}
+
+              {/* 步骤 3：结果与复制（自动生成） */}
+              <div class="space-y-2 p-3 rounded border border-gray-200 bg-white/50">
+                <div class="font-600">步骤 3：结果</div>
+                <div class="flex gap-2 items-center flex-wrap">
+                  <button
+                    class="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 disabled:opacity-50"
+                    disabled={!output()}
+                    onClick={() => copyWithFeedback(output() || input())}
+                  >
+                    {copied() ? "√ 已复制" : "复制结果"}
+                  </button>
+                  <button
+                    class="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 disabled:opacity-50"
+                    disabled={!output()}
+                    onClick={() => downloadTxt("watermarked.txt", output())}
+                  >
+                    导出 .txt
+                  </button>
+                  <div class="text-xs text-gray-500">
+                    输出增幅：{outputGrowth().growthPct}%｜新增字符：
+                    {outputGrowth().added}｜令牌数：{outputGrowth().tokens}
+                  </div>
+                </div>
+                <label class="text-sm text-gray-600">结果</label>
+                <textarea
+                  class="w-full h-40 p-2 rounded border border-gray-200 font-mono text-sm"
+                  placeholder="点击“生成”后在此查看结果"
+                  value={output()}
                   onInput={(e) =>
-                    setMinRepeat(
-                      parseInt((e.target as HTMLInputElement).value || "1")
-                    )
+                    setOutput((e.target as HTMLTextAreaElement).value)
                   }
                 />
-              </div>
-              <div class="space-y-1">
-                <label class="text-sm text-gray-600">随机重复最大</label>
-                <input
-                  type="number"
-                  class="w-full p-2 rounded border border-gray-200 text-sm"
-                  min={minRepeat()}
-                  value={maxRepeat()}
-                  onInput={(e) =>
-                    setMaxRepeat(
-                      parseInt(
-                        (e.target as HTMLInputElement).value ||
-                          String(minRepeat())
-                      )
-                    )
-                  }
-                />
+                <div class="text-xs text-gray-500 leading-5">
+                  兼容性提示：不同编辑器/管道可能会移除零宽字符；若需更稳健，可提高冗余或选择“星标/爱心”等可见符号表测试效果。
+                </div>
               </div>
             </div>
           )}
 
-          <div class="grid gap-2 md:grid-cols-2">
-            <div class="space-y-1">
-              <label class="text-sm text-gray-600">冗余次数（纠错）</label>
-              <input
-                type="number"
-                class="w-full p-2 rounded border border-gray-200 text-sm"
-                min="1"
-                value={redundancy()}
-                onInput={(e) =>
-                  setRedundancy(
-                    parseInt((e.target as HTMLInputElement).value || "1")
-                  )
-                }
-              />
-            </div>
-            <div class="space-y-1">
-              <label class="text-sm text-gray-600">单段隐藏长度</label>
-              <div class="p-2 rounded border border-gray-200 text-xs text-gray-600 bg-gray-50">
-                {singleHidden().length}
+          {workMode() === "extract" && (
+            <div class="space-y-4">
+              <div class="text-sm text-gray-600">
+                把可能含有水印的文本粘贴到下面，将自动解码。
+              </div>
+              <div class="space-y-2 p-3 rounded border border-gray-200 bg-white/50">
+                <div class="font-600">粘贴含水印文本</div>
+                <textarea
+                  class="w-full h-40 p-2 rounded border border-gray-200 font-mono text-sm"
+                  placeholder="把文本粘贴到这里"
+                  value={input()}
+                  onInput={(e) =>
+                    setInput((e.target as HTMLTextAreaElement).value)
+                  }
+                />
+                <div class="grid gap-2 md:grid-cols-2 items-end">
+                  <div class="space-y-1">
+                    <label class="text-sm text-gray-600">
+                      符号表（可选，默认零宽）
+                    </label>
+                    <select
+                      class="w-full p-2 rounded border border-gray-200 text-sm bg-white"
+                      value={symbolKey()}
+                      onInput={(e) =>
+                        setSymbolKey((e.target as HTMLSelectElement).value)
+                      }
+                    >
+                      {SYMBOL_SETS.map((s) => (
+                        <option value={s.key}>{s.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div class="text-xs text-gray-500">
+                    已发现片段：{segmentsCount()} 个
+                  </div>
+                </div>
+                <div class="flex items-center justify-between">
+                  <div class="text-xs text-gray-500">
+                    符号表：{SYMBOL_SET_DESC[symbolKey()] ?? ""}
+                  </div>
+                </div>
+                <div class="flex gap-2 flex-wrap">
+                  <button
+                    class="px-3 py-1 rounded bg-rose-600 text-white disabled:opacity-50"
+                    disabled={!input()}
+                    onClick={() => {
+                      setOutput(input());
+                      runStrip();
+                    }}
+                  >
+                    清洗水印
+                  </button>
+                  <button
+                    class="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 disabled:opacity-50"
+                    disabled={!input()}
+                    onClick={() => copy(input())}
+                  >
+                    复制原文
+                  </button>
+                  <button
+                    class="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 disabled:opacity-50"
+                    disabled={!input()}
+                    onClick={() => downloadTxt("raw.txt", input())}
+                  >
+                    导出 .txt
+                  </button>
+                </div>
+                <div class="text-sm">
+                  <span class="text-gray-600">解码结果：</span>
+                  <span class="font-mono break-all">{decoded() ?? "(无)"}</span>
+                </div>
               </div>
             </div>
-          </div>
-          {(mode() === "full-random-one" ||
-            mode() === "paragraph-random-one") && (
-            <div class="text-xs text-gray-500 leading-5">
-              当前模式仅注入一段水印，冗余设置将被忽略。
-            </div>
           )}
-          <label class="text-sm text-gray-600">原文</label>
-          <textarea
-            class="w-full h-56 p-2 rounded border border-gray-200 font-mono text-sm"
-            placeholder="在此粘贴或输入要注入水印的文本"
-            value={input()}
-            onInput={(e) => setInput((e.target as HTMLTextAreaElement).value)}
-          />
-          <label class="text-sm text-gray-600">
-            水印（任意文本，将以 UTF-8 编码）
-          </label>
-          <input
-            class="w-full p-2 rounded border border-gray-200 text-sm"
-            placeholder="如：owner=user@example.com; ts=2025-10-09"
-            value={wm()}
-            onInput={(e) => setWm((e.target as HTMLInputElement).value)}
-          />
-          <div class="text-xs text-gray-500 leading-5">
-            当前注入单位长度：{hiddenSegment().length}
-            （字符）。密集模式会在每个间隙插入，文本会显著增大。
-          </div>
-          <div class="flex gap-2">
-            <button
-              class="px-3 py-1 rounded bg-blue-600 text-white disabled:opacity-50"
-              disabled={!input() || !wm()}
-              onClick={runInject}
-            >
-              注入水印
-            </button>
-            <button
-              class="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 disabled:opacity-50"
-              disabled={!output() && !input()}
-              onClick={() => copy(output() || input())}
-            >
-              复制当前文本
-            </button>
-          </div>
         </div>
-
-        <div class="space-y-2">
-          <label class="text-sm text-gray-600">结果</label>
-          <textarea
-            class="w-full h-56 p-2 rounded border border-gray-200 font-mono text-sm"
-            placeholder="点击“注入水印”后在此查看结果"
-            value={output()}
-            onInput={(e) => setOutput((e.target as HTMLTextAreaElement).value)}
-          />
-          <div class="flex gap-2 flex-wrap">
-            <button
-              class="px-3 py-1 rounded bg-emerald-600 text-white disabled:opacity-50"
-              disabled={!output() && !input()}
-              onClick={runDecode}
-            >
-              从文本解码水印
-            </button>
-            <button
-              class="px-3 py-1 rounded bg-rose-600 text-white disabled:opacity-50"
-              disabled={!output() && !input()}
-              onClick={runStrip}
-            >
-              去除隐藏字符
-            </button>
-            <button
-              class="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 disabled:opacity-50"
-              disabled={!output()}
-              onClick={() => copy(output())}
-            >
-              复制结果
-            </button>
-          </div>
-          <div class="text-sm">
-            <span class="text-gray-600">解码结果：</span>
-            <span class="font-mono break-all">{decoded() ?? "(无)"}</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="text-xs text-gray-500 leading-5">
-        兼容性提示：不同编辑器/管道可能会移除零宽字符；复制/粘贴到某些站点时也可能丢失。
-        若需鲁棒性，可增加冗余（多次重复）或加入校验与版本号等元信息。
       </div>
     </div>
   );
