@@ -6,13 +6,6 @@ import { defineConfig } from "vite";
 import solid from "vite-plugin-solid";
 import { viteStaticCopy } from "vite-plugin-static-copy";
 
-const PYODIDE_EXCLUDE = [
-  "!**/*.{md,html}",
-  "!**/*.d.ts",
-  "!**/*.whl",
-  "!**/node_modules",
-];
-
 function viteStaticCopyPyodide() {
   const resolved = fileURLToPath(import.meta.resolve("pyodide"));
   const pyodideDirRaw = dirname(resolved);

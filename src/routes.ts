@@ -6,22 +6,22 @@ export const routes = [
     component: lazy(() => import("./components/pages/Home")),
   },
   // --- Data ---
-  {
-    path: "/data/anyview",
-    component: lazy(() => import("./components/pages/data/anyview")),
-  },
+  // {
+  //   path: "/data/anyview",
+  //   component: lazy(() => import("./components/pages/data/anyview")),
+  // },
   // {
   //   path: "/data/barcode-qrcode-gen",
   //   component: lazy(() => import("./components/pages/data/barcode-qrcode-gen")),
   // },
-  {
-    path: "/data/master",
-    component: lazy(() => import("./components/pages/data/master/datamaster")),
-  },
-  {
-    path: "/data/master/json",
-    component: lazy(() => import("./components/pages/data/master/json")),
-  },
+  // {
+  //   path: "/data/master",
+  //   component: lazy(() => import("./components/pages/data/master/datamaster")),
+  // },
+  // {
+  //   path: "/data/master/json",
+  //   component: lazy(() => import("./components/pages/data/master/json")),
+  // },
 
   // --- AI ---
   {

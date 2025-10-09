@@ -220,7 +220,7 @@ export function buildPdfModel(lexicalResult: any, fileBuffer: ArrayBuffer) {
               const streamEndOffset = endStreamToken.__start_offset__;
               obj.stream_bytes = new Uint8Array(fileBuffer.slice(streamStartOffset, streamEndOffset));
               obj.stream_length = obj.stream_bytes.length;
-              obj.stream_hex_preview = Array.from(obj.stream_bytes.slice(0, 32)).map(b => b.toString(16).padStart(2, '0')).join(' ');
+              obj.stream_hex_preview = Array.from(obj.stream_bytes.slice(0, 32)).map((b: any) => b.toString(16).padStart(2, '0')).join(' ');
            }
         }
       }
