@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@duckdb/duckdb-wasm": "^1.30.0",
+    "@google/genai": "^1.23.0",
     "@solidjs/router": "^0.15.3",
     "@sqlite.org/sqlite-wasm": "3.50.4-build1",
     "@tensorflow/tfjs": "^4.22.0",
