@@ -585,7 +585,8 @@ function stripHidden(text: string): string {
 }
 
 export default function UnicodeWatermark() {
-  const [input, setInput] = createSignal("");
+  const [injectInput, setInjectInput] = createSignal("");
+  const [extractInput, setExtractInput] = createSignal("");
   const [wm, setWm] = createSignal("");
   const [output, setOutput] = createSignal("");
   const [decoded, setDecoded] = createSignal<string | null>(null);
@@ -620,16 +621,16 @@ export default function UnicodeWatermark() {
   const estimatedAddedChars = createMemo(() =>
     tokensPreview().reduce((sum, t) => sum + t.length, 0)
   );
-  const charCount = createMemo(() => Array.from(input()).length);
-  const isReady = createMemo(() => Boolean(input() && wm()));
+  const charCount = createMemo(() => Array.from(injectInput()).length);
+  const isReady = createMemo(() => Boolean(injectInput() && wm()));
   const [workMode, setWorkMode] = createSignal<"inject" | "extract">("inject");
   const segmentsCount = createMemo(() => {
-    const text = output() || input();
+    const text = extractInput();
     return extractSegmentsForSet(text, selectedSet()).length;
   });
   const [copied, setCopied] = createSignal(false);
   const outputGrowth = createMemo(() => {
-    const inLen = Array.from(input()).length;
+    const inLen = Array.from(injectInput()).length;
     const outLen = Array.from(output()).length;
     if (!inLen)
       return { growthPct: 0, added: outLen, tokens: tokensPreview().length };
@@ -669,7 +670,7 @@ export default function UnicodeWatermark() {
 
   const debouncedInject = debounce(() => {
     if (workMode() !== "inject") return;
-    const text = input();
+    const text = injectInput();
     const set = selectedSet();
     const redundancyForMode =
       mode() === "full-random-one" || mode() === "paragraph-random-one"
@@ -708,7 +709,7 @@ export default function UnicodeWatermark() {
   // 自动生成：注入模式下监听相关依赖
   createEffect(() => {
     // 读取依赖触发追踪
-    input();
+    injectInput();
     wm();
     symbolKey();
     mode();
@@ -728,21 +729,21 @@ export default function UnicodeWatermark() {
 
   createEffect(() => {
     // 触发追踪
-    input();
+    extractInput();
     symbolKey();
     if (workMode() === "extract") debouncedDecode();
   });
 
   function fillDemo() {
-    if (!input())
-      setInput(
+    if (!injectInput())
+      setInjectInput(
         "这是一段用于演示的文本。你可以把任何文章粘贴到这里，我会把水印悄悄藏进文字里而不改变肉眼可见效果。"
       );
     if (!wm()) setWm("owner=user@example.com; ts=2025-10-09");
   }
 
   function runInject() {
-    const text = input();
+    const text = injectInput();
     const set = selectedSet();
     // 使用按位令牌流分配而不是整段插入
     const redundancyForMode =
@@ -781,7 +782,7 @@ export default function UnicodeWatermark() {
 
   function runDecode() {
     const set = selectedSet();
-    const text = output() || input();
+    const text = extractInput();
     const segments = extractSegmentsForSet(text, set);
     const msg = majorityVoteDecode(segments, set);
     setDecoded(msg);
@@ -789,7 +790,7 @@ export default function UnicodeWatermark() {
 
   function runStrip() {
     const set = selectedSet();
-    setOutput(stripBySet(output() || input(), set));
+    setExtractInput(stripBySet(extractInput(), set));
   }
 
   async function copy(text: string) {
@@ -844,9 +845,9 @@ export default function UnicodeWatermark() {
                 <textarea
                   class="w-full h-40 p-2 rounded border border-gray-200 font-mono text-sm"
                   placeholder="把要加水印的文字放这里"
-                  value={input()}
+                  value={injectInput()}
                   onInput={(e) =>
-                    setInput((e.target as HTMLTextAreaElement).value)
+                    setInjectInput((e.target as HTMLTextAreaElement).value)
                   }
                 />
               </div>
@@ -1042,7 +1043,7 @@ export default function UnicodeWatermark() {
                   <button
                     class="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 disabled:opacity-50"
                     disabled={!output()}
-                    onClick={() => copyWithFeedback(output() || input())}
+                    onClick={() => copyWithFeedback(output() || injectInput())}
                   >
                     {copied() ? "√ 已复制" : "复制结果"}
                   </button>
@@ -1074,9 +1075,9 @@ export default function UnicodeWatermark() {
                 <textarea
                   class="w-full h-40 p-2 rounded border border-gray-200 font-mono text-sm"
                   placeholder="把文本粘贴到这里"
-                  value={input()}
+                  value={extractInput()}
                   onInput={(e) =>
-                    setInput((e.target as HTMLTextAreaElement).value)
+                    setExtractInput((e.target as HTMLTextAreaElement).value)
                   }
                 />
                 <div class="grid gap-2 md:grid-cols-2 items-end">
@@ -1103,18 +1104,15 @@ export default function UnicodeWatermark() {
                 <div class="flex gap-2 flex-wrap">
                   <button
                     class="px-3 py-1 rounded bg-rose-600 text-white disabled:opacity-50"
-                    disabled={!input()}
-                    onClick={() => {
-                      setOutput(input());
-                      runStrip();
-                    }}
+                    disabled={!extractInput()}
+                    onClick={runStrip}
                   >
                     清洗水印
                   </button>
                   <button
                     class="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 disabled:opacity-50"
-                    disabled={!input()}
-                    onClick={() => copy(input())}
+                    disabled={!extractInput()}
+                    onClick={() => copy(extractInput())}
                   >
                     复制
                   </button>
