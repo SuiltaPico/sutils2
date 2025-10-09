@@ -106,6 +106,23 @@ export default defineConfig({
   server: {
     cors: true,
     headers: {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+      "Access-Control-Allow-Headers":
+        "Origin, X-Requested-With, Content-Type, Accept, Authorization, Range",
+      "Access-Control-Expose-Headers": "Content-Length, Content-Range",
+      "Cross-Origin-Opener-Policy": "same-origin",
+      "Cross-Origin-Embedder-Policy": "require-corp",
+    },
+  },
+  preview: {
+    cors: true,
+    headers: {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+      "Access-Control-Allow-Headers":
+        "Origin, X-Requested-With, Content-Type, Accept, Authorization, Range",
+      "Access-Control-Expose-Headers": "Content-Length, Content-Range",
       "Cross-Origin-Opener-Policy": "same-origin",
       "Cross-Origin-Embedder-Policy": "require-corp",
     },
