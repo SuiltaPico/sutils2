@@ -837,7 +837,10 @@ export default function UnicodeWatermark() {
 
               {/* 步骤 1：贴原文 */}
               <div class="space-y-2 p-3 rounded border border-gray-200 bg-white/50">
-                <div class="font-600">步骤 1：粘贴或输入原文</div>
+                <div class="font-600">步骤 1：输入原文</div>
+                <div class="text-xs text-gray-500">
+                  这部分的文本会对外展示。
+                </div>
                 <textarea
                   class="w-full h-40 p-2 rounded border border-gray-200 font-mono text-sm"
                   placeholder="把要加水印的文字放这里"
@@ -850,16 +853,16 @@ export default function UnicodeWatermark() {
 
               {/* 步骤 2：写水印 */}
               <div class="space-y-2 p-3 rounded border border-gray-200 bg-white/50">
-                <div class="font-600">步骤 2：写入水印</div>
+                <div class="font-600">步骤 2：输入水印</div>
+                <div class="text-xs text-gray-500">
+                  这部分的文本会藏在原文里。
+                </div>
                 <input
                   class="w-full p-2 rounded border border-gray-200 text-sm"
                   placeholder="输入你想隐式加入的文本"
                   value={wm()}
                   onInput={(e) => setWm((e.target as HTMLInputElement).value)}
                 />
-                <div class="text-xs text-gray-500 leading-5">
-                  单段隐藏长度：{singleHidden().length} 字符；
-                </div>
               </div>
 
               {/* 高级设置：保留原有功能 */}
@@ -1050,12 +1053,8 @@ export default function UnicodeWatermark() {
                   >
                     导出 .txt
                   </button>
-                  <div class="text-xs text-gray-500">
-                    输出增幅：{outputGrowth().growthPct}%｜新增字符：
-                    {outputGrowth().added}｜令牌数：{outputGrowth().tokens}
-                  </div>
                 </div>
-                <label class="text-sm text-gray-600">结果</label>
+                <label class="text-xs text-gray-500">这部分的文本是原文被加上水印的结果。</label>
                 <textarea
                   class="w-full h-40 p-2 rounded border border-gray-200 font-mono text-sm"
                   placeholder="点击“生成”后在此查看结果"
@@ -1064,19 +1063,13 @@ export default function UnicodeWatermark() {
                     setOutput((e.target as HTMLTextAreaElement).value)
                   }
                 />
-                <div class="text-xs text-gray-500 leading-5">
-                  兼容性提示：不同编辑器/管道可能会移除零宽字符；若需更稳健，可提高冗余或选择“星标/爱心”等可见符号表测试效果。
-                </div>
               </div>
             </div>
           )}
 
           {workMode() === "extract" && (
             <div class="space-y-4">
-              <div class="text-sm text-gray-600">
-                把可能含有水印的文本粘贴到下面，将自动解码。
-              </div>
-              <div class="space-y-2 p-3 rounded border border-gray-200 bg-white/50">
+              {/* <div class="space-y-2 p-3 rounded border border-gray-200 bg-white/50"> */}
                 <div class="font-600">粘贴含水印文本</div>
                 <textarea
                   class="w-full h-40 p-2 rounded border border-gray-200 font-mono text-sm"
@@ -1089,7 +1082,7 @@ export default function UnicodeWatermark() {
                 <div class="grid gap-2 md:grid-cols-2 items-end">
                   <div class="space-y-1">
                     <label class="text-sm text-gray-600">
-                      符号表（可选，默认零宽）
+                      符号表
                     </label>
                     <select
                       class="w-full p-2 rounded border border-gray-200 text-sm bg-white"
@@ -1105,11 +1098,6 @@ export default function UnicodeWatermark() {
                   </div>
                   <div class="text-xs text-gray-500">
                     已发现片段：{segmentsCount()} 个
-                  </div>
-                </div>
-                <div class="flex items-center justify-between">
-                  <div class="text-xs text-gray-500">
-                    符号表：{SYMBOL_SET_DESC[symbolKey()] ?? ""}
                   </div>
                 </div>
                 <div class="flex gap-2 flex-wrap">
@@ -1128,21 +1116,14 @@ export default function UnicodeWatermark() {
                     disabled={!input()}
                     onClick={() => copy(input())}
                   >
-                    复制原文
-                  </button>
-                  <button
-                    class="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 disabled:opacity-50"
-                    disabled={!input()}
-                    onClick={() => downloadTxt("raw.txt", input())}
-                  >
-                    导出 .txt
+                    复制
                   </button>
                 </div>
                 <div class="text-sm">
                   <span class="text-gray-600">解码结果：</span>
                   <span class="font-mono break-all">{decoded() ?? "(无)"}</span>
                 </div>
-              </div>
+              {/* </div> */}
             </div>
           )}
         </div>
