@@ -26,6 +26,7 @@ export const routes = [
   // --- AI ---
   {
     path: "/ai/selai",
+    description: "使用 TensorFlow.js 和 WebGPU/WebGL 在浏览器运行在线学习的 Transformer 模型。（已废弃）",
     component: lazy(() => import("./components/pages/ai/selai")),
     deprecated: true,
   },
@@ -36,23 +37,35 @@ export const routes = [
   // --- IMG ---
   {
     path: "/img/color-to-transp",
+    description: "将图片颜色转换为透明色",
     component: lazy(() => import("./components/pages/img/color-to-transp")),
+    done: true,
   },
   // --- EXP ---
   {
     path: "/exp/wasm-aot-calc",
+    description: "WASM AOT 计算器，把数学表达式即时编译 (AOT) 成 WebAssembly 并执行",
     component: lazy(() => import("./components/pages/exp/wasm-aot-calc")),
+    done: true,
+  },
+  {
+    path: "/exp/l-system",
+    description: "L-system 演练场（WASM AOT）",
+    component: lazy(() => import("./components/pages/exp/l-system-wasm-aot")),
+    done: false,
   },
   {
     path: "/exp/wasm-aot-simd-particle-swarm-sim",
+    description: "WASM AOT 粒子群模拟，使用 SIMD 优化",
     component: lazy(
       () => import("./components/pages/exp/wasm-aot-simd-particle-swarm-sim")
     ),
+    done: true,
   },
   {
     path: "/exp/wasm-mandelbrot",
     component: lazy(() => import("./components/pages/exp/wasm-mandelbrot")),
-    description: "WASM 多线程 Mandelbrot 集合渲染",
+    description: "WASM 多线程 Mandelbrot 集合渲染尝试",
     done: true,
   },
   {
@@ -73,7 +86,9 @@ export const routes = [
   // },
   {
     path: "/exp/skia-wasm-text-editor",
-    component: lazy(() => import("./components/pages/exp/skia-wasm-text-editor")),
+    component: lazy(
+      () => import("./components/pages/exp/skia-wasm-text-editor")
+    ),
     description: "CanvasKit WASM 纯文本编辑器（实验）",
     done: false,
   },
@@ -92,18 +107,26 @@ export const routes = [
   {
     path: "/exp/shader-playground",
     component: lazy(() => import("./components/pages/exp/shader-playground")),
-    description: "Shader Playground: WebGL/WebGL2/WebGPU",
+    description: "Shader 演练场，支持 WebGL(GLSL ES 1.0)、WebGL2(GLSL ES 3.0)、WebGPU(WGSL)",
     done: false,
   },
   {
     path: "/exp/python-wasm",
     component: lazy(() => import("./components/pages/exp/python-wasm")),
-    description: "Pyodide 在线 Python",
+    description: "基于 Pyodide 的在线 Python 执行环境",
+    done: false,
+  },
+  {
+    path: "/exp/text-watermark-injector",
+    component: lazy(() => import("./components/pages/exp/unicode-watermark")),
+    description: "文本水印注入器",
     done: false,
   },
   {
     path: "/exp/audio-spectrum-corrector",
-    component: lazy(() => import("./components/pages/exp/audio-spectrum-corrector")),
+    component: lazy(
+      () => import("./components/pages/exp/audio-spectrum-corrector")
+    ),
     description: "音频频谱强制纠正（实验）",
     done: false,
   },
@@ -139,13 +162,13 @@ export const routes = [
   },
   {
     path: "/exp/game/map-gen",
-    component: lazy(() => import("./components/pages/exp/game/map-gen/index.tsx")),
+    component: lazy(() => import("./components/pages/exp/game/map-gen/index")),
     description: "地图生成：Perlin/Simplex 噪声",
     done: false,
   },
   {
     path: "/exp/mind-map",
-    component: lazy(() => import("./components/pages/exp/mind-map.tsx")),
+    component: lazy(() => import("./components/pages/exp/mind-map")),
   },
   // {
   //   path: "/exp/data/binary-stats",
@@ -153,6 +176,7 @@ export const routes = [
   // },
   {
     path: "/exp/nlp/text-stats",
+    description: "分析文本的基础计数、信息熵、词汇多样性、复杂度、可读性、词频分布及主题连贯性",
     component: lazy(() => import("./components/pages/exp/nlp/text-stats")),
   },
   // {

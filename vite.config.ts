@@ -91,6 +91,8 @@ function pageMetadataPlugin() {
               const stats = fs.statSync(filepathToStat);
               metadata[routePath] = stats.mtime.toISOString();
             } catch {}
+          } else {
+            console.log(componentFilePathTsx, "not found");
           }
         }
 
