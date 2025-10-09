@@ -37,7 +37,7 @@ export const routes = [
   // --- IMG ---
   {
     path: "/img/color-to-transp",
-    description: "将图片颜色转换为透明色",
+    description: "将图片的某个颜色转换为透明色。",
     component: lazy(() => import("./components/pages/img/color-to-transp")),
     done: true,
   },
@@ -113,13 +113,13 @@ export const routes = [
   {
     path: "/exp/python-wasm",
     component: lazy(() => import("./components/pages/exp/python-wasm")),
-    description: "基于 Pyodide 的在线 Python 执行环境",
+    description: "基于 Pyodide 的在线 Python 执行环境。",
     done: false,
   },
   {
     path: "/exp/text-watermark-injector",
     component: lazy(() => import("./components/pages/exp/unicode-watermark")),
-    description: "文本水印注入器",
+    description: "文本水印注入器。把特殊 Unicode 字符隐式注入文本。",
     done: false,
   },
   {
