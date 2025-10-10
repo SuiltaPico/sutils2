@@ -34,7 +34,7 @@ export const routes = [
   },
   {
     path: "/ai/console",
-    name: "AI Console（Google）",
+    name: "AI Console",
     description: "配置 API Key，进行对话并管理历史记录（仅本地存储）",
     component: lazy(() => import("./components/pages/ai/console")),
   },
