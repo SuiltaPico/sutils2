@@ -188,6 +188,12 @@ export const routes = [
     done: false,
   },
   {
+    path: "/exp/game/wayland",
+    name: "Wayland 战斗原型",
+    description: "1D 编队 · RTwP 基础循环与指令（转位/替位/施放）",
+    component: lazy(() => import("./components/pages/exp/game/wayland/sandbox")),
+  },
+  {
     path: "/exp/mind-map",
     name: "思维导图",
     component: lazy(() => import("./components/pages/exp/mind-map")),
