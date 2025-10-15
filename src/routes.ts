@@ -46,6 +46,13 @@ export const routes = [
     component: lazy(() => import("./components/pages/img/color-to-transp")),
     done: true,
   },
+  {
+    path: "/img/black-border",
+    name: "图片黑边工具",
+    description: "给图片加黑边或去黑边（扫描四个方向获取最大非黑边矩形）",
+    component: lazy(() => import("./components/pages/img/black-border")),
+    done: true,
+  },
   // --- EXP ---
   {
     path: "/exp/wasm-aot-calc",
@@ -192,6 +199,15 @@ export const routes = [
     name: "Wayland 战斗原型",
     description: "1D 编队 · RTwP 基础循环与指令（转位/替位/施放）",
     component: lazy(() => import("./components/pages/exp/game/wayland/sandbox")),
+  },
+  {
+    path: "/game/chaotic-pendulum",
+    name: "混沌摆（双摆）",
+    description: "双摆混沌演示：可调长度/质量/阻尼，支持拖影显示",
+    component: lazy(
+      () => import("./components/pages/game/chaotic-pendulum")
+    ),
+    done: false,
   },
   {
     path: "/exp/mind-map",
