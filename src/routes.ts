@@ -6,6 +6,13 @@ export const routes = [
     name: "首页",
     component: lazy(() => import("./components/pages/Home")),
   },
+  {
+    path: "/exp/sql-lab",
+    name: "在线 SQL 实验",
+    component: lazy(() => import("./components/pages/exp/sql-lab")),
+    description: "切换 sql.js / @sqlite.org/sqlite-wasm / @duckdb/duckdb-wasm 执行 SQL",
+    done: false,
+  },
   // --- Data ---
   // {
   //   path: "/data/anyview",
