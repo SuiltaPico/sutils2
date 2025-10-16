@@ -1,4 +1,12 @@
-import { For, Show, batch, createEffect, createMemo, createSignal, onMount } from "solid-js";
+import {
+  For,
+  Show,
+  batch,
+  createEffect,
+  createMemo,
+  createSignal,
+  onMount,
+} from "solid-js";
 
 type MindMapNode = {
   id: string;
@@ -29,7 +37,10 @@ function generateId() {
   return Math.random().toString(36).slice(2, 10);
 }
 
-function traverse(root: MindMapNode, cb: (n: MindMapNode, parent: MindMapNode | null, index: number) => void) {
+function traverse(
+  root: MindMapNode,
+  cb: (n: MindMapNode, parent: MindMapNode | null, index: number) => void
+) {
   function walk(n: MindMapNode, parent: MindMapNode | null) {
     cb(n, parent, parent ? parent.children.indexOf(n) : -1);
     if (!n.collapsed) {
@@ -43,7 +54,11 @@ function findNode(root: MindMapNode, id: string): FoundNode | null {
   let out: FoundNode | null = null;
   function rec(n: MindMapNode, parent: MindMapNode | null) {
     if (n.id === id) {
-      out = { node: n, parent, parentIndex: parent ? parent.children.indexOf(n) : -1 };
+      out = {
+        node: n,
+        parent,
+        parentIndex: parent ? parent.children.indexOf(n) : -1,
+      };
       return;
     }
     for (const c of n.children) {
@@ -63,7 +78,11 @@ function computeLayout(root: MindMapNode) {
     // Returns total vertical space consumed starting at startY; positions[node.id] assigned
     if (node.collapsed || node.children.length === 0) {
       const centerY = startY + NODE_HEIGHT / 2;
-      positions.set(node.id, { id: node.id, x: depth * (NODE_WIDTH + H_GAP), y: centerY });
+      positions.set(node.id, {
+        id: node.id,
+        x: depth * (NODE_WIDTH + H_GAP),
+        y: centerY,
+      });
       return NODE_HEIGHT + V_GAP;
     }
     let cursorY = startY;
@@ -78,7 +97,11 @@ function computeLayout(root: MindMapNode) {
     const minY = Math.min(...childCenters);
     const maxY = Math.max(...childCenters);
     const centerY = (minY + maxY) / 2;
-    positions.set(node.id, { id: node.id, x: depth * (NODE_WIDTH + H_GAP), y: centerY });
+    positions.set(node.id, {
+      id: node.id,
+      x: depth * (NODE_WIDTH + H_GAP),
+      y: centerY,
+    });
     return cursorY - startY;
   }
 
@@ -140,7 +163,12 @@ export default function MindMapPage() {
       const clone = structuredClone(r) as MindMapNode;
       const found = findNode(clone, toId);
       if (!found) return clone;
-      const newNode: MindMapNode = { id: generateId(), title: "New", children: [], collapsed: false };
+      const newNode: MindMapNode = {
+        id: generateId(),
+        title: "New",
+        children: [],
+        collapsed: false,
+      };
       found.node.children.push(newNode);
       found.node.collapsed = false;
       return clone;
@@ -153,7 +181,12 @@ export default function MindMapPage() {
       const found = findNode(clone, ofId);
       if (!found) return clone;
       if (!found.parent) return clone; // root has no sibling
-      const newNode: MindMapNode = { id: generateId(), title: "New", children: [], collapsed: false };
+      const newNode: MindMapNode = {
+        id: generateId(),
+        title: "New",
+        children: [],
+        collapsed: false,
+      };
       found.parent.children.splice(found.parentIndex + 1, 0, newNode);
       return clone;
     });
@@ -229,14 +262,21 @@ export default function MindMapPage() {
     type Caret = { pIndex: number; offset: number };
     const [docParas, setDocParas] = createSignal<string[]>([]);
     const [caret, setCaret] = createSignal<Caret>({ pIndex: 0, offset: 0 });
-    const [undoStack, setUndoStack] = createSignal<{ paras: string[]; caret: Caret }[]>([]);
-    const [redoStack, setRedoStack] = createSignal<{ paras: string[]; caret: Caret }[]>([]);
+    const [undoStack, setUndoStack] = createSignal<
+      { paras: string[]; caret: Caret }[]
+    >([]);
+    const [redoStack, setRedoStack] = createSignal<
+      { paras: string[]; caret: Caret }[]
+    >([]);
     let hiddenTa!: HTMLTextAreaElement;
     let editorBox!: HTMLDivElement;
     const paraTextNodes: Text[] = [];
 
     function pushUndo() {
-      setUndoStack((s) => [...s, { paras: [...docParas()], caret: { ...caret() } }]);
+      setUndoStack((s) => [
+        ...s,
+        { paras: [...docParas()], caret: { ...caret() } },
+      ]);
       setRedoStack([]);
     }
     function applyDoc(paras: string[], c: Caret) {
@@ -260,7 +300,10 @@ export default function MindMapPage() {
           .replace(/\r\n?/g, "\n")
           .split("\n");
         if (initial.length === 0) initial.push("");
-        applyDoc(initial, { pIndex: Math.min(0, initial.length - 1), offset: 0 });
+        applyDoc(initial, {
+          pIndex: Math.min(0, initial.length - 1),
+          offset: 0,
+        });
         queueMicrotask(() => hiddenTa?.focus());
       }
     });
@@ -334,14 +377,18 @@ export default function MindMapPage() {
       const { pIndex, offset } = caret();
       const lineLen = (docParas()[pIndex] ?? "").length;
       if (offset < lineLen) return setCaret({ pIndex, offset: offset + 1 });
-      if (pIndex < docParas().length - 1) setCaret({ pIndex: pIndex + 1, offset: 0 });
+      if (pIndex < docParas().length - 1)
+        setCaret({ pIndex: pIndex + 1, offset: 0 });
     }
     function undo() {
       const s = undoStack();
       if (s.length === 0) return;
       const last = s[s.length - 1];
       setUndoStack(s.slice(0, -1));
-      setRedoStack((r) => [...r, { paras: [...docParas()], caret: { ...caret() } }]);
+      setRedoStack((r) => [
+        ...r,
+        { paras: [...docParas()], caret: { ...caret() } },
+      ]);
       applyDoc([...last.paras], { ...last.caret });
     }
     function redo() {
@@ -349,24 +396,57 @@ export default function MindMapPage() {
       if (r.length === 0) return;
       const last = r[r.length - 1];
       setRedoStack(r.slice(0, -1));
-      setUndoStack((s) => [...s, { paras: [...docParas()], caret: { ...caret() } }]);
+      setUndoStack((s) => [
+        ...s,
+        { paras: [...docParas()], caret: { ...caret() } },
+      ]);
       applyDoc([...last.paras], { ...last.caret });
     }
     function onKeyDownEditor(e: KeyboardEvent) {
       // Allow Ctrl+Enter / Shift+Enter to bubble for node ops
-      if (e.ctrlKey && e.key === "z") { e.preventDefault(); undo(); return; }
-      if (e.ctrlKey && (e.key === "Z" || (e.shiftKey && e.key === "z"))) { e.preventDefault(); redo(); return; }
+      if (e.ctrlKey && e.key === "z") {
+        e.preventDefault();
+        undo();
+        return;
+      }
+      if (e.ctrlKey && (e.key === "Z" || (e.shiftKey && e.key === "z"))) {
+        e.preventDefault();
+        redo();
+        return;
+      }
       if (!e.ctrlKey && !e.metaKey) {
-        if (e.key === "Backspace") { e.preventDefault(); backspace(); return; }
-        if (e.key === "Delete") { e.preventDefault(); delForward(); return; }
-        if (e.key === "Enter") { e.preventDefault(); splitLine(); return; }
-        if (e.key === "ArrowLeft") { e.preventDefault(); moveLeft(); return; }
-        if (e.key === "ArrowRight") { e.preventDefault(); moveRight(); return; }
+        if (e.key === "Backspace") {
+          e.preventDefault();
+          backspace();
+          return;
+        }
+        if (e.key === "Delete") {
+          e.preventDefault();
+          delForward();
+          return;
+        }
+        if (e.key === "Enter") {
+          e.preventDefault();
+          splitLine();
+          return;
+        }
+        if (e.key === "ArrowLeft") {
+          e.preventDefault();
+          moveLeft();
+          return;
+        }
+        if (e.key === "ArrowRight") {
+          e.preventDefault();
+          moveRight();
+          return;
+        }
       }
     }
     function getLineElements(): HTMLElement[] {
-      return Array.from(editorBox.children).filter((el) =>
-        (el as HTMLElement).dataset && (el as HTMLElement).dataset.role === "line"
+      return Array.from(editorBox.children).filter(
+        (el) =>
+          (el as HTMLElement).dataset &&
+          (el as HTMLElement).dataset.role === "line"
       ) as HTMLElement[];
     }
     function measureCaretPosition() {
@@ -375,7 +455,9 @@ export default function MindMapPage() {
         const { pIndex, offset } = caret();
         const lineNode = paraTextNodes[pIndex];
         const parentRect = editorBox.getBoundingClientRect();
-        let left = 0, top = 0, height = 16;
+        let left = 0,
+          top = 0,
+          height = 16;
         if (lineNode) {
           const range = document.createRange();
           const clamped = Math.max(0, Math.min(offset, lineNode.data.length));
@@ -416,17 +498,28 @@ export default function MindMapPage() {
         const r = el.getBoundingClientRect();
         const cy = (r.top + r.bottom) / 2;
         const dy = Math.abs(clientY - cy);
-        if (dy < minDy) { minDy = dy; targetIndex = idx; }
+        if (dy < minDy) {
+          minDy = dy;
+          targetIndex = idx;
+        }
       });
       const lineElem = lines[targetIndex];
       const text = paraTextNodes[targetIndex];
-      if (!text) { setCaret({ pIndex: targetIndex, offset: 0 }); queueMicrotask(() => hiddenTa.focus()); return; }
+      if (!text) {
+        setCaret({ pIndex: targetIndex, offset: 0 });
+        queueMicrotask(() => hiddenTa.focus());
+        return;
+      }
       // binary search offset by comparing x
       const range = document.createRange();
-      let lo = 0, hi = text.data.length;
+      let lo = 0,
+        hi = text.data.length;
       const clamp = (n: number) => Math.max(0, Math.min(n, text.data.length));
       const toX = (pos: number) => {
-        try { range.setStart(text, clamp(pos)); range.setEnd(text, clamp(pos)); } catch {}
+        try {
+          range.setStart(text, clamp(pos));
+          range.setEnd(text, clamp(pos));
+        } catch {}
         const rect = range.getClientRects()[0];
         if (rect) return rect.left;
         const le = lineElem.getBoundingClientRect();
@@ -437,18 +530,30 @@ export default function MindMapPage() {
       while (lo < hi) {
         const mid = (lo + hi) >> 1;
         const x = toX(mid);
-        if (x - targetX < 0) lo = mid + 1; else hi = mid;
+        if (x - targetX < 0) lo = mid + 1;
+        else hi = mid;
       }
       setCaret({ pIndex: targetIndex, offset: lo });
-      queueMicrotask(() => { hiddenTa.focus(); measureCaretPosition(); });
+      queueMicrotask(() => {
+        hiddenTa.focus();
+        measureCaretPosition();
+      });
     }
     function onInputTa(e: InputEvent) {
       const v = e.data;
       if (v) insertText(v);
     }
     // Caret visualization
-    const [caretStyle, setCaretStyle] = createSignal<{ left: number; top: number; height: number }>({ left: 0, top: 0, height: 16 });
-    createEffect(() => { docParas(); caret(); measureCaretPosition(); });
+    const [caretStyle, setCaretStyle] = createSignal<{
+      left: number;
+      top: number;
+      height: number;
+    }>({ left: 0, top: 0, height: 16 });
+    createEffect(() => {
+      docParas();
+      caret();
+      measureCaretPosition();
+    });
     return (
       <g>
         <rect
@@ -498,9 +603,20 @@ export default function MindMapPage() {
           >
             <div
               ref={editorBox}
-              onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); setCaretFromPoint(e.clientX, e.clientY); }}
-              onClick={(e) => { e.preventDefault(); e.stopPropagation(); hiddenTa?.focus(); }}
-              onKeyDown={(e) => { e.stopPropagation(); onKeyDownEditor(e as unknown as KeyboardEvent); }}
+              onMouseDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setCaretFromPoint(e.clientX, e.clientY);
+              }}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                hiddenTa?.focus();
+              }}
+              onKeyDown={(e) => {
+                e.stopPropagation();
+                onKeyDownEditor(e as unknown as KeyboardEvent);
+              }}
               style={{
                 position: "relative",
                 width: "100%",
@@ -519,11 +635,26 @@ export default function MindMapPage() {
               <style>
                 {`@keyframes blink { 0%{opacity:1} 50%{opacity:0} 100%{opacity:1} }`}
               </style>
-              <For each={docParas()}>{(line, i) => (
-                <div data-role="line" style={{ "white-space": "pre-wrap", "word-break": "break-word" }}>
-                  <span ref={(el) => { const tn = document.createTextNode(line); el.textContent = ""; el.appendChild(tn); paraTextNodes[i()] = tn; }} />
-                </div>
-              )}</For>
+              <For each={docParas()}>
+                {(line, i) => (
+                  <div
+                    data-role="line"
+                    style={{
+                      "white-space": "pre-wrap",
+                      "word-break": "break-word",
+                    }}
+                  >
+                    <span
+                      ref={(el) => {
+                        const tn = document.createTextNode(line);
+                        el.textContent = "";
+                        el.appendChild(tn);
+                        paraTextNodes[i()] = tn;
+                      }}
+                    />
+                  </div>
+                )}
+              </For>
               {/* Caret */}
               <div
                 style={{
@@ -542,7 +673,10 @@ export default function MindMapPage() {
                 ref={(el) => (hiddenTa = el)}
                 value=""
                 onInput={onInputTa}
-                onKeyDown={(e) => { e.stopPropagation(); onKeyDownEditor(e as unknown as KeyboardEvent); }}
+                onKeyDown={(e) => {
+                  e.stopPropagation();
+                  onKeyDownEditor(e as unknown as KeyboardEvent);
+                }}
                 style={{
                   position: "absolute",
                   left: `${caretStyle().left}px`,
@@ -587,10 +721,24 @@ export default function MindMapPage() {
             style={{ cursor: "pointer" }}
           >
             <circle cx={knobX()} cy={knobY()} r={8} fill="#fff" stroke="#bbb" />
-            <line x1={knobX() - 5} y1={knobY()} x2={knobX() + 5} y2={knobY()} stroke="#666" stroke-width={"2"} />
+            <line
+              x1={knobX() - 5}
+              y1={knobY()}
+              x2={knobX() + 5}
+              y2={knobY()}
+              stroke="#666"
+              stroke-width={"2"}
+            />
             <Show when={!props.n.collapsed}>
               {/* expanded shows '+' like XMind knob; requirement emphasizes '-' when collapsed, so '+' optional */}
-              <line x1={knobX()} y1={knobY() - 5} x2={knobX()} y2={knobY() + 5} stroke="#666" stroke-width={"2"} />
+              <line
+                x1={knobX()}
+                y1={knobY() - 5}
+                x2={knobX()}
+                y2={knobY() + 5}
+                stroke="#666"
+                stroke-width={"2"}
+              />
             </Show>
           </g>
         </Show>
@@ -608,40 +756,44 @@ export default function MindMapPage() {
     return (
       <Show when={!isCollapsed() && children().length > 0}>
         <g>
-          <For each={children()}>{(c) => {
-            const cp = createMemo(() => positions().get(c.id)!);
-            const x1 = createMemo(() => pos().x + NODE_WIDTH + POST_LEN);
-            const y1 = createMemo(() => pos().y);
-            const x2 = createMemo(() => cp().x);
-            const y2 = createMemo(() => cp().y);
-            const midX = createMemo(() => x1() + 16);
-            const dy = createMemo(() => y2() - y1());
-            const dirY = createMemo(() => (dy() >= 0 ? 1 : -1));
-            const dirX = createMemo(() => (x2() - midX() >= 0 ? 1 : -1));
-            const r2 = createMemo(() => Math.min(10, Math.abs(x2() - midX()), Math.abs(dy()) / 2));
-            const vEndY = createMemo(() => y2() - dirY() * r2());
-            const a2endX = createMemo(() => midX() + dirX() * r2());
-            const a2startX = createMemo(() => midX());
-            const a2startY = createMemo(() => vEndY());
-            const a2endY = createMemo(() => y2());
-            // Sweep flag for child-side arc to ensure inner-corner rounding
-            const s2 = () => (dirY() > 0 ? 0 : 1);
-            const isFlat = createMemo(() => Math.abs(dy()) < 1 || r2() < 0.5);
-            return (
-              <path
-                d={
-                  isFlat()
-                    ? `M ${x1()} ${y1()} H ${midX()} H ${x2()}`
-                    : `M ${x1()} ${y1()} H ${midX()} V ${vEndY()} A ${r2()} ${r2()} 0 0 ${s2()} ${a2endX()} ${a2endY()} H ${x2()}`
-                }
-                stroke="#bbb"
-                stroke-width={"1.5"}
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                fill="none"
-              />
-            );
-          }}</For>
+          <For each={children()}>
+            {(c) => {
+              const cp = createMemo(() => positions().get(c.id)!);
+              const x1 = createMemo(() => pos().x + NODE_WIDTH + POST_LEN);
+              const y1 = createMemo(() => pos().y);
+              const x2 = createMemo(() => cp().x);
+              const y2 = createMemo(() => cp().y);
+              const midX = createMemo(() => x1() + 16);
+              const dy = createMemo(() => y2() - y1());
+              const dirY = createMemo(() => (dy() >= 0 ? 1 : -1));
+              const dirX = createMemo(() => (x2() - midX() >= 0 ? 1 : -1));
+              const r2 = createMemo(() =>
+                Math.min(10, Math.abs(x2() - midX()), Math.abs(dy()) / 2)
+              );
+              const vEndY = createMemo(() => y2() - dirY() * r2());
+              const a2endX = createMemo(() => midX() + dirX() * r2());
+              const a2startX = createMemo(() => midX());
+              const a2startY = createMemo(() => vEndY());
+              const a2endY = createMemo(() => y2());
+              // Sweep flag for child-side arc to ensure inner-corner rounding
+              const s2 = () => (dirY() > 0 ? 0 : 1);
+              const isFlat = createMemo(() => Math.abs(dy()) < 1 || r2() < 0.5);
+              return (
+                <path
+                  d={
+                    isFlat()
+                      ? `M ${x1()} ${y1()} H ${midX()} H ${x2()}`
+                      : `M ${x1()} ${y1()} H ${midX()} V ${vEndY()} A ${r2()} ${r2()} 0 0 ${s2()} ${a2endX()} ${a2endY()} H ${x2()}`
+                  }
+                  stroke="#bbb"
+                  stroke-width={"1.5"}
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  fill="none"
+                />
+              );
+            }}
+          </For>
         </g>
       </Show>
     );
@@ -650,40 +802,73 @@ export default function MindMapPage() {
   return (
     <div
       ref={containerRef}
-      style={{ width: "100%", height: "100%", overflow: "hidden", outline: "none", background: "#fafafa" }}
+      style={{
+        width: "100%",
+        height: "100%",
+        overflow: "hidden",
+        outline: "none",
+        background: "#fafafa",
+      }}
       tabIndex={0}
       onKeyDown={handleKeyDown}
       onClick={() => setFocusedId(null)}
       onWheel={handleWheel}
     >
       <svg width="100%" height="100%">
-        <g transform={`translate(${translate().x}, ${translate().y}) scale(${scale()})`}>
+        <g
+          transform={`translate(${translate().x}, ${
+            translate().y
+          }) scale(${scale()})`}
+        >
           <g>
             {/* connectors under nodes: drive from current tree traversal to ensure completeness */}
-            <For each={(() => { const ids: string[] = []; traverse(root(), (n) => ids.push(n.id)); return ids; })()}>{(id) => {
-              const found = findNode(root(), id);
-              if (!found) return null;
-              const n = found.node;
-              return <Connectors n={n} />;
-            }}</For>
+            <For
+              each={(() => {
+                const ids: string[] = [];
+                traverse(root(), (n) => ids.push(n.id));
+                return ids;
+              })()}
+            >
+              {(id) => {
+                const found = findNode(root(), id);
+                if (!found) return null;
+                const n = found.node;
+                return <Connectors n={n} />;
+              }}
+            </For>
           </g>
 
           <g>
-            <For each={(() => { const ids: string[] = []; traverse(root(), (n) => ids.push(n.id)); return ids; })()}>{(id) => {
-              const found = findNode(root(), id);
-              if (!found) return null;
-              const n = found.node;
-              return <NodeRect n={n} />;
-            }}</For>
+            <For
+              each={(() => {
+                const ids: string[] = [];
+                traverse(root(), (n) => ids.push(n.id));
+                return ids;
+              })()}
+            >
+              {(id) => {
+                const found = findNode(root(), id);
+                if (!found) return null;
+                const n = found.node;
+                return <NodeRect n={n} />;
+              }}
+            </For>
           </g>
         </g>
       </svg>
 
-      <div style={{ position: "absolute", left: "12px", top: "12px", color: "#666", "font-size": "12px" }}>
-        Ctrl+Enter 添加同级兄弟节点，Shift+Enter 添加子级节点。滚轮缩放；点击空白失焦。
+      <div
+        style={{
+          position: "absolute",
+          left: "12px",
+          top: "12px",
+          color: "#666",
+          "font-size": "12px",
+        }}
+      >
+        Ctrl+Enter 添加同级兄弟节点，Shift+Enter
+        添加子级节点。滚轮缩放；点击空白失焦。
       </div>
     </div>
   );
 }
-
-

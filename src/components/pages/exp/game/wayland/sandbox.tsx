@@ -36,9 +36,21 @@ type SkillConfig =
     }
   | {
       name: string;
+      type: "wave"; // 群攻：按顺序逐个目标伤害递减
+      costEntropy: number;
+      baseFactor: number; // 第一个目标的伤害系数
+      falloffPerTarget: number; // 每多命中一个目标，伤害系数递减量（例如 0.2 表示依次 -20%）
+    }
+  | {
+      name: string;
       type: "heal";
       costEntropy: number;
       healPercentOfSelfMaxHp: number; // 按施法者自身生命上限的百分比治疗
+    }
+  | {
+      name: string;
+      type: "substitute"; // 后备技能：选择一个位置，立即替换入场
+      costEntropy: number;
     };
 
 type NormalAttackConfig =
@@ -84,7 +96,8 @@ const CRIT_MULTIPLIER = 1.5; // 暴击伤害倍率
 // ---- 立绘资源自动加载 (@char/<id>.png) ----
 const CHAR_IMAGE_URLS = (import.meta as any).glob("./char/*.png", {
   eager: true,
-  as: "url",
+  query: "?url",
+  import: "default",
 }) as Record<string, string>;
 
 function getCharUrlById(id: string): string | undefined {
@@ -94,6 +107,25 @@ function getCharUrlById(id: string): string | undefined {
 
 // ---- 模板库（来自 sandbox.tree）----
 const TEMPLATES: Record<string, RoleTemplate> = {
+  entropy_mover: {
+    id: "entropy_mover",
+    name: "移熵术士（主角）",
+    profession: "特种",
+    maxHp: 90,
+    attack: 24,
+    defense: 30,
+    maxEntropy: 30,
+    maxSkillGauge: 12,
+    attackIntervalTicks: 60,
+    normalAttack: { type: "damage", damageFactor: 1 }, // 晶粒射击（普攻语义）
+    skill: {
+      name: "技能浪潮",
+      type: "wave",
+      costEntropy: 8,
+      baseFactor: 1.3,
+      falloffPerTarget: 0.2,
+    },
+  },
   heavy_guard: {
     id: "heavy_guard",
     name: "重甲近卫",
@@ -130,6 +162,60 @@ const TEMPLATES: Record<string, RoleTemplate> = {
       type: "damage",
       costEntropy: 10,
       damageFactor: 3.0,
+    },
+  },
+  melee_mage: {
+    id: "melee_mage",
+    name: "近战法师",
+    profession: "导流法师",
+    maxHp: 70,
+    attack: 28,
+    defense: 20,
+    maxEntropy: 30,
+    maxSkillGauge: 20,
+    attackIntervalTicks: 75,
+    normalAttack: { type: "damage", damageFactor: 1 },
+    skill: {
+      name: "导流爆击",
+      type: "damage",
+      costEntropy: 8,
+      damageFactor: 2.5,
+    },
+  },
+  crossbowman: {
+    id: "crossbowman",
+    name: "远程弩手",
+    profession: "斗士",
+    maxHp: 85,
+    attack: 26,
+    defense: 20,
+    maxEntropy: 15,
+    maxSkillGauge: 20,
+    attackIntervalTicks: 60,
+    normalAttack: { type: "damage", damageFactor: 1 },
+    skill: {
+      name: "贯穿弩矢",
+      type: "damage",
+      costEntropy: 6,
+      damageFactor: 2.2,
+    },
+  },
+  support_guard: {
+    id: "support_guard",
+    name: "支援近卫",
+    profession: "近卫",
+    maxHp: 140,
+    attack: 8,
+    defense: 80,
+    maxEntropy: 20,
+    // 后台技能：无充能条限制（0/0 视为就绪），在后备时可释放
+    maxSkillGauge: 0,
+    attackIntervalTicks: 80,
+    normalAttack: { type: "damage", damageFactor: 1 },
+    skill: {
+      name: "快速替补",
+      type: "substitute",
+      costEntropy: 5,
     },
   },
   medic: {
@@ -374,13 +460,51 @@ export default function WaylandSandbox() {
   const [cfgAlliesOn, setCfgAlliesOn] = createSignal<RoleTemplate[]>([]);
   const [cfgAlliesBench, setCfgAlliesBench] = createSignal<RoleTemplate[]>([]);
   const [cfgEnemiesOn, setCfgEnemiesOn] = createSignal<RoleTemplate[]>([]);
-  const [cfgEnemiesQueue, setCfgEnemiesQueue] = createSignal<RoleTemplate[]>([]);
+  const [cfgEnemiesQueue, setCfgEnemiesQueue] = createSignal<RoleTemplate[]>(
+    []
+  );
   const MAX_ALLY_ON = 4;
   const MAX_ALLY_BENCH = 6;
   const MAX_ENEMY_ON = 5;
 
   // 敌方新进场节奏（简单规则）
   let nextEnemySpawnTick = 0;
+
+  // ---- 后备替补选择态 ----
+  const [subSelecting, setSubSelecting] = createSignal<{
+    casterId: string; // 来自我方后备的支援近卫ID
+  } | null>(null);
+
+  function isInAllyBench(id: string): boolean {
+    return allyBench().some((r) => r.id === id);
+  }
+
+  function performSubstitute(targetOnFieldId: string, casterBenchId: string) {
+    const benchIdx = allyBench().findIndex((r) => r.id === casterBenchId);
+    if (benchIdx < 0) return; // 不在后备
+    const targetIdx = allies().findIndex((r) => r.id === targetOnFieldId);
+    if (targetIdx < 0) return; // 目标不在场
+    const benchRole = allyBench()[benchIdx];
+    const targetRole = allies()[targetIdx];
+    // 从后备移除 caster
+    setAllyBench((prev) => prev.filter((_, i) => i !== benchIdx));
+    // 将目标挪到后备末尾
+    setAllyBench((prev) => [...prev, targetRole]);
+    // caster 入场到目标位置
+    setAllies((prev) => {
+      const next = [...prev];
+      next[targetIdx] = benchRole;
+      return next;
+    });
+    // 初始化拖尾
+    updateGhostHpForRole(benchRole);
+    updateGhostHpForRole(targetRole);
+    // 释放特效
+    triggerCastFx(benchRole.id);
+    pushLog(
+      `我方 支援近卫 快速替补：${benchRole.template.name} 入场，替换 ${targetRole.template.name}`
+    );
+  }
 
   function commitRoleUpdate(updated: RoleInstance) {
     if (updated.side === "ally") {
@@ -467,7 +591,10 @@ export default function WaylandSandbox() {
     const interval = attacker.template.attackIntervalTicks;
     if (tick() - attacker.lastAttackTick < interval) return;
     // 普攻按模板配置执行
-    const na = attacker.template.normalAttack ?? { type: "damage", damageFactor: 1 };
+    const na = attacker.template.normalAttack ?? {
+      type: "damage",
+      damageFactor: 1,
+    };
     if (na.type === "heal") {
       const list = attacker.side === "ally" ? allies() : enemies();
       const targetHeal = lowestHpAlive(list);
@@ -495,7 +622,8 @@ export default function WaylandSandbox() {
       (na.damageFactor ?? 1) * (isCrit ? CRIT_MULTIPLIER : 1)
     );
     applyDamage(target, dmg, { isCrit, sourceId: attacker.id });
-    if (attacker.side === "ally") setLockTarget(target.id, attacker.template.id);
+    if (attacker.side === "ally")
+      setLockTarget(target.id, attacker.template.id);
     attacker.lastAttackTick = tick();
     pushLog(
       `${attacker.side === "ally" ? "我方" : "敌方"} ${
@@ -507,10 +635,14 @@ export default function WaylandSandbox() {
   function tryCastSkill(caster: RoleInstance) {
     if (!caster.alive || !caster.template.skill) return;
     const s = caster.template.skill;
-    if (caster.skillGauge < caster.template.maxSkillGauge) return;
+    if (
+      s.type !== "substitute" &&
+      caster.skillGauge < caster.template.maxSkillGauge
+    )
+      return;
 
-    // 重置技能条（释放条件：仅需技能条满）
-    caster.skillGauge = 0;
+    // 重置技能条（替补类无充能条，其他需清零）
+    if (s.type !== "substitute") caster.skillGauge = 0;
 
     // 释放技能会提高精神熵（上限封顶）
     if (caster.template.maxEntropy > 0) {
@@ -535,6 +667,34 @@ export default function WaylandSandbox() {
         } 施放技能「${s.name}」`
       );
       // 刷新施法者侧（熵/技能条/增益）
+      commitRoleUpdate(caster);
+      // 释放特效
+      triggerCastFx(caster.id);
+      return;
+    }
+
+    if (s.type === "wave") {
+      const targets = (caster.side === "ally" ? enemies() : allies()).filter(
+        (r) => r.alive
+      );
+      if (targets.length === 0) return;
+      const dmgList: number[] = [];
+      targets.forEach((t, idx) => {
+        const isCrit = Math.random() < CRIT_RATE;
+        const ratio = Math.max(0.1, 1 - s.falloffPerTarget * idx);
+        const factor = s.baseFactor * (isCrit ? CRIT_MULTIPLIER : 1) * ratio;
+        const dmg = computeDamage(caster, t, factor);
+        applyDamage(t, dmg, { isCrit, sourceId: caster.id });
+        if (idx === 0 && caster.side === "ally")
+          setLockTarget(t.id, caster.template.id);
+        dmgList.push(dmg);
+      });
+      pushLog(
+        `${caster.side === "ally" ? "我方" : "敌方"} ${
+          caster.template.name
+        } 技能「${s.name}」 命中 ${targets.length} 个目标`
+      );
+      // 刷新施法者侧（熵/技能条）
       commitRoleUpdate(caster);
       // 释放特效
       triggerCastFx(caster.id);
@@ -580,6 +740,20 @@ export default function WaylandSandbox() {
       commitRoleUpdate(caster);
       // 释放特效
       triggerCastFx(caster.id);
+      return;
+    }
+
+    if (s.type === "substitute") {
+      // 仅当 caster 在后备时可用
+      if (caster.side !== "ally" || !isInAllyBench(caster.id)) {
+        pushLog("支援近卫的快速替补需在后备释放");
+        return;
+      }
+      // 设置选择态
+      setSubSelecting({ casterId: caster.id });
+      pushLog("请选择一个我方在场位置进行替换");
+      // 替补类不需要进一步立即 commit，待点击目标后再处理
+      return;
     }
   }
 
@@ -719,15 +893,13 @@ export default function WaylandSandbox() {
     rafId = requestAnimationFrame(loop);
   }
 
-  
-
   onMount(() => {
     // 初始停留在配队模式
     setSetupMode(true);
     // 若配队为空，预填一套默认编队，避免无法开始
     if (cfgAlliesOn().length === 0 && cfgEnemiesOn().length === 0) {
-      setCfgAlliesOn([TEMPLATES.heavy_guard, TEMPLATES.medic]);
-      setCfgAlliesBench([TEMPLATES.melee_fighter]);
+      setCfgAlliesOn([TEMPLATES.entropy_mover, TEMPLATES.heavy_guard, TEMPLATES.medic]);
+      setCfgAlliesBench([TEMPLATES.melee_fighter, TEMPLATES.support_guard]);
       setCfgEnemiesOn([TEMPLATES.mob]);
       setCfgEnemiesQueue([TEMPLATES.mob, TEMPLATES.mob]);
     }
@@ -944,7 +1116,9 @@ export default function WaylandSandbox() {
                         disabled={cfgAlliesBench().length >= MAX_ALLY_BENCH}
                         onClick={() =>
                           setCfgAlliesBench((prev) =>
-                            prev.length >= MAX_ALLY_BENCH ? prev : [...prev, tpl]
+                            prev.length >= MAX_ALLY_BENCH
+                              ? prev
+                              : [...prev, tpl]
                           )
                         }
                       >
@@ -963,7 +1137,9 @@ export default function WaylandSandbox() {
                       </button>
                       <button
                         class="px-1 py-0.5 rounded bg-rose-500 text-white"
-                        onClick={() => setCfgEnemiesQueue((prev) => [...prev, tpl])}
+                        onClick={() =>
+                          setCfgEnemiesQueue((prev) => [...prev, tpl])
+                        }
                       >
                         加敌方队列
                       </button>
@@ -977,7 +1153,9 @@ export default function WaylandSandbox() {
             <h2 class="text-sm text-gray-600">当前配队</h2>
             <div class="grid grid-cols-2 gap-3">
               <div>
-                <div class="text-xs text-gray-600 mb-1">我方在场 ({cfgAlliesOn().length}/{MAX_ALLY_ON})</div>
+                <div class="text-xs text-gray-600 mb-1">
+                  我方在场 ({cfgAlliesOn().length}/{MAX_ALLY_ON})
+                </div>
                 <div class="flex flex-wrap gap-1">
                   <For each={cfgAlliesOn()}>
                     {(tpl, idx) => (
@@ -986,7 +1164,9 @@ export default function WaylandSandbox() {
                         <button
                           class="px-1 rounded bg-emerald-600 text-white"
                           onClick={() =>
-                            setCfgAlliesOn((prev) => prev.filter((_, i) => i !== idx()))
+                            setCfgAlliesOn((prev) =>
+                              prev.filter((_, i) => i !== idx())
+                            )
                           }
                         >
                           移除
@@ -997,7 +1177,9 @@ export default function WaylandSandbox() {
                 </div>
               </div>
               <div>
-                <div class="text-xs text-gray-600 mb-1">我方后备 ({cfgAlliesBench().length}/{MAX_ALLY_BENCH})</div>
+                <div class="text-xs text-gray-600 mb-1">
+                  我方后备 ({cfgAlliesBench().length}/{MAX_ALLY_BENCH})
+                </div>
                 <div class="flex flex-wrap gap-1">
                   <For each={cfgAlliesBench()}>
                     {(tpl, idx) => (
@@ -1006,7 +1188,9 @@ export default function WaylandSandbox() {
                         <button
                           class="px-1 rounded bg-emerald-600 text-white"
                           onClick={() =>
-                            setCfgAlliesBench((prev) => prev.filter((_, i) => i !== idx()))
+                            setCfgAlliesBench((prev) =>
+                              prev.filter((_, i) => i !== idx())
+                            )
                           }
                         >
                           移除
@@ -1017,7 +1201,9 @@ export default function WaylandSandbox() {
                 </div>
               </div>
               <div>
-                <div class="text-xs text-gray-600 mb-1">敌方在场 ({cfgEnemiesOn().length}/{MAX_ENEMY_ON})</div>
+                <div class="text-xs text-gray-600 mb-1">
+                  敌方在场 ({cfgEnemiesOn().length}/{MAX_ENEMY_ON})
+                </div>
                 <div class="flex flex-wrap gap-1">
                   <For each={cfgEnemiesOn()}>
                     {(tpl, idx) => (
@@ -1026,7 +1212,9 @@ export default function WaylandSandbox() {
                         <button
                           class="px-1 rounded bg-rose-600 text-white"
                           onClick={() =>
-                            setCfgEnemiesOn((prev) => prev.filter((_, i) => i !== idx()))
+                            setCfgEnemiesOn((prev) =>
+                              prev.filter((_, i) => i !== idx())
+                            )
                           }
                         >
                           移除
@@ -1037,7 +1225,9 @@ export default function WaylandSandbox() {
                 </div>
               </div>
               <div>
-                <div class="text-xs text-gray-600 mb-1">敌方队列 ({cfgEnemiesQueue().length})</div>
+                <div class="text-xs text-gray-600 mb-1">
+                  敌方队列 ({cfgEnemiesQueue().length})
+                </div>
                 <div class="flex flex-wrap gap-1">
                   <For each={cfgEnemiesQueue()}>
                     {(tpl, idx) => (
@@ -1046,7 +1236,9 @@ export default function WaylandSandbox() {
                         <button
                           class="px-1 rounded bg-rose-600 text-white"
                           onClick={() =>
-                            setCfgEnemiesQueue((prev) => prev.filter((_, i) => i !== idx()))
+                            setCfgEnemiesQueue((prev) =>
+                              prev.filter((_, i) => i !== idx())
+                            )
                           }
                         >
                           移除
@@ -1087,42 +1279,42 @@ export default function WaylandSandbox() {
   return (
     <Show when={!setupMode()} fallback={<SetupView />}>
       <div class="p-4 grid grid-cols-[1fr_280px] gap-4">
-      <style>{`
+        <style>{`
       @keyframes hit-fade { from { opacity: 0.55; filter: saturate(1.1); } to { opacity: 0; filter: none; } }
       @keyframes cast-fade { from { opacity: 0.35; } to { opacity: 0; } }
       @keyframes float-up { from { transform: translate(-50%, 0); opacity: 1; } to { transform: translate(-50%, -24px); opacity: 0; } }
       @keyframes float-up-drift { from { transform: translate(-50%, 0); opacity: 1; } to { transform: translate(-50%, -28px); opacity: 0; } }
       `}</style>
-      <div
-        class="space-y-3 relative"
-        ref={(el) => setContainerRef(el as HTMLDivElement)}
-      >
-        <div class="flex items-center justify-between">
-          <h1 class="text-lg font-600">Wayland 沙盒</h1>
-          <div class="flex items-center gap-2 text-sm">
-            <span class="text-gray-700">tick: {tick()}</span>
-            <label class="inline-flex items-center gap-1">
-              <input
-                type="checkbox"
-                checked={speed() === 2}
-                onInput={(e) =>
-                  setSpeed((e.currentTarget.checked ? 2 : 1) as 1 | 2)
-                }
-              />
-              2x
-            </label>
-            <button
-              class="px-2 py-1 rounded bg-gray-200 hover:bg-gray-300"
-              onClick={() => setPaused((p) => !p)}
-            >
-              {paused() ? "继续" : "暂停"}
-            </button>
-            <button
-              class="px-2 py-1 rounded bg-blue-600 text-white"
-              onClick={() => resetBattle()}
-            >
-              重开
-            </button>
+        <div
+          class="space-y-3 relative"
+          ref={(el) => setContainerRef(el as HTMLDivElement)}
+        >
+          <div class="flex items-center justify-between">
+            <h1 class="text-lg font-600">Wayland 沙盒</h1>
+            <div class="flex items-center gap-2 text-sm">
+              <span class="text-gray-700">tick: {tick()}</span>
+              <label class="inline-flex items-center gap-1">
+                <input
+                  type="checkbox"
+                  checked={speed() === 2}
+                  onInput={(e) =>
+                    setSpeed((e.currentTarget.checked ? 2 : 1) as 1 | 2)
+                  }
+                />
+                2x
+              </label>
+              <button
+                class="px-2 py-1 rounded bg-gray-200 hover:bg-gray-300"
+                onClick={() => setPaused((p) => !p)}
+              >
+                {paused() ? "继续" : "暂停"}
+              </button>
+              <button
+                class="px-2 py-1 rounded bg-blue-600 text-white"
+                onClick={() => resetBattle()}
+              >
+                重开
+              </button>
               <button
                 class="px-2 py-1 rounded bg-amber-600 text-white"
                 onClick={() => {
@@ -1133,120 +1325,181 @@ export default function WaylandSandbox() {
               >
                 返回配队
               </button>
+            </div>
+          </div>
+
+          {/* 全局覆盖层：锁定标记与伤害飘字，避免被单卡片裁剪 */}
+          <div class="pointer-events-none absolute inset-0 z-50">
+            {/* 锁定标记 */}
+            <For each={Array.from(locks().entries())}>
+              {([targetId, allyTplId]) => {
+                const p = getCardPos(targetId);
+                if (!p) return null as any;
+                return (
+                  <div
+                    class="absolute px-1.5 py-0.5 rounded bg-white/95 shadow text-[10px] flex items-center gap-1"
+                    style={{
+                      left: `${p.cx}px`,
+                      top: `${p.top + 4}px`,
+                      transform: "translateX(-50%)",
+                    }}
+                  >
+                    <img
+                      src={getCharUrlById(allyTplId) || ""}
+                      alt="lock"
+                      class="h-4 w-4 object-contain"
+                    />
+                    <span>锁定</span>
+                  </div>
+                );
+              }}
+            </For>
+            {/* 伤害飘字 */}
+            <For each={floatTexts()}>
+              {(f) => {
+                const p = getCardPos(f.roleId);
+                if (!p) return null as any;
+                return (
+                  <div
+                    class="absolute"
+                    classList={{
+                      "text-red-600": !f.isHeal,
+                      "text-emerald-600": f.isHeal,
+                      "font-extrabold": f.isCrit,
+                      "font-semibold": !f.isCrit,
+                    }}
+                    style={{
+                      left: `${p.cx + f.dx}px`,
+                      top: `${p.top + 6 + f.yOffset}px`,
+                      transform: "translateX(-50%)",
+                      animation: `float-up-drift ${FLOAT_TEXT_MS}ms ease-out forwards`,
+                      "text-shadow": f.isCrit
+                        ? "0 0 2px rgba(255,255,255,0.8)"
+                        : "none",
+                    }}
+                  >
+                    {f.text}
+                  </div>
+                );
+              }}
+            </For>
+          </div>
+
+          {/* 替补选择覆盖层（允许点击） */}
+          <Show when={subSelecting()}>
+            <div class="absolute inset-0 z-50 pointer-events-auto">
+              <For each={allies()}>
+                {(r) => {
+                  const p = getCardPos(r.id);
+                  if (!p) return null as any;
+                  return (
+                    <button
+                      class="absolute px-2 py-0.5 rounded bg-amber-600 text-white text-[12px] shadow hover:bg-amber-700"
+                      style={{
+                        left: `${p.cx}px`,
+                        top: `${p.top - 8}px`,
+                        transform: "translateX(-50%)",
+                      }}
+                      onClick={() => {
+                        const sel = subSelecting();
+                        if (!sel) return;
+                        performSubstitute(r.id, sel.casterId);
+                        // 技能代价：提高施法者熵（若仍存在于后备，更新其状态；若已入场，将在战斗循环中更新）
+                        const benchIdx = allyBench().findIndex(
+                          (x) => x.id === sel.casterId
+                        );
+                        if (benchIdx >= 0) {
+                          const b = { ...allyBench()[benchIdx] };
+                          const sc = TEMPLATES.support_guard.skill as Extract<
+                            SkillConfig,
+                            { type: "substitute" }
+                          >;
+                          b.entropy = Math.min(
+                            b.template.maxEntropy,
+                            b.entropy + sc.costEntropy
+                          );
+                          setAllyBench((prev) => {
+                            const next = [...prev];
+                            next[benchIdx] = b;
+                            return next;
+                          });
+                        }
+                        setSubSelecting(null);
+                      }}
+                    >
+                      替换到此
+                    </button>
+                  );
+                }}
+              </For>
+              <div class="absolute left-2 top-2 flex items-center gap-2">
+                <span class="px-2 py-0.5 rounded bg-white shadow text-[12px]">
+                  选择一个我方位置进行替换
+                </span>
+                <button
+                  class="px-2 py-0.5 rounded bg-gray-200 hover:bg-gray-300 text-[12px]"
+                  onClick={() => setSubSelecting(null)}
+                >
+                  取消
+                </button>
+              </div>
+            </div>
+          </Show>
+
+          <div class="grid grid-cols-2 gap-4">
+            <section class="space-y-2">
+              <h2 class="text-sm text-gray-600">我方在场</h2>
+              <div class="flex flex-row-reverse flex-wrap gap-2">
+                <For each={allies()}>
+                  {(r) => <RoleCard rAccessor={() => r} />}
+                </For>
+              </div>
+            </section>
+            <section class="space-y-2">
+              <h2 class="text-sm text-gray-600">敌方在场</h2>
+              <div class="flex flex-wrap gap-2 justify-end">
+                <For each={enemies()}>
+                  {(r) => <RoleCard rAccessor={() => r} />}
+                </For>
+              </div>
+            </section>
+          </div>
+
+          <div class="grid grid-cols-2 gap-4">
+            <section class="space-y-2">
+              <h2 class="text-sm text-gray-600">后备</h2>
+              <div class="flex flex-wrap gap-2">
+                <For each={allyBench()}>
+                  {(r) => <RoleCard rAccessor={() => r} />}
+                </For>
+              </div>
+            </section>
+            <section class="space-y-2">
+              <h2 class="text-sm text-gray-600">敌方队列</h2>
+              <div class="flex flex-wrap gap-2 justify-end">
+                <For each={enemyQueue()}>
+                  {(r) => <RoleCard rAccessor={() => r} />}
+                </For>
+              </div>
+            </section>
+          </div>
+
+          <div class="text-sm text-gray-600">
+            <span>
+              我方存活: {alliesAlive().length} / {allies().length}
+            </span>
+            <span class="ml-4">
+              敌方存活: {enemiesAlive().length} / {enemies().length}
+            </span>
           </div>
         </div>
 
-        {/* 全局覆盖层：锁定标记与伤害飘字，避免被单卡片裁剪 */}
-        <div class="pointer-events-none absolute inset-0 z-50">
-          {/* 锁定标记 */}
-          <For each={Array.from(locks().entries())}>
-            {([targetId, allyTplId]) => {
-              const p = getCardPos(targetId);
-              if (!p) return null as any;
-              return (
-                <div
-                  class="absolute px-1.5 py-0.5 rounded bg-white/95 shadow text-[10px] flex items-center gap-1"
-                  style={{
-                    left: `${p.cx}px`,
-                    top: `${p.top + 4}px`,
-                    transform: "translateX(-50%)",
-                  }}
-                >
-                  <img
-                    src={getCharUrlById(allyTplId) || ""}
-                    alt="lock"
-                    class="h-4 w-4 object-contain"
-                  />
-                  <span>锁定</span>
-                </div>
-              );
-            }}
-          </For>
-          {/* 伤害飘字 */}
-          <For each={floatTexts()}>
-            {(f) => {
-              const p = getCardPos(f.roleId);
-              if (!p) return null as any;
-              return (
-                <div
-                  class="absolute"
-                  classList={{
-                    "text-red-600": !f.isHeal,
-                    "text-emerald-600": f.isHeal,
-                    "font-extrabold": f.isCrit,
-                    "font-semibold": !f.isCrit,
-                  }}
-                  style={{
-                    left: `${p.cx + f.dx}px`,
-                    top: `${p.top + 6 + f.yOffset}px`,
-                    transform: "translateX(-50%)",
-                    animation: `float-up-drift ${FLOAT_TEXT_MS}ms ease-out forwards`,
-                    "text-shadow": f.isCrit
-                      ? "0 0 2px rgba(255,255,255,0.8)"
-                      : "none",
-                  }}
-                >
-                  {f.text}
-                </div>
-              );
-            }}
-          </For>
-        </div>
-
-        <div class="grid grid-cols-2 gap-4">
-          <section class="space-y-2">
-            <h2 class="text-sm text-gray-600">我方在场</h2>
-            <div class="flex flex-row-reverse flex-wrap gap-2">
-              <For each={allies()}>
-                {(r) => <RoleCard rAccessor={() => r} />}
-              </For>
-            </div>
-          </section>
-          <section class="space-y-2">
-            <h2 class="text-sm text-gray-600">敌方在场</h2>
-            <div class="flex flex-wrap gap-2 justify-end">
-              <For each={enemies()}>
-                {(r) => <RoleCard rAccessor={() => r} />}
-              </For>
-            </div>
-          </section>
-        </div>
-
-        <div class="grid grid-cols-2 gap-4">
-          <section class="space-y-2">
-            <h2 class="text-sm text-gray-600">后备</h2>
-            <div class="flex flex-wrap gap-2">
-              <For each={allyBench()}>
-                {(r) => <RoleCard rAccessor={() => r} />}
-              </For>
-            </div>
-          </section>
-          <section class="space-y-2">
-            <h2 class="text-sm text-gray-600">敌方队列</h2>
-            <div class="flex flex-wrap gap-2 justify-end">
-              <For each={enemyQueue()}>
-                {(r) => <RoleCard rAccessor={() => r} />}
-              </For>
-            </div>
-          </section>
-        </div>
-
-        <div class="text-sm text-gray-600">
-          <span>
-            我方存活: {alliesAlive().length} / {allies().length}
-          </span>
-          <span class="ml-4">
-            敌方存活: {enemiesAlive().length} / {enemies().length}
-          </span>
-        </div>
-      </div>
-
-      <aside class="space-y-2">
-        <h2 class="text-sm text-gray-600">战斗日志</h2>
-        <div class="h-[520px] overflow-auto rounded border bg-white p-2 text-sm whitespace-pre-wrap">
-          <For each={logLines()}>{(l) => <div>{l}</div>}</For>
-        </div>
-      </aside>
+        <aside class="space-y-2">
+          <h2 class="text-sm text-gray-600">战斗日志</h2>
+          <div class="h-[520px] overflow-auto rounded border bg-white p-2 text-sm whitespace-pre-wrap">
+            <For each={logLines()}>{(l) => <div>{l}</div>}</For>
+          </div>
+        </aside>
       </div>
     </Show>
   );
