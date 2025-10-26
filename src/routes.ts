@@ -208,6 +208,12 @@ export const routes = [
     component: lazy(() => import("./components/pages/exp/game/wayland/sandbox")),
   },
   {
+    path: "/exp/game/urbanflow",
+    name: "UrbanFlow 网格编辑器（原型）",
+    description: "城市交通模拟器：网格城市编辑与可视化（原型）",
+    component: lazy(() => import("./components/pages/exp/game/urbanflow/index")),
+  },
+  {
     path: "/game/chaotic-pendulum",
     name: "混沌摆（双摆）",
     description: "双摆混沌演示：可调长度/质量/阻尼，支持拖影显示",
