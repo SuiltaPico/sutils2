@@ -18,6 +18,12 @@ export function draw(
     simTime,
     vehicles,
     showGrid,
+    placingRect,
+    rectStart,
+    rectHover,
+    tool,
+    blockKind,
+    roadBlocks,
   } = state;
 
   // 背景
@@ -121,12 +127,91 @@ export function draw(
   }
   ctx.restore();
 
+  // 绘制道路块（4x4 粗网格）
+  if (roadBlocks.length) {
+    ctx.save();
+    ctx.translate(cx, cy);
+    for (const rb of roadBlocks) {
+      const gx = rb.bx * 4;
+      const gy = rb.by * 4;
+      const x = gx * TILE * s;
+      const y = gy * TILE * s;
+      const w = 4 * TILE * s;
+      const h = 4 * TILE * s;
+      ctx.fillStyle = rb.kind === "cement_4x4" ? "#9ca3af" : "#6b7280";
+      ctx.fillRect(Math.floor(x), Math.floor(y), Math.ceil(w), Math.ceil(h));
+    }
+    ctx.restore();
+  }
+
   // 车辆数 HUD
   ctx.save();
   ctx.fillStyle = "#111827";
   ctx.font = `${12 * Math.max(1, s)}px sans-serif`;
   ctx.fillText(`车辆: ${vehicles.length}`, 8, 16);
+  // 时间 HUD (游戏内)
+  const T_DAY = 24 * 3600;
+  const t = ((simTime.get() % T_DAY) + T_DAY) % T_DAY;
+  const hh = Math.floor(t / 3600);
+  const mm = Math.floor((t % 3600) / 60);
+  const pad = (n: number) => (n < 10 ? `0${n}` : `${n}`);
+  ctx.fillText(`时间: ${pad(hh)}:${pad(mm)}`, 8, 32);
   ctx.restore();
+
+  // 矩形放置预览（最终区域）
+  if (placingRect() && rectStart && rectHover) {
+    const rs = rectStart as any as { gx: number; gy: number };
+    const rh = rectHover as any as { gx: number; gy: number };
+    let x0 = Math.max(0, Math.min(rs.gx, rh.gx));
+    let x1 = Math.min(GRID_W - 1, Math.max(rs.gx, rh.gx));
+    let y0 = Math.max(0, Math.min(rs.gy, rh.gy));
+    let y1 = Math.min(GRID_H - 1, Math.max(rs.gy, rh.gy));
+    // 道路块模式下：对齐至 4x4 且限制为水平或垂直一条直线
+    if (blockKind()) {
+      const bs = 4;
+      const bx0 = Math.floor(x0 / bs);
+      const by0 = Math.floor(y0 / bs);
+      const bx1 = Math.floor(x1 / bs);
+      const by1 = Math.floor(y1 / bs);
+      const horz = Math.abs(bx1 - bx0) >= Math.abs(by1 - by0);
+      if (horz) {
+        const bya = Math.floor((by0 + by1) / 2);
+        x0 = Math.min(bx0, bx1) * bs;
+        x1 = (Math.max(bx0, bx1) + 1) * bs - 1;
+        y0 = bya * bs;
+        y1 = (bya + 1) * bs - 1;
+      } else {
+        const bxa = Math.floor((bx0 + bx1) / 2);
+        x0 = bxa * bs;
+        x1 = (bxa + 1) * bs - 1;
+        y0 = Math.min(by0, by1) * bs;
+        y1 = (Math.max(by0, by1) + 1) * bs - 1;
+      }
+    }
+    const px = x0 * TILE * s + cx;
+    const py = y0 * TILE * s + cy;
+    const pw = (x1 - x0 + 1) * TILE * s;
+    const ph = (y1 - y0 + 1) * TILE * s;
+
+    // 颜色：优先道路块，其次当前工具
+    let color: string;
+    if (blockKind()) {
+      color = blockKind() === "cement_4x4" ? "#9ca3af" : "#6b7280";
+    } else {
+      const kind = toolToKindLocal(tool());
+      color = cellColor[kind] || "#000000";
+    }
+    ctx.save();
+    ctx.globalAlpha = 0.25;
+    ctx.fillStyle = color;
+    ctx.fillRect(Math.floor(px), Math.floor(py), Math.ceil(pw), Math.ceil(ph));
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = "#0ea5e9";
+    ctx.lineWidth = Math.max(1, 2 * s);
+    ctx.setLineDash([6 * s, 4 * s]);
+    ctx.strokeRect(Math.floor(px) + 0.5, Math.floor(py) + 0.5, Math.ceil(pw), Math.ceil(ph));
+    ctx.restore();
+  }
 
   // 网格线
   if (showGrid()) {
@@ -173,4 +258,21 @@ export function draw(
 
 function clamp(n: number, a: number, b: number) {
   return Math.max(a, Math.min(b, n));
+}
+
+function toolToKindLocal(t: ReturnType<UrbanFlowState["tool"]>): CellKind {
+  switch (t) {
+    case "road":
+      return CellKind.Road;
+    case "res":
+      return CellKind.Res;
+    case "com":
+      return CellKind.Com;
+    case "off":
+      return CellKind.Off;
+    case "erase":
+      return CellKind.Empty;
+    default:
+      return CellKind.Empty;
+  }
 }

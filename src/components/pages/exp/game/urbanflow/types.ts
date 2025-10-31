@@ -8,9 +8,13 @@ export type GraphTool =
 
 export const STORAGE_KEY = "urbanflow/grid/v1";
 export const GRAPH_KEY = "urbanflow/graph/v1";
+export const ROAD_BLOCKS_KEY = "urbanflow/roadblocks/v1";
 export const GRID_W = 256;
 export const GRID_H = 256;
 export const TILE = 8; // 每格基础像素（缩放前）
+export const ROAD_BLOCK_SIZE = 4; // 道路块 4x4 基本格
+export const GRID_BW = GRID_W / ROAD_BLOCK_SIZE; // 道路块网格宽（粗网格）
+export const GRID_BH = GRID_H / ROAD_BLOCK_SIZE; // 道路块网格高（粗网格）
 
 export enum CellKind {
   Empty = 0,
@@ -48,4 +52,13 @@ export type Vehicle = {
   color: string;
   length: number; // px
   width: number; // px
+};
+
+// 道路块系统
+export type RoadBlockKind = "cement_4x4" | "asphalt_4x4";
+export type RoadBlock = {
+  id: number;
+  kind: RoadBlockKind;
+  bx: number; // 粗网格坐标（单位: ROAD_BLOCK_SIZE 基本格）
+  by: number;
 };

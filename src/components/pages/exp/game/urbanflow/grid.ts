@@ -1,5 +1,5 @@
 import { UrbanFlowState } from "./state";
-import { GRID_H, GRID_W, STORAGE_KEY } from "./types";
+import { CellKind, GRID_H, GRID_W, STORAGE_KEY } from "./types";
 
 export function loadGrid(state: UrbanFlowState) {
   try {
@@ -16,6 +16,7 @@ export function loadGrid(state: UrbanFlowState) {
       if (buf.length === state.cells.length) state.cells = buf;
     }
   } catch {}
+  recalcZoneIndex(state);
 }
 export function saveGrid(state: UrbanFlowState) {
   try {
@@ -41,6 +42,23 @@ export function throttleSave(state: UrbanFlowState) {
     saveGrid(state);
     lastSave = now;
   }
+}
+
+export function recalcZoneIndex(state: UrbanFlowState) {
+  const res: number[] = [];
+  const com: number[] = [];
+  const off: number[] = [];
+  const arr = state.cells;
+  for (let i = 0; i < arr.length; i++) {
+    const v = arr[i];
+    if (v === CellKind.Res) res.push(i);
+    else if (v === CellKind.Com) com.push(i);
+    else if (v === CellKind.Off) off.push(i);
+  }
+  state.resCellIndices = res;
+  state.comCellIndices = com;
+  state.offCellIndices = off;
+  state.setZoneStats({ res: res.length, com: com.length, off: off.length });
 }
 
 export function undo(state: UrbanFlowState) {

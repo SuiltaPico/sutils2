@@ -1,8 +1,17 @@
 import { createMemo, onCleanup, onMount } from "solid-js";
 import { draw } from "./drawing";
-import { paintAt } from "./events";
-import { generateSampleGrid, getNode, loadGraph, saveGraph } from "./graph";
-import { loadGrid, redo, saveGrid, undo } from "./grid";
+import { paintAt, fillRectWithKind } from "./events";
+import {
+  autoBuildRoadGraphForRect,
+  rebuildGraphFromRoadBlocks,
+  generateSampleGrid,
+  getNode,
+  loadGraph,
+  loadRoadBlocks,
+  saveGraph,
+  saveRoadBlocks,
+} from "./graph";
+import { loadGrid, redo, saveGrid, undo, recalcZoneIndex } from "./grid";
 import { clearVehicles, spawnVehicles, updateSim } from "./simulation";
 import { createUrbanFlowState } from "./state";
 import { CellKind, Tool } from "./types";
@@ -35,13 +44,22 @@ export default function UrbanFlow() {
     setShowGrid,
     graphTool,
     setGraphTool,
+    placingRect,
+    setPlacingRect,
+    blockKind,
+    setBlockKind,
     simRunning,
     setSimRunning,
+    autoCommute,
+    setAutoCommute,
+    commuteRate,
+    setCommuteRate,
     undoStack,
     redoStack,
     hasGraph,
     graphCount,
     vehicleCount,
+    zoneStats,
   } = state;
 
   const MAX_HISTORY = 100;
@@ -80,6 +98,8 @@ export default function UrbanFlow() {
   onMount(() => {
     loadGrid(state);
     loadGraph(state);
+    loadRoadBlocks(state);
+    rebuildGraphFromRoadBlocks(state);
     const ro = new ResizeObserver(resize);
     ro.observe(wrapper);
     window.addEventListener("resize", resize);
@@ -90,10 +110,88 @@ export default function UrbanFlow() {
     let lastX = 0;
     let lastY = 0;
 
+    const toWorldAndGrid = (e: PointerEvent) => {
+      const rect = canvas.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+      const s = scale();
+      const cx = camX();
+      const cy = camY();
+      const wx = (mx - cx) / s;
+      const wy = (my - cy) / s;
+      const gx = Math.floor(wx / 8);
+      const gy = Math.floor(wy / 8);
+      return { wx, wy, gx, gy };
+    };
+
     const onDown = (e: PointerEvent) => {
       canvas.setPointerCapture(e.pointerId);
       lastX = e.clientX;
       lastY = e.clientY;
+      // 矩形放置模式：点击起点/终点
+      if (placingRect()) {
+        const { gx, gy } = toWorldAndGrid(e);
+        if (!state.rectStart) {
+          state.rectStart = { gx, gy } as any;
+          state.rectHover = { gx, gy } as any;
+          invalidate();
+        } else {
+          const rs = state.rectStart as any as { gx: number; gy: number };
+          if (blockKind()) {
+            // 道路块直线放置：按粗网格（4x4）对齐，选择水平或垂直方向
+            const bs = 4;
+            const bx0 = Math.floor(rs.gx / bs);
+            const by0 = Math.floor(rs.gy / bs);
+            const bx1 = Math.floor(gx / bs);
+            const by1 = Math.floor(gy / bs);
+            const horz = Math.abs(bx1 - bx0) >= Math.abs(by1 - by0);
+            const bxa = Math.min(bx0, bx1);
+            const bxb = Math.max(bx0, bx1);
+            const bya = Math.min(by0, by1);
+            const byb = Math.max(by0, by1);
+            const fixBy = Math.floor((by0 + by1) / 2);
+            const fixBx = Math.floor((bx0 + bx1) / 2);
+            if (horz) {
+              for (let bx = bxa; bx <= bxb; bx++) {
+                // 写入 roadBlocks（避免重复），不再用分区像素涂抹
+                const exists = state.roadBlocks.find((rb) => rb.bx === bx && rb.by === fixBy);
+                if (!exists) {
+                  state.roadBlocks.push({ id: state.nextRoadBlockId++, kind: blockKind()!, bx, by: fixBy });
+                }
+              }
+            } else {
+              for (let by = bya; by <= byb; by++) {
+                const exists = state.roadBlocks.find((rb) => rb.bx === fixBx && rb.by === by);
+                if (!exists) {
+                  state.roadBlocks.push({ id: state.nextRoadBlockId++, kind: blockKind()!, bx: fixBx, by });
+                }
+              }
+            }
+            // 根据道路块重建路网
+            rebuildGraphFromRoadBlocks(state);
+            saveRoadBlocks(state);
+            invalidate();
+          } else {
+            // 普通分区矩形填充
+            state.currentStroke = new Map();
+            const kind = toolToKind(state.tool());
+            fillRectWithKind(state, rs.gx, rs.gy, gx, gy, kind);
+            undoStack.push(Array.from(state.currentStroke.values()));
+            while (undoStack.length > MAX_HISTORY) undoStack.shift();
+            redoStack.length = 0;
+            state.currentStroke = null;
+            recalcZoneIndex(state);
+            saveGrid(state);
+          }
+          // 复位
+          state.rectStart = null;
+          state.rectHover = null;
+          invalidate();
+        }
+        dragging = false;
+        dragMode = null;
+        return;
+      }
       if (
         e.button === 1 ||
         e.button === 2 ||
@@ -128,6 +226,9 @@ export default function UrbanFlow() {
       try {
         canvas.releasePointerCapture(e.pointerId);
       } catch {}
+      if (placingRect()) {
+        return; // 矩形模式不在 pointerup 中处理撤销栈
+      }
       if (state.currentStroke && state.currentStroke.size > 0) {
         undoStack.push(Array.from(state.currentStroke.values()));
         while (undoStack.length > MAX_HISTORY) undoStack.shift();
@@ -136,6 +237,14 @@ export default function UrbanFlow() {
         saveGrid(state);
       } else {
         state.currentStroke = null;
+      }
+    };
+    const onMoveHover = (e: PointerEvent) => {
+      if (!placingRect()) return;
+      const { gx, gy } = toWorldAndGrid(e);
+      if (state.rectStart) {
+        state.rectHover = { gx, gy } as any;
+        invalidate();
       }
     };
     const onWheel = (e: WheelEvent) => {
@@ -159,7 +268,10 @@ export default function UrbanFlow() {
     };
 
     canvas.addEventListener("pointerdown", onDown);
-    canvas.addEventListener("pointermove", onMove);
+    canvas.addEventListener("pointermove", (ev) => {
+      onMove(ev);
+      onMoveHover(ev);
+    });
     canvas.addEventListener("pointerup", end);
     canvas.addEventListener("pointercancel", end);
     canvas.addEventListener("pointerout", end);
@@ -168,6 +280,16 @@ export default function UrbanFlow() {
     const onKey = (e: KeyboardEvent) => {
       const z = e.key === "z" || e.key === "Z";
       const y = e.key === "y" || e.key === "Y";
+      if (e.key === "Escape") {
+        if (state.rectStart || placingRect()) {
+          state.rectStart = null;
+          state.rectHover = null;
+          setPlacingRect(false);
+          invalidate();
+          e.preventDefault();
+          return;
+        }
+      }
       if ((e.ctrlKey || e.metaKey) && z && !e.shiftKey) {
         // 撤销
         if (undo(state)) {
@@ -234,10 +356,25 @@ export default function UrbanFlow() {
         setTool={setTool}
         brush={brush}
         setBrush={setBrush}
+        placingRect={placingRect}
+        setPlacingRect={(v) => {
+          setPlacingRect(v);
+          if (!v) {
+            state.rectStart = null;
+            state.rectHover = null;
+          }
+          invalidate();
+        }}
+        blockKind={blockKind}
+        setBlockKind={setBlockKind}
         graphTool={graphTool}
         setGraphTool={setGraphTool}
         simRunning={simRunning}
         setSimRunning={setSimRunning}
+        autoCommute={autoCommute}
+        setAutoCommute={setAutoCommute}
+        commuteRate={commuteRate}
+        setCommuteRate={setCommuteRate}
         generateSampleGrid={() => {
           generateSampleGrid(state, wrapper, (c: number) => {
             spawnVehicles(state, c);
@@ -256,6 +393,7 @@ export default function UrbanFlow() {
         hasGraph={hasGraph}
         graphCount={graphCount}
         vehicleCount={vehicleCount}
+        zoneStats={zoneStats}
         showGrid={showGrid}
         setShowGrid={(v) => {
           setShowGrid(v);
@@ -279,6 +417,7 @@ export default function UrbanFlow() {
         }}
         clearGrid={() => {
           state.cells.fill(0);
+          recalcZoneIndex(state);
           invalidate();
           saveGrid(state);
         }}
@@ -293,6 +432,11 @@ export default function UrbanFlow() {
           }
         }}
         clamp={clamp}
+        cancelRectStart={() => {
+          state.rectStart = null;
+          state.rectHover = null;
+          invalidate();
+        }}
       />
     </div>
   );

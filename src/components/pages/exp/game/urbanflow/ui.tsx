@@ -1,5 +1,5 @@
 import { Accessor, Setter } from "solid-js";
-import { CellKind, cellColor, GraphTool, Node, Tool, Vehicle } from "./types";
+import { CellKind, cellColor, GraphTool, Node, RoadBlockKind, Tool } from "./types";
 
 function Legend(props: { color: string; label: string }) {
   return (
@@ -20,6 +20,10 @@ type SidebarProps = {
   setBrush: Setter<number>;
   graphTool: Accessor<GraphTool>;
   setGraphTool: Setter<GraphTool>;
+  placingRect: Accessor<boolean>;
+  setPlacingRect: Setter<boolean>;
+  blockKind: Accessor<RoadBlockKind | null>;
+  setBlockKind: Setter<RoadBlockKind | null>;
   simRunning: Accessor<boolean>;
   setSimRunning: Setter<boolean>;
   generateSampleGrid: () => void;
@@ -39,6 +43,12 @@ type SidebarProps = {
   undo: () => void;
   redo: () => void;
   clamp: (n: number, a: number, b: number) => number;
+  zoneStats: Accessor<{ res: number; com: number; off: number }>;
+  autoCommute: Accessor<boolean>;
+  setAutoCommute: Setter<boolean>;
+  commuteRate: Accessor<number>;
+  setCommuteRate: Setter<number>;
+  cancelRectStart: () => void;
 };
 
 export function Sidebar(props: SidebarProps) {
@@ -59,14 +69,6 @@ export function Sidebar(props: SidebarProps) {
           />
         </div>
         <div class="grid grid-cols-2 gap-2 text-sm">
-          <button
-            class={`border rounded px-2 py-1 hover:bg-gray-100 ${
-              props.tool() === "road" ? "bg-gray-200" : ""
-            }`}
-            onClick={() => props.setTool("road")}
-          >
-            道路
-          </button>
           <button
             class={`border rounded px-2 py-1 hover:bg-gray-100 ${
               props.tool() === "res" ? "bg-gray-200" : ""
@@ -107,6 +109,54 @@ export function Sidebar(props: SidebarProps) {
           >
             选择
           </button>
+        </div>
+      </div>
+      <div class="space-y-2">
+        <h3 class="font-medium">块放置</h3>
+        <div class="grid grid-cols-2 gap-2 text-sm">
+          <button
+            class={`border rounded px-2 py-1 hover:bg-gray-100 ${
+              props.placingRect() ? "bg-blue-100 border-blue-300" : ""
+            }`}
+            onClick={() => props.setPlacingRect(!props.placingRect())}
+          >
+            {props.placingRect() ? "退出矩形放置" : "矩形放置"}
+          </button>
+          <button
+            class="border rounded px-2 py-1 hover:bg-gray-100"
+            onClick={() => props.cancelRectStart()}
+          >
+            取消起点
+          </button>
+        </div>
+        <div class="grid grid-cols-2 gap-2 text-sm">
+          <button
+            class={`border rounded px-2 py-1 hover:bg-gray-100 ${
+              props.blockKind() === "cement_4x4" ? "bg-gray-200" : ""
+            }`}
+            onClick={() => {
+              const next = props.blockKind() === "cement_4x4" ? null : "cement_4x4";
+              props.setBlockKind(next);
+              if (next) props.setTool("select");
+            }}
+          >
+            水泥路 4×4
+          </button>
+          <button
+            class={`border rounded px-2 py-1 hover:bg-gray-100 ${
+              props.blockKind() === "asphalt_4x4" ? "bg-gray-200" : ""
+            }`}
+            onClick={() => {
+              const next = props.blockKind() === "asphalt_4x4" ? null : "asphalt_4x4";
+              props.setBlockKind(next);
+              if (next) props.setTool("select");
+            }}
+          >
+            沥青路 4×4
+          </button>
+        </div>
+        <div class="text-xs text-gray-600">
+          选择“道路块”后，矩形放置会沿水平方向或垂直方向铺设直线道路块，并自动连接形成路网。未选择道路块时，矩形放置将按当前工具批量填充分区。
         </div>
       </div>
       <div class="space-y-2">
@@ -198,6 +248,43 @@ export function Sidebar(props: SidebarProps) {
               } · 车 ${props.vehicleCount()}`
             : "未加载路网"}
         </div>
+      </div>
+      <div class="space-y-2">
+        <h3 class="font-medium">统计</h3>
+        <div class="text-sm grid grid-cols-2 gap-x-3 gap-y-1">
+          <div>住宅格</div><div class="text-right">{props.zoneStats().res}</div>
+          <div>商业格</div><div class="text-right">{props.zoneStats().com}</div>
+          <div>办公格</div><div class="text-right">{props.zoneStats().off}</div>
+          <div>车辆</div><div class="text-right">{props.vehicleCount()}</div>
+        </div>
+      </div>
+      <div class="space-y-2">
+        <h3 class="font-medium">自动通勤</h3>
+        <label class="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={props.autoCommute()}
+            onInput={(e) =>
+              props.setAutoCommute((e.target as HTMLInputElement).checked)
+            }
+          />
+          启用
+        </label>
+        <label class="flex items-center justify-between gap-2 text-sm">
+          <span>强度</span>
+          <input
+            class="w-28"
+            type="range"
+            min="0"
+            max="5"
+            step="0.1"
+            value={props.commuteRate()}
+            onInput={(e) =>
+              props.setCommuteRate(Number((e.target as HTMLInputElement).value))
+            }
+          />
+          <span class="w-10 text-right">{props.commuteRate().toFixed(1)}</span>
+        </label>
       </div>
       <div class="space-y-2">
         <h3 class="font-medium">图层</h3>

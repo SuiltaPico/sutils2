@@ -6,7 +6,7 @@ import {
   getNode,
   saveGraph,
 } from "./graph";
-import { debounceSave, throttleSave } from "./grid";
+import { debounceSave, throttleSave, recalcZoneIndex } from "./grid";
 import { toolToKind } from "./index";
 import { UrbanFlowState } from "./state";
 import { CellKind, TILE } from "./types";
@@ -78,6 +78,7 @@ export function paintAt(
   }
   // 重绘与保存
   invalidate();
+  recalcZoneIndex(state);
   if (first) debounceSave(state);
   else throttleSave(state);
 }
@@ -87,7 +88,12 @@ const getCell = (state: UrbanFlowState, x: number, y: number): CellKind => {
   if (x < 0 || y < 0 || x >= 256 || y >= 256) return CellKind.Empty;
   return state.cells[idx(x, y)] as CellKind;
 };
-const setCell = (state: UrbanFlowState, x: number, y: number, v: CellKind) => {
+export const setCell = (
+  state: UrbanFlowState,
+  x: number,
+  y: number,
+  v: CellKind
+) => {
   if (x < 0 || y < 0 || x >= 256 || y >= 256) return;
   const i = idx(x, y);
   const before = state.cells[i];
@@ -103,3 +109,22 @@ const setCell = (state: UrbanFlowState, x: number, y: number, v: CellKind) => {
     }
   }
 };
+
+export function fillRectWithKind(
+  state: UrbanFlowState,
+  gx0: number,
+  gy0: number,
+  gx1: number,
+  gy1: number,
+  kind: CellKind
+) {
+  const x0 = Math.max(0, Math.min(gx0, gx1));
+  const x1 = Math.min(255, Math.max(gx0, gx1));
+  const y0 = Math.max(0, Math.min(gy0, gy1));
+  const y1 = Math.min(255, Math.max(gy0, gy1));
+  for (let y = y0; y <= y1; y++) {
+    for (let x = x0; x <= x1; x++) {
+      setCell(state, x, y, kind);
+    }
+  }
+}
