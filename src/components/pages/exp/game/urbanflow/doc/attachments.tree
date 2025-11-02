@@ -1,0 +1,64 @@
+附件系统（Attach）详规 {
+  目标与作用 {
+    以轻量对象（信号灯/标志/路灯/隔离栏/树木/站牌等）附着在 Block 的边/角/锚点上；
+    提供对齐/吸附规则、批量渲染、生命周期与事件；与隐藏网络与行人/信号系统解耦对齐。
+  }
+
+  Schema {
+    AttachmentProto {
+      id: 唯一字符串，例如 attach.signal.pole, attach.sign.stop, attach.lamp.street；
+      kind: signal|sign|lamp|barrier|tree|amenity|utility；
+      styleKey: 样式/图标键；
+      size_m: {w,h,d}；clearance_m?: number；
+      anchor: edge|corner|point；
+      offset: {u: 0..1, n_m?: number} // u 沿边归一化，n_m 法向偏移；
+      spacing_m?: number // 批量布设时的间距；
+      rules?: {side: left|right|both, minDistFromCrosswalk_m?: number, visibleRange_m?: number}；
+    }
+    AttachmentInstance {
+      entityId: 实例ID；protoId；blockId；edgeRef?: {blockEdgeIdx}；cornerRef?: {cornerIdx}；
+      transform: {pos, rot, elev?}；
+    }
+  }
+
+  锚点与吸附规则 {
+    边锚点(edge): 沿 Block 边界，支持 u∈[0,1] 与米单位混合输入；
+    角锚点(corner): 四角吸附；
+    点锚点(point): 预设锚点数组，可由原型声明；
+    合法性: 不越界/净空≥clearance_m/与相邻附件间距≥spacing_m；
+  }
+
+  放置与批量生成 {
+    命令: attach(blockId, protoId, {anchor, offset}) → instanceId；
+    批量: attachDistribute(blockId, protoId, {edge, startU, endU, spacing_m})；
+    替换: replaceAttachment(instanceId, newProtoId)；
+    删除: detach(instanceId[])；
+  }
+
+  典型原型建议 {
+    信号灯杆 attach.signal.pole {kind: signal; styleKey: attach.signal.pole; size_m:{w:0.3,h:5.5,d:0.3}; anchor: edge; offset:{u:0.05,n_m:0.6}; rules:{minDistFromCrosswalk_m:1.0}}；
+    停止标志 attach.sign.stop {kind: sign; styleKey: attach.sign.stop; size_m:{w:0.5,h:1.8,d:0.1}; anchor: edge; offset:{u:0.02,n_m:0.5}}；
+    路灯 attach.lamp.street {kind: lamp; styleKey: attach.lamp.street; size_m:{w:0.4,h:7.0,d:0.4}; anchor: edge; offset:{u:0.1,n_m:0.8}; spacing_m:30}；
+    护栏 attach.barrier {kind: barrier; styleKey: attach.barrier; size_m:{w:2.0,h:1.0,d:0.2}; anchor: edge; offset:{u:0.0,n_m:0.2}; spacing_m:2.0}；
+    行道树 attach.tree {kind: tree; styleKey: attach.tree; size_m:{w:1.2,h:6.0,d:1.2}; anchor: edge; offset:{u:0.15,n_m:1.2}; spacing_m:8}；
+  }
+
+  事件与生命周期 {
+    事件: attachAdded, attachUpdated, attachRemoved；
+    生命周期: 放置→更新→删除；随 Block 拆除而回收；
+  }
+
+  渲染与性能 {
+    批处理: 同 styleKey 实例化；
+    LOD: 远处抽稀/合并为线性几何（例如护栏）；
+    可见性: 按图层开关；
+  }
+
+  与系统联动 {
+    信号: signalController 可引用 attach.signal.pole 作为可视锚点；
+    行人: 斑马线与最小距离规则；
+    警告/网格: 与“道路曲线编辑/校验”共享净空校验；
+  }
+}
+
+

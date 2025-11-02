@@ -1,0 +1,151 @@
+实体类型库 {
+  设计目的: 统一定义人物/动物/车辆的原型、外观与参数，便于编辑器放置与系统生成；与“需求与 Agent 系统/车辆物理/行人微观/事件系统”一致对齐。
+  字段 Schema {
+    id: 唯一字符串；
+    类别: {human/animal/vehicle}；
+    子类: 对应细分类型（例如 youngWhiteCollar/ambulance/dog/bird 等）；
+    变体?: {gender: male|female, livery?: 车身涂装/标识/贴花, outfit?: 服装样式键}；
+    渲染: {styleKey, scale?: [sx,sy], shadow?: small|medium|large}；
+    运动与体量: {speed_mps: [min,max], bodyRadius_m, perception_m}；
+    行为默认: {attention: [0,1], compliance: [0,1]}；
+    车辆规格?: {length_m, width_m, height_m, seats?, cargoKg?, fuel: gas|diesel|ev|cng, maxSpeed_kmh, physicsPreset?,
+      driveType?: fwd|rwd|awd|4x4|tracked, tire?: road|allTerrain|mud|track,
+      offroadRating?: 0..1, allowedSurfaces?: [barren|dirt|gravel|asphalt|cement|grass][],
+      surfaceSpeedFactor?: {barren?: number, dirt?: number, gravel?: number, asphalt?: number, cement?: number, grass?: number}
+    }；
+    动物特性?: {species, isPet?, roamRadius_m}；
+    生成权重?: {contextTags: [residential/commercial/industrial/civic/park/road/highway/transit], weight: 0..1}；
+    调色板?: {allowedColors: string[]}；
+    说明?: 文本；
+  }
+
+  命名与单位规范 {
+    ID 规则: ent.<kind>.<subtype>[.<variant>]；示例: ent.vehicle.sedan；
+    单位: 速度= m/s（UI 显示 km/h），尺寸=米，半径=米，质量/载荷=kg；
+    渲染 key: styleKey 命名为 "<domain>.<name>"，与样式表 style.json 对齐；
+  }
+
+  默认值与范围 {
+    speed_mps: [min,max] 且 0<min≤max≤40；
+    bodyRadius_m: 0.15–0.6；perception_m: 4–30；
+    车辆规格.maxSpeed_kmh: 25–220；length_m: 1.6–18.0；width_m: 0.5–2.6；height_m: 0.5–4.2；
+    physicsPreset ∈ {level0, level1, level2}；
+  }
+
+  physicsPreset 映射 {
+    level0: 轻量（自行车/摩托/远距抽稀车辆），低频更新；
+    level1: 标准乘用车/公交/出租，IDM 纵向+简化横向；
+    level2: 重型车/应急车/拥堵区细化，启用更严格子步长；
+  }
+
+  生成权重与上下文 {
+    contextTags ∈ {residential,commercial,industrial,civic,park,road,highway,transit}；
+    生成概率 p ∝ weight×场景因子（时间/天气/区位/策略）；权重取值范围[0,1]；
+    接口: spawnEntity(typeId, pos, {palette?, livery?, seed?})；
+  }
+
+  一致性与校验 {
+    车辆外廓需可嵌入车道宽（width_m ≤ 车道宽-安全余量）；
+    bicycle/ebike 默认走“人行/自行车网络”；motorcycle 走“机动车网络”；
+    allowedSurfaces 若包含 barren/dirt/grass，可在无路面处低速通行（offroad），速度与事故率按“物理/地表映射”修正；
+    警车/救护/消防具 siren=true 能力，与“信号优先”联动；
+  }
+
+  人物类 {
+    幼儿·男 { id: ent.human.child.m; 类别: human; 子类: child; 变体: {gender: male}; 渲染: {styleKey: human.child.m}; 运动与体量: {speed_mps: [0.9,1.2], bodyRadius_m: 0.28, perception_m: 6}; 行为默认: {attention: 0.55, compliance: 0.7}; 说明: 学前儿童，常伴随家长； }
+    幼儿·女 { id: ent.human.child.f; 类别: human; 子类: child; 变体: {gender: female}; 渲染: {styleKey: human.child.f}; 运动与体量: {speed_mps: [0.9,1.2], bodyRadius_m: 0.27, perception_m: 6}; 行为默认: {attention: 0.56, compliance: 0.7}; }
+
+    学生·男 { id: ent.human.student.m; 类别: human; 子类: student; 变体: {gender: male}; 渲染: {styleKey: human.student.m}; 运动与体量: {speed_mps: [1.2,1.5], bodyRadius_m: 0.30, perception_m: 8}; 行为默认: {attention: 0.65, compliance: 0.8}; }
+    学生·女 { id: ent.human.student.f; 类别: human; 子类: student; 变体: {gender: female}; 渲染: {styleKey: human.student.f}; 运动与体量: {speed_mps: [1.2,1.5], bodyRadius_m: 0.29, perception_m: 8}; 行为默认: {attention: 0.66, compliance: 0.82}; }
+
+    工人·男 { id: ent.human.worker.m; 类别: human; 子类: worker; 变体: {gender: male}; 渲染: {styleKey: human.worker.m}; 运动与体量: {speed_mps: [1.1,1.4], bodyRadius_m: 0.33, perception_m: 9}; 行为默认: {attention: 0.65, compliance: 0.75}; }
+    工人·女 { id: ent.human.worker.f; 类别: human; 子类: worker; 变体: {gender: female}; 渲染: {styleKey: human.worker.f}; 运动与体量: {speed_mps: [1.1,1.4], bodyRadius_m: 0.31, perception_m: 9}; 行为默认: {attention: 0.66, compliance: 0.77}; }
+
+    年轻白领·男 { id: ent.human.whitecollar.young.m; 类别: human; 子类: youngWhiteCollar; 变体: {gender: male}; 渲染: {styleKey: human.white.young.m}; 运动与体量: {speed_mps: [1.2,1.6], bodyRadius_m: 0.32, perception_m: 10}; 行为默认: {attention: 0.72, compliance: 0.85}; }
+    年轻白领·女 { id: ent.human.whitecollar.young.f; 类别: human; 子类: youngWhiteCollar; 变体: {gender: female}; 渲染: {styleKey: human.white.young.f}; 运动与体量: {speed_mps: [1.2,1.6], bodyRadius_m: 0.30, perception_m: 10}; 行为默认: {attention: 0.73, compliance: 0.86}; }
+
+    中年白领·男 { id: ent.human.whitecollar.mid.m; 类别: human; 子类: midWhiteCollar; 变体: {gender: male}; 渲染: {styleKey: human.white.mid.m}; 运动与体量: {speed_mps: [1.1,1.5], bodyRadius_m: 0.33, perception_m: 10}; 行为默认: {attention: 0.74, compliance: 0.86}; }
+    中年白领·女 { id: ent.human.whitecollar.mid.f; 类别: human; 子类: midWhiteCollar; 变体: {gender: female}; 渲染: {styleKey: human.white.mid.f}; 运动与体量: {speed_mps: [1.1,1.5], bodyRadius_m: 0.31, perception_m: 10}; 行为默认: {attention: 0.75, compliance: 0.87}; }
+
+    老人·男 { id: ent.human.senior.m; 类别: human; 子类: senior; 变体: {gender: male}; 渲染: {styleKey: human.senior.m}; 运动与体量: {speed_mps: [0.8,1.2], bodyRadius_m: 0.32, perception_m: 8}; 行为默认: {attention: 0.6, compliance: 0.85}; }
+    老人·女 { id: ent.human.senior.f; 类别: human; 子类: senior; 变体: {gender: female}; 渲染: {styleKey: human.senior.f}; 运动与体量: {speed_mps: [0.8,1.2], bodyRadius_m: 0.3, perception_m: 8}; 行为默认: {attention: 0.6, compliance: 0.86}; }
+
+    家庭主妇·男 { id: ent.human.homemaker.m; 类别: human; 子类: homemaker; 变体: {gender: male}; 渲染: {styleKey: human.homemaker.m}; 运动与体量: {speed_mps: [1.0,1.4], bodyRadius_m: 0.32, perception_m: 9}; 行为默认: {attention: 0.68, compliance: 0.82}; }
+    家庭主妇·女 { id: ent.human.homemaker.f; 类别: human; 子类: homemaker; 变体: {gender: female}; 渲染: {styleKey: human.homemaker.f}; 运动与体量: {speed_mps: [1.0,1.4], bodyRadius_m: 0.31, perception_m: 9}; 行为默认: {attention: 0.69, compliance: 0.83}; }
+
+    环卫工人·男 { id: ent.human.sanitation.m; 类别: human; 子类: sanitation; 变体: {gender: male, outfit: uniform.orange}; 渲染: {styleKey: human.sanitation.m}; 运动与体量: {speed_mps: [1.0,1.3], bodyRadius_m: 0.33, perception_m: 9}; 行为默认: {attention: 0.7, compliance: 0.9}; }
+    环卫工人·女 { id: ent.human.sanitation.f; 类别: human; 子类: sanitation; 变体: {gender: female, outfit: uniform.orange}; 渲染: {styleKey: human.sanitation.f}; 运动与体量: {speed_mps: [1.0,1.3], bodyRadius_m: 0.31, perception_m: 9}; 行为默认: {attention: 0.7, compliance: 0.9}; }
+
+    医生·男 { id: ent.human.doctor.m; 类别: human; 子类: doctor; 变体: {gender: male, outfit: uniform.white}; 渲染: {styleKey: human.doctor.m}; 运动与体量: {speed_mps: [1.2,1.5], bodyRadius_m: 0.32, perception_m: 10}; 行为默认: {attention: 0.78, compliance: 0.9}; }
+    医生·女 { id: ent.human.doctor.f; 类别: human; 子类: doctor; 变体: {gender: female, outfit: uniform.white}; 渲染: {styleKey: human.doctor.f}; 运动与体量: {speed_mps: [1.2,1.5], bodyRadius_m: 0.30, perception_m: 10}; 行为默认: {attention: 0.79, compliance: 0.9}; }
+
+    警察·男 { id: ent.human.police.m; 类别: human; 子类: police; 变体: {gender: male, outfit: uniform.police}; 渲染: {styleKey: human.police.m}; 运动与体量: {speed_mps: [1.2,1.6], bodyRadius_m: 0.33, perception_m: 12}; 行为默认: {attention: 0.82, compliance: 0.95}; 说明: 可与事件系统执法权重联动； }
+    警察·女 { id: ent.human.police.f; 类别: human; 子类: police; 变体: {gender: female, outfit: uniform.police}; 渲染: {styleKey: human.police.f}; 运动与体量: {speed_mps: [1.2,1.6], bodyRadius_m: 0.31, perception_m: 12}; 行为默认: {attention: 0.82, compliance: 0.95}; }
+
+    护士·男 { id: ent.human.nurse.m; 类别: human; 子类: nurse; 变体: {gender: male, outfit: uniform.nurse}; 渲染: {styleKey: human.nurse.m}; 运动与体量: {speed_mps: [1.1,1.4], bodyRadius_m: 0.32, perception_m: 10}; 行为默认: {attention: 0.77, compliance: 0.9}; }
+    护士·女 { id: ent.human.nurse.f; 类别: human; 子类: nurse; 变体: {gender: female, outfit: uniform.nurse}; 渲染: {styleKey: human.nurse.f}; 运动与体量: {speed_mps: [1.1,1.4], bodyRadius_m: 0.30, perception_m: 10}; 行为默认: {attention: 0.78, compliance: 0.9}; }
+
+    快递员·男 { id: ent.human.courier.m; 类别: human; 子类: courier; 变体: {gender: male, outfit: uniform.courier}; 渲染: {styleKey: human.courier.m}; 运动与体量: {speed_mps: [1.2,1.6], bodyRadius_m: 0.32, perception_m: 10}; 行为默认: {attention: 0.7, compliance: 0.8}; }
+    快递员·女 { id: ent.human.courier.f; 类别: human; 子类: courier; 变体: {gender: female, outfit: uniform.courier}; 渲染: {styleKey: human.courier.f}; 运动与体量: {speed_mps: [1.2,1.6], bodyRadius_m: 0.30, perception_m: 10}; 行为默认: {attention: 0.71, compliance: 0.82}; }
+
+    外卖员·男 { id: ent.human.delivery.m; 类别: human; 子类: foodDelivery; 变体: {gender: male, outfit: uniform.delivery}; 渲染: {styleKey: human.delivery.m}; 运动与体量: {speed_mps: [1.2,1.7], bodyRadius_m: 0.32, perception_m: 10}; 行为默认: {attention: 0.68, compliance: 0.78}; }
+    外卖员·女 { id: ent.human.delivery.f; 类别: human; 子类: foodDelivery; 变体: {gender: female, outfit: uniform.delivery}; 渲染: {styleKey: human.delivery.f}; 运动与体量: {speed_mps: [1.2,1.7], bodyRadius_m: 0.30, perception_m: 10}; 行为默认: {attention: 0.69, compliance: 0.8}; }
+
+    教师·男 { id: ent.human.teacher.m; 类别: human; 子类: teacher; 变体: {gender: male}; 渲染: {styleKey: human.teacher.m}; 运动与体量: {speed_mps: [1.1,1.5], bodyRadius_m: 0.32, perception_m: 10}; 行为默认: {attention: 0.76, compliance: 0.88}; }
+    教师·女 { id: ent.human.teacher.f; 类别: human; 子类: teacher; 变体: {gender: female}; 渲染: {styleKey: human.teacher.f}; 运动与体量: {speed_mps: [1.1,1.5], bodyRadius_m: 0.30, perception_m: 10}; 行为默认: {attention: 0.77, compliance: 0.9}; }
+
+    保安·男 { id: ent.human.security.m; 类别: human; 子类: security; 变体: {gender: male, outfit: uniform.security}; 渲染: {styleKey: human.security.m}; 运动与体量: {speed_mps: [1.1,1.5], bodyRadius_m: 0.33, perception_m: 10}; 行为默认: {attention: 0.75, compliance: 0.88}; }
+    保安·女 { id: ent.human.security.f; 类别: human; 子类: security; 变体: {gender: female, outfit: uniform.security}; 渲染: {styleKey: human.security.f}; 运动与体量: {speed_mps: [1.1,1.5], bodyRadius_m: 0.31, perception_m: 10}; 行为默认: {attention: 0.75, compliance: 0.88}; }
+  }
+
+  动物类 {
+    猫 { id: ent.animal.cat; 类别: animal; 动物特性: {species: cat, isPet: true, roamRadius_m: 60}; 渲染: {styleKey: animal.cat, scale: [1,1], shadow: small}; 运动与体量: {speed_mps: [1.0,3.0], bodyRadius_m: 0.18, perception_m: 10}; 行为默认: {attention: 0.6, compliance: 0.3}; }
+    狗 { id: ent.animal.dog; 类别: animal; 动物特性: {species: dog, isPet: true, roamRadius_m: 100}; 渲染: {styleKey: animal.dog, scale: [1,1], shadow: small}; 运动与体量: {speed_mps: [1.2,4.0], bodyRadius_m: 0.22, perception_m: 12}; 行为默认: {attention: 0.65, compliance: 0.5}; }
+    鸟 { id: ent.animal.bird; 类别: animal; 动物特性: {species: bird, isPet: false, roamRadius_m: 200}; 渲染: {styleKey: animal.bird, scale: [1,1], shadow: small}; 运动与体量: {speed_mps: [1.5,6.0], bodyRadius_m: 0.15, perception_m: 20}; 行为默认: {attention: 0.5, compliance: 0.4}; 说明: 作为装饰性/环境生物，默认不与交通产生强交互。 }
+  }
+
+  车辆类 {
+    小轿车 { id: ent.vehicle.sedan; 类别: vehicle; 子类: sedan; 渲染: {styleKey: vehicle.sedan, shadow: medium}; 车辆规格: {length_m: 4.5, width_m: 1.8, height_m: 1.45, seats: 5, cargoKg: 150, fuel: gas, maxSpeed_kmh: 180, physicsPreset: level1}; 调色板: {allowedColors: ["white","black","silver","gray","blue","red"]}; }
+    紧凑轿车 { id: ent.vehicle.compact; 类别: vehicle; 子类: compact; 渲染: {styleKey: vehicle.compact}; 车辆规格: {length_m: 4.2, width_m: 1.75, height_m: 1.45, seats: 5, cargoKg: 120, fuel: gas, maxSpeed_kmh: 170, physicsPreset: level1}; 调色板: {allowedColors: ["white","gray","blue","red","yellow"]}; }
+    SUV { id: ent.vehicle.suv; 类别: vehicle; 子类: suv; 渲染: {styleKey: vehicle.suv}; 车辆规格: {length_m: 4.8, width_m: 1.95, height_m: 1.7, seats: 5, cargoKg: 250, fuel: gas, maxSpeed_kmh: 180, physicsPreset: level1}; 调色板: {allowedColors: ["white","black","gray","green","blue"]}; }
+    越野SUV·四驱 { id: ent.vehicle.suv.offroad; 类别: vehicle; 子类: suvOffroad; 渲染: {styleKey: vehicle.suv.offroad}; 车辆规格: {length_m: 4.8, width_m: 1.98, height_m: 1.8, seats: 5, cargoKg: 300, fuel: gas, maxSpeed_kmh: 170, physicsPreset: level1, driveType: 4x4, tire: allTerrain, offroadRating: 0.8, allowedSurfaces: [barren,dirt,gravel,asphalt,cement,grass], surfaceSpeedFactor: {barren: 0.6, dirt: 0.75, gravel: 0.85, asphalt: 1.0, cement: 1.0, grass: 0.6}}; 调色板: {allowedColors: ["white","black","gray","green","sand"]}; 说明: 非铺装性能较好，事故基线较低； }
+    MPV { id: ent.vehicle.mpv; 类别: vehicle; 子类: mpv; 渲染: {styleKey: vehicle.mpv}; 车辆规格: {length_m: 4.9, width_m: 1.85, height_m: 1.75, seats: 7, cargoKg: 200, fuel: gas, maxSpeed_kmh: 170, physicsPreset: level1}; 调色板: {allowedColors: ["white","silver","black"]}; }
+    皮卡 { id: ent.vehicle.pickup; 类别: vehicle; 子类: pickup; 渲染: {styleKey: vehicle.pickup}; 车辆规格: {length_m: 5.4, width_m: 1.9, height_m: 1.8, seats: 5, cargoKg: 500, fuel: diesel, maxSpeed_kmh: 160, physicsPreset: level1}; 调色板: {allowedColors: ["white","black","silver","brown"]}; }
+    面包车/厢式 { id: ent.vehicle.van; 类别: vehicle; 子类: van; 渲染: {styleKey: vehicle.van}; 车辆规格: {length_m: 4.8, width_m: 1.85, height_m: 1.95, seats: 2, cargoKg: 800, fuel: diesel, maxSpeed_kmh: 150, physicsPreset: level1}; 调色板: {allowedColors: ["white","gray","yellow"]}; }
+    轻型货车 { id: ent.vehicle.truck.light; 类别: vehicle; 子类: truckLight; 渲染: {styleKey: vehicle.truck.light}; 车辆规格: {length_m: 6.0, width_m: 2.1, height_m: 2.5, seats: 3, cargoKg: 2500, fuel: diesel, maxSpeed_kmh: 120, physicsPreset: level1}; 调色板: {allowedColors: ["white","gray"]}; }
+    中型货车 { id: ent.vehicle.truck.medium; 类别: vehicle; 子类: truckMedium; 渲染: {styleKey: vehicle.truck.medium}; 车辆规格: {length_m: 8.5, width_m: 2.4, height_m: 3.2, seats: 3, cargoKg: 6000, fuel: diesel, maxSpeed_kmh: 100, physicsPreset: level2}; 调色板: {allowedColors: ["white","gray","blue"]}; }
+    重型货车 { id: ent.vehicle.truck.heavy; 类别: vehicle; 子类: truckHeavy; 渲染: {styleKey: vehicle.truck.heavy}; 车辆规格: {length_m: 12.0, width_m: 2.5, height_m: 3.8, seats: 3, cargoKg: 12000, fuel: diesel, maxSpeed_kmh: 90, physicsPreset: level2}; 调色板: {allowedColors: ["white","gray"]}; }
+    工程自卸车 { id: ent.vehicle.truck.dump; 类别: vehicle; 子类: dump; 渲染: {styleKey: vehicle.truck.dump}; 车辆规格: {length_m: 7.5, width_m: 2.45, height_m: 3.2, seats: 3, cargoKg: 8000, fuel: diesel, maxSpeed_kmh: 80, physicsPreset: level2, driveType: rwd, tire: allTerrain, offroadRating: 0.7, allowedSurfaces: [barren,dirt,gravel,asphalt,cement], surfaceSpeedFactor: {barren: 0.55, dirt: 0.7, gravel: 0.85, asphalt: 1.0, cement: 1.0}}; 调色板: {allowedColors: ["yellow","orange","white"]}; 说明: 用于道路施工土方运输，与“道路施工流程”联动； }
+    推土机 { id: ent.vehicle.construction.bulldozer; 类别: vehicle; 子类: bulldozer; 渲染: {styleKey: vehicle.bulldozer}; 车辆规格: {length_m: 5.5, width_m: 3.2, height_m: 3.2, seats: 1, cargoKg: 0, fuel: diesel, maxSpeed_kmh: 20, physicsPreset: level2, driveType: tracked, tire: track, offroadRating: 1.0, allowedSurfaces: [barren,dirt,gravel,grass], surfaceSpeedFactor: {barren: 0.5, dirt: 0.6, gravel: 0.6, grass: 0.5, asphalt: 0.6, cement: 0.6}}; 调色板: {allowedColors: ["yellow"]}; 说明: 施工设备，低速与高越野能力； }
+    半挂牵引 { id: ent.vehicle.truck.semi; 类别: vehicle; 子类: semi; 渲染: {styleKey: vehicle.truck.semi}; 车辆规格: {length_m: 16.5, width_m: 2.5, height_m: 4.0, seats: 2, cargoKg: 25000, fuel: diesel, maxSpeed_kmh: 85, physicsPreset: level2}; 调色板: {allowedColors: ["white","gray"]}; }
+    城市公交 { id: ent.vehicle.bus.city; 类别: vehicle; 子类: busCity; 渲染: {styleKey: vehicle.bus.city}; 车辆规格: {length_m: 12.0, width_m: 2.5, height_m: 3.2, seats: 35, cargoKg: 0, fuel: diesel, maxSpeed_kmh: 80, physicsPreset: level1}; 调色板: {allowedColors: ["red","blue","green","white"]}; }
+    长途客车 { id: ent.vehicle.coach; 类别: vehicle; 子类: coach; 渲染: {styleKey: vehicle.coach}; 车辆规格: {length_m: 12.5, width_m: 2.5, height_m: 3.6, seats: 49, cargoKg: 0, fuel: diesel, maxSpeed_kmh: 100, physicsPreset: level1}; 调色板: {allowedColors: ["white","blue"]}; }
+    出租车 { id: ent.vehicle.taxi; 类别: vehicle; 子类: taxi; 变体: {livery: taxi.city.default}; 渲染: {styleKey: vehicle.taxi}; 车辆规格: {length_m: 4.5, width_m: 1.8, height_m: 1.45, seats: 4, cargoKg: 120, fuel: gas, maxSpeed_kmh: 170, physicsPreset: level1}; 调色板: {allowedColors: ["yellow","green","blue","white"]}; }
+    警车 { id: ent.vehicle.police; 类别: vehicle; 子类: police; 变体: {livery: police.standard}; 渲染: {styleKey: vehicle.police}; 车辆规格: {length_m: 4.6, width_m: 1.85, height_m: 1.5, seats: 4, cargoKg: 100, fuel: gas, maxSpeed_kmh: 200, physicsPreset: level1}; 调色板: {allowedColors: ["white","blue"]}; 说明: 支持警灯/警笛，联动“信号优先”。 }
+    救护车 { id: ent.vehicle.ambulance; 类别: vehicle; 子类: ambulance; 变体: {livery: ems.standard}; 渲染: {styleKey: vehicle.ambulance}; 车辆规格: {length_m: 5.6, width_m: 2.1, height_m: 2.6, seats: 4, cargoKg: 200, fuel: diesel, maxSpeed_kmh: 160, physicsPreset: level1}; 调色板: {allowedColors: ["white"]}; 说明: 支持警笛与优先。 }
+    消防车 { id: ent.vehicle.fireengine; 类别: vehicle; 子类: fireEngine; 变体: {livery: fire.standard}; 渲染: {styleKey: vehicle.fireengine}; 车辆规格: {length_m: 8.0, width_m: 2.5, height_m: 3.4, seats: 6, cargoKg: 3000, fuel: diesel, maxSpeed_kmh: 120, physicsPreset: level2}; 调色板: {allowedColors: ["red"]}; }
+    垃圾清运车 { id: ent.vehicle.garbage; 类别: vehicle; 子类: garbage; 渲染: {styleKey: vehicle.garbage}; 车辆规格: {length_m: 7.0, width_m: 2.4, height_m: 3.2, seats: 3, cargoKg: 5000, fuel: diesel, maxSpeed_kmh: 90, physicsPreset: level2}; 调色板: {allowedColors: ["green","white"]}; }
+    校车 { id: ent.vehicle.schoolbus; 类别: vehicle; 子类: schoolBus; 渲染: {styleKey: vehicle.schoolbus}; 车辆规格: {length_m: 10.5, width_m: 2.5, height_m: 3.2, seats: 40, cargoKg: 0, fuel: diesel, maxSpeed_kmh: 90, physicsPreset: level1}; 调色板: {allowedColors: ["yellow"]}; }
+    摩托车 { id: ent.vehicle.motorcycle; 类别: vehicle; 子类: motorcycle; 渲染: {styleKey: vehicle.motorcycle, shadow: small}; 车辆规格: {length_m: 2.1, width_m: 0.8, height_m: 1.1, seats: 2, cargoKg: 30, fuel: gas, maxSpeed_kmh: 140, physicsPreset: level0}; 调色板: {allowedColors: ["black","red","blue","white"]}; }
+    自行车 { id: ent.vehicle.bicycle; 类别: vehicle; 子类: bicycle; 渲染: {styleKey: vehicle.bicycle, shadow: small}; 车辆规格: {length_m: 1.8, width_m: 0.6, height_m: 1.1, seats: 1, cargoKg: 10, fuel: ev, maxSpeed_kmh: 35, physicsPreset: level0}; 调色板: {allowedColors: ["black","red","blue","white","green"]}; 说明: 作为行人图上的移动体，与机动车道冲突按规则处理。 }
+    电动自行车 { id: ent.vehicle.ebike; 类别: vehicle; 子类: ebike; 渲染: {styleKey: vehicle.ebike, shadow: small}; 车辆规格: {length_m: 1.9, width_m: 0.6, height_m: 1.1, seats: 1, cargoKg: 20, fuel: ev, maxSpeed_kmh: 45, physicsPreset: level0}; 调色板: {allowedColors: ["black","white","blue"]}; }
+    网约车 { id: ent.vehicle.ridehailing; 类别: vehicle; 子类: rideHailing; 渲染: {styleKey: vehicle.ridehailing}; 车辆规格: {length_m: 4.6, width_m: 1.85, height_m: 1.5, seats: 4, cargoKg: 120, fuel: gas, maxSpeed_kmh: 180, physicsPreset: level1}; 调色板: {allowedColors: ["black","white","gray"]}; 说明: 策略与价格联动。
+    }
+  }
+
+  接口与注册 {
+    API: entities.registerType(proto), entities.listBy(kind|tag), entities.get(id), spawnEntity(typeId, pos, opts?)；
+    样式与调色板: entities.setPalette(typeId, colors[]), entities.setStyleKey(typeId, styleKey)；
+    约束: 车辆规格与“车辆物理”的参数映射需在导入时校验（长宽高/座位/最大速度/动力学档位）。
+  }
+
+  与系统联动 {
+    居民/Agent: 人物类与 Resident 组件的外观/步速/体量映射；
+    行人微观: 动物与“行人网络”弱耦合，默认只与斑马线/广场交互；
+    车辆物理: 车辆类映射到默认 physicsPreset(level0/1/2)；
+    事件系统: 警车/救护/消防车作为资源池可用单位；
+    生成: 由“需求与 Agent 系统/出行需求生成”按模式与上下文调用 spawnEntity。
+  }
+}
+
+

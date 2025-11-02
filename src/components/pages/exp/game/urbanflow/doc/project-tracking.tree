@@ -1,0 +1,309 @@
+项目跟踪 (UrbanFlow) {
+  基本信息 {
+    项目: UrbanFlow 网格编辑器（原型）
+    路由: /exp/game/urbanflow
+    版本: 0.1.0-proto
+    更新: 2025-11-02
+  }
+
+  里程碑 Roadmap {
+    M0 框架与渲染最小闭环 [done] {
+      目标: IRenderer 抽象 + Canvas2D 适配 + 图层注册与绘制
+      交付: 进入页面后可见网格图层，Renderer 可注册/显隐图层
+    }
+    M1 时间与调度最小闭环 [done] {
+      目标: 固定步长时钟(10Hz) + 倍速/暂停联动 + 重绘驱动
+      交付: 顶栏显示“FPS · Sim Hz”，倍速/暂停生效
+    }
+    M2 输入与拾取（最小版） [done] {
+      目标: 指针/键盘统一事件封装；基础拾取返回坐标
+      交付: 画布显示光标坐标/十字准星；为后续工具做准备
+    }
+    M3 World 模块扩展 [done] {
+      目标: World 图层增强（坐标刻度/缩放基础），最小世界状态
+      交付: 缩放/平移基础；简单实体计数在右侧面板显示
+    }
+    M4 性能与图层面板（雏形） [done] {
+      目标: Renderer/Sim 预算显示与图层控制；可调整时钟 Hz
+      交付: PerformancePanel/LayerToggles 雏形
+    }
+    M5 Worker/Sim 分离（可选） [planned] {
+      目标: 将 tick 托管到 Worker（保持最小接口）
+      交付: 心跳/背压指示，主线程仅渲染
+    }
+    M6 编辑器工具最小集 [planned] {
+      目标: SelectTool/BlockTool 雏形与径向菜单；画布就地预览
+      交付: 选择/框选/删除/基础属性检查；BlockTool 显示占位预览
+      依赖: M2/M3
+    }
+    M7 Blocks 数据与库（只读浏览） [planned] {
+      目标: 建立 blocks 原型 JSON/schema 导入；库面板只读
+      交付: blocks.listByCategory 展示；搜索/筛选；无放置
+      依赖: M6（面板承载）
+    }
+    M8 SectionTemplates（只读+校验雏形） [planned] {
+      目标: 载入模板库；基本 width/车道数一致性校验
+      交付: 模板面板与示意预览；对 `blocks.sectionTemplateRef` 的校验提示
+      依赖: M7
+    }
+    M9 Intersections/Signals（骨架） [planned] {
+      目标: 模型与UI骨架，暂不生成几何；事件/总线打通
+      交付: 路口面板可载入/保存一个计划对象；事件流打通
+      依赖: M1/M4
+    }
+    M10 可玩MVP [planned] {
+      目标: 可添加/删除道路、配置红绿灯、可对司机速度施加偏置并可诱发事故
+      交付: 验收清单见“验收（MVP）”
+      依赖: M2/M3/M4 基座；新增 ROAD/SIG/SIM/INCIDENT 最小实现
+    }
+  }
+
+  验收（MVP） {
+    - 可绘制≥3段道路并形成一个路口；删除任一段后路网结构/入口索引正确更新
+    - 车辆按最短路行驶；修改某段 v_max 后，平均速度/延误有可见变化
+    - 信号面板编辑相位并保存后，放行差异在该路口可观察（排队长度/延误变化）
+    - 选中一辆车，施加“+30%/-50%”速度偏置，能引发或避免一次低速事故
+    - 发生事故时：受影响边容量下降与降速生效；UI 显示事件图钉/计时，超时自动清场
+    - KPI 在 1–2 Hz 刷新；FPS≥50，SimHz≥10（小图景）
+  }
+
+  迭代计划与依赖（高层） {
+    节拍: S1(M2) → S2(M3+部分M4) → S3(M4+M6) → S4(M6收尾+M7) → S5(M8) → S6(M9)
+    关键依赖:
+      - 输入/拾取(M2) → World交互(M3) → 工具(M6)
+      - 数据驱动(Blocks/Sections, M7/M8) → UI只读 → 后续放置与校验
+      - 性能/图层(M4) 贯穿支撑，Worker(M5) 可选加速
+  }
+
+  当前进展 Progress {
+    已完成 [done] {
+      - 渲染后端抽象与适配 {
+          files: [
+            @link: "../src/platform/render/IRenderer.ts" { },
+            @link: "../src/platform/render/RendererRegistry.ts" { },
+            @link: "../src/platform/render/adapters/canvas2d/renderer.ts" { }
+          ]
+        }
+      - 特性装配（FeatureLoader + manifest）{
+          files: [
+            @link: "../src/app/providers/FeatureLoader.tsx" { },
+            @link: "../src/core/config/features.manifest.ts" { }
+          ]
+        }
+      - World 最小图层（网格）{
+          files: [
+            @link: "../src/features/world/index.ts" { },
+            @link: "../src/features/world/renderer/layers.ts" { }
+          ]
+        }
+      - App 外壳集成（HUD/FPS/图层开关）{
+          file: @link: "../src/app/layout/AppShell.tsx" { }
+        }
+      - 时间与调度（10Hz Clock + 倍速/暂停）{
+          file: @link: "../src/core/time/clock.ts" { }
+        }
+      - 主题变量（画布背景）{
+          file: @link: "../../../index.css" { }
+        }
+      - 输入与拾取（最小版：十字准星与坐标提示）{
+          files: [
+            @link: "../src/app/layout/AppShell.tsx" { },
+            @link: "../src/app/providers/RendererProvider.tsx" { }
+          ]
+        }
+      - 输入与拾取（统一封装与接入）{
+          files: [
+            @link: "../src/platform/input/pointer.ts" { },
+            @link: "../src/platform/input/keyboard.ts" { },
+            @link: "../src/app/layout/AppShell.tsx" { }
+          ]
+          说明: 通过 attachPointer/attachKeyboard 统一输入源；支持中/右键平移、滚轮缩放、Space 暂停/播放、+/- 倍速调整。
+        }
+      - 性能与图层面板（雏形）{
+          files: [
+            @link: "../src/app/ui/components/panels/PerformancePanel.tsx" { },
+            @link: "../src/app/layout/AppShell.tsx" { }
+          ]
+        }
+      - World 图层增强（坐标刻度/缩放与平移基础）[已完成]{
+          files: [
+            @link: "../src/features/world/renderer/layers.ts" { },
+            @link: "../src/core/state/createAppStore.ts" { }
+          ]
+          说明: 已实现缩放/平移与坐标刻度；右侧“实体计数”已在面板显示（最小实现）。
+        }
+      - 编辑器 SelectTool 雏形 {
+          files: [
+            @link: "../src/app/providers/FeatureLoader.tsx" { },
+            @link: "../src/core/config/features.manifest.ts" { },
+            @link: "../src/app/layout/AppShell.tsx" { },
+            @link: "../src/features/editor/index.ts" { }
+          ]
+          说明: 左键拖拽框选，Delete/Esc 清除；注册 `ui.selection` 图层并与 LayerToggles 联动。
+        }
+    }
+
+    进行中/下一步 [in_progress] {
+    }
+  }
+
+  任务板 Board {
+    Task RENDER-1 { title: IRenderer + Canvas2D 最小实现; status: done; refs: [IRenderer.ts, RendererRegistry.ts, canvas2d/renderer.ts] }
+    Task APP-1    { title: FeatureLoader + features.manifest 动态装配; status: done; refs: [FeatureLoader.tsx, features.manifest.ts] }
+    Task WORLD-1  { title: world.grid 图层注册与绘制; status: done; refs: [world/index.ts, world/renderer/layers.ts] }
+    Task TIME-1   { title: 10Hz Clock + 倍速/暂停联动; status: done; refs: [core/time/clock.ts, AppShell.tsx] }
+    Task UI-1     { title: AppShell 集成 Renderer/Clock 与 HUD; status: done; refs: [AppShell.tsx] }
+
+    Task PERF-1   { title: PerformancePanel 雏形; status: done; acceptance: {显示 renderer/sim ms, 可调 Hz}; refs: [ui/components/panels/PerformancePanel.tsx] }
+    Task INPUT-1  { title: 指针/键盘统一封装与基础拾取; status: done; acceptance: {十字准星/坐标提示}; refs: [platform/input/pointer.ts, platform/input/keyboard.ts, render/IRenderer.pick?] }
+    Task WORLD-2  { title: World 图层增强（缩放/刻度）; status: done; acceptance: {缩放/平移，刻度随缩放变化}; refs: [core/state/createAppStore.ts, features/world/renderer/layers.ts, app/layout/AppShell.tsx] }
+    Task LAYER-1  { title: LayerToggles 面板（雏形）; status: done; acceptance: {可见/透明度/顺序基础控制}; refs: [ui/components/panels/LayerToggles.tsx] }
+    Task EDITOR-1 { title: SelectTool 雏形; status: done; acceptance: {单/框选/删除/高亮}; refs: [app/providers/FeatureLoader.tsx, core/config/features.manifest.ts, app/layout/AppShell.tsx, features/editor/index.ts] }
+    Task EDITOR-2 { title: BlockTool 雏形（只预览不落定）; status: planned; acceptance: {库项拖入→画布预览/吸附/撤销}; refs: [features/editor/ui/tools/BlockTool.tsx] }
+    Task BLOCKS-1 { title: Blocks 原型库（只读浏览）; status: planned; acceptance: {按类别列表/搜索/详情}; refs: [features/blocks/data/prototypes.json, .../schema.json, .../ui/panels/BlockLibrary.tsx] }
+    Task SECT-1   { title: SectionTemplates 载入与校验雏形; status: planned; acceptance: {模板载入/宽度与laneCount校验提示}; refs: [features/roads/model/section-templates.json, .../ui/panels/RoadEditor.tsx] }
+    Task SIG-1    { title: Intersections/Signals 骨架; status: planned; acceptance: {载入/保存计划，事件连通}; refs: [features/intersections/index.ts, .../ui/panels/IntersectionPanel.tsx] }
+  
+    Task ROAD-2 { title: 折线道路绘制/删除/撤销；status: planned; refs: [features/roads/index.ts, .../ui/tools/RoadTool.tsx, .../systems/build.ts] }
+    Task GRAPH-1 { title: 路网图构建(节点/边/入口索引)；status: planned; refs: [features/traffic/services/graph.ts] }
+    Task SIG-2   { title: 信号相位模板+面板+应用；status: planned; refs: [features/intersections/ui/IntersectionPanel.tsx, .../systems/signals.ts] }
+    Task SIG-3   { title: 放行门控(Gate)最小实现；status: planned; refs: [features/traffic/systems/pathfind.ts, .../systems/reroute.ts] }
+    Task SIM-1   { title: 车辆SoA与IDM子集(纵向)；status: planned; refs: [features/traffic/systems/loop.ts] }
+    Task SIM-2   { title: 车辆生成/回收与简化再路由；status: planned; refs: [features/traffic/systems/reroute.ts] }
+    Task UI-VEH  { title: 车辆选中与速度偏置UI；status: planned; refs: [ui/panels/Inspector.tsx] }
+    Task INCIDENT-1 { title: 碰撞判据与事件；status: planned; refs: [features/incidents/systems/lifecycle.ts] }
+    Task INCIDENT-2 { title: 封闭/降速作用与可视化；status: planned; refs: [features/incidents/ui/IncidentOverlay.tsx] }
+    Task PERF-2  { title: KPI 聚合与HUD；status: planned; refs: [features/analytics/systems/metrics.ts] }
+  }
+
+  验收清单（当前迭代） Acceptance {
+    - 进入路由后，画布显示背景与网格（minor/major）
+    - 左侧按钮与右侧复选框均可切换图层 `world.grid`
+    - 顶栏显示 “FPS · Sim Hz”；点击“暂停/播放/倍速(0.5/1/2x)”能正确反映到 Sim Hz
+    - features.manifest 关闭 world: true→false 后，页面不报错但渲染空场景
+  
+    面向 M4（性能/图层） {
+      - PerformancePanel 展示 rendererMs/simMs/Hz，并可调节目标 Hz（0.5/1/2/4/8）
+      - LayerToggles 可显隐/调整透明度；变更即时反映到渲染
+    }
+  }
+
+  DoR/DoD（就绪/完成定义） {
+    DoR（任务进入开发）: {已列出文件与目录, 显式依赖/接口契约, UI草图或示意, 可验收条目, 失败与降级策略}
+    DoD（任务完成）: {通过验收清单, API/事件对齐 @ui.tree, 文档与注释最小化完成, 性能无回退, 基本单元/交互测试通过}
+  }
+
+  KPI 与可观测性 {
+    基础KPI: {rendererMs≤4, simMs≤30, snapshot推送≤30FPS, 丢帧<5%}
+    交互KPI: {拾取命中率≥95%, 输入到预览延迟≤50ms, 面板交互渲染≤16ms}
+    度量来源: render.budget/metrics.update/events.batch（1–2 Hz 聚合）
+  }
+
+  风险与缓解 Risks {
+    - 输入与拾取耦合渲染坐标体系：分层抽象与只读快照 [缓解: 统一输入坐标与 dpi 缩放]
+    - 性能预算与掉帧：需要基础计时与降级阶梯 [缓解: 先做计时/阈值提示]
+    - 模块扩展复杂度：按 features/* 高内聚拆分 [缓解: 严格 API 与事件总线]
+    - Worker 同步与一致性：跨线程时钟/快照漂移 [缓解: 固定步长与关键帧对齐，先小范围试点(M5)]
+    - 数据驱动一致性：blocks/sections schema 变更 [缓解: schema 版本与导入校验，提供迁移脚本位]
+  }
+  
+  参考与映射 Links {
+    设计总览: @link: "./doc.tree" { }
+    文件树:   @link: "./FileTree.tree" { }
+    UI 详规:  @link: "./ui.tree" { }
+    Blocks:   @link: "./blocks.tree" { }
+    Entities: @link: "./entities.tree" { }
+    Sections: @link: "./section-templates.tree" { }
+    Attach:   @link: "./attachments.tree" { }
+  }
+
+  文件与目录状态评估 (File & Directory Status Assessment) {
+    说明: 本节基于设计文档与现有代码，评估各模块的开发状态与下一步计划，粒度到关键文件/目录。
+
+    platform: 平台适配层 {
+      状态: [核心完成] 渲染抽象层已建立；[部分完成] Canvas2D 适配器满足原型需求；[未开始] 输入、资产管理、WebGPU 适配等模块尚未建立。
+      下一步: 落实 M2 里程碑，统一封装指针与键盘输入事件。
+
+      render/: 渲染抽象与后端 {
+        IRenderer.ts {
+          完成情况: [已完成] 定义了核心接口（图层注册、渲染循环），满足 M0 里程碑。
+          下一步: 随着输入与拾取（M2）的开发，可能需要增加如 `pick(position)` 等接口。
+        }
+        RendererRegistry.ts {
+          完成情况: [已完成] 实现了渲染器的注册与按需实例化，目前仅支持 Canvas2D。
+          下一步: 结构稳定，待 WebGPU 适配器开发后在此处注册即可。
+        }
+        adapters/canvas2d/renderer.ts {
+          完成情况: [基础实现] 满足了绘制网格等基础图元的需求。
+          下一步: 性能有较大优化空间，缺少对复杂图形（如平滑曲线、文本）的高效绘制支持。
+        }
+      }
+    }
+
+    core: 核心引擎 {
+      状态: [骨架阶段] 仅有时钟、事件总线、特性开关等最基础模块。模拟循环、插件系统、RNG、状态管理等核心功能均未实现。
+      下一步: 随着 M3 及后续里程碑推进，逐步搭建模拟循环(sim)、状态管理(state)和插件(plugin)系统。
+
+      config/features.manifest.ts {
+        完成情况: [已完成] 能够控制 `world` 特性的开关，满足 M0 交付要求。
+        下一步: 稳定，未来新增特性时在此处添加条目即可。
+      }
+      time/clock.ts {
+        完成情况: [已完成] 实现了固定步长时钟、倍速与暂停/播放控制，满足 M1 里程碑。
+        下一步: 功能完善。未来若实现 Worker/Sim 分离（M5），可能需要改造为可跨线程同步的结构。
+      }
+      events/bus.ts & state/createAppStore.ts {
+        完成情况: [骨架] 提供了最基础的全局事件总线和状态容器。
+        下一步: 需根据业务发展充实事件类型定义和 State 结构。
+      }
+    }
+
+    app: 应用外壳与 UI {
+      状态: [基础完成] 应用外壳与核心 Provider 已就位；[已完成] 性能面板与图层开关雏形可用。
+      下一步: 后续细化性能指标与交互（区间统计/历史曲线），丰富图层管理。
+
+      layout/AppShell.tsx {
+        完成情况: [已完成] 整合了顶栏、侧边栏、画布等核心布局，并与 Renderer 和 Clock 联动。
+        下一步: 布局稳定。将依据 `ui.tree` 逐步填充各类面板和工具栏按钮。
+      }
+      providers/FeatureLoader.tsx & RendererProvider.tsx {
+        完成情况: [已完成] 动态特性装配与渲染器上下文注入功能已完成。
+        下一步: 稳定。
+      }
+      ui/components/panels/PerformancePanel.tsx {
+        完成情况: [已完成] 展示 FPS/Sim Hz/Renderer ms/Sim ms，并可调时钟 Hz。
+        下一步: 增加历史曲线与分位数统计；支持导出采样。
+      }
+    }
+
+    features: 功能模块 {
+      状态: [雏形] 仅有 `world` 模块的渲染入口，无任何业务逻辑。其他所有 `features` 模块均未创建。
+      下一步: 增强 `world` 模块，实现 M3 里程碑要求的缩放、平移与坐标刻度显示。
+
+      world/ {
+        状态: [渲染就绪，逻辑缺失] 作为一个功能模块，目前仅实现了“被渲染”的部分。
+        下一步: 对应任务 WORLD-2，增加 `model/state.ts` 管理世界状态（缩放/偏移），并在 `renderer/layers.ts` 中实现坐标刻度绘制。
+        index.ts {
+          完成情况: [已完成] 作为特性入口，完成了图层注册。
+          下一步: 未来需在此处注册 system (模拟逻辑) 和 UI (模块专属面板)。
+        }
+        renderer/layers.ts {
+          完成情况: [基础实现] 实现了 `world.grid` 图层的绘制。
+          下一步: 需根据 M3 增强，绘制坐标轴刻度，并响应世界的缩放与平移状态。
+        }
+      }
+    }
+
+    ui: 通用 UI 组件 {
+      状态: [未开始] `FileTree.tree` 中规划的通用 UI 组件目录尚不存在。当前 `PerformancePanel.tsx` 位于 `app/ui` 下，未来可能重构至此。
+      下一步: 随开发进展，逐步沉淀可复用的通用面板、表单控件等。
+    }
+
+    shared: 共享工具库 {
+      状态: [未开始] 尚未建立。
+      下一步: 在开发数学、几何或通用工具函数时，应创建此目录存放。
+    }
+  }
+}
+
+

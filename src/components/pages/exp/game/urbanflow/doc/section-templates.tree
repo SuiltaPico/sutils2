@@ -1,0 +1,120 @@
+截面模板与车道用途（详规） {
+  设计目标与范围 {
+    定义道路横断面模板（SectionTemplate）与车道用途（LaneUse）的权威规范；
+    为道路生成/升级/替换提供一致的数据源，并与 blocks.tree 的 sectionTemplateRef 对齐；
+    提供校验/默认值/时间窗策略与 UI 挂接点。
+  }
+
+  SectionTemplate Schema {
+    字段 {
+      id: 唯一字符串，例如 st.local.minor, st.arterial.major, st.expressway；
+      label: 本地化名称；
+      speed_kmh: 建议自由流限速；
+      width_m: 总宽（中分隔/路肩/人行含在内）；
+      segments: [
+        { kind: sidewalk|bike|shoulder|busway|lane|median|parking,
+          side?: left|right|center,
+          count?: number,           // lane/busway/bike 的条数
+          width_m: number|number[], // 可为数组对每条分别给宽
+          use?: LaneUse|LaneUse[],  // 车道用途；非 lane 可省略
+          reversible?: bool,        // 可变/潮汐
+          buffer_m?: number,        // 与相邻段的缓冲/隔离带
+          notes?: 文本 }
+      ]；
+      crosswalk_default: {width_m: 3.5..4.0, setback_m: 3..5}；
+      turn_defaults: {left_pocket_m: 25..60, right_pocket_m: 12..20}；
+      radius_min_by_speed: {20:8, 30:15, 40:25, 50:40, 60:70}；
+      laneCount: [up,down]（单向可为 [n,0]）；
+      ped_allowed: bool；bike_allowed: bool；truck_allowed: bool；
+    }
+    约束与派生 {
+      width_m 必须≥Σ(segments.width_m + buffer)；
+      lane.use 与车辆类型/时间窗需一致；
+      laneCount 由 segments.kind==lane 的 count 聚合而来；
+      connector.width ≈ 车道组宽度（允许±0.5 m 过渡）；
+    }
+  }
+
+  LaneUse 分类与语义 {
+    枚举: general, busOnly, busWithQueueJump, bike, sharedBike, emergency, parking, variable, reversible, tram, hgvRestricted；
+    规则: 
+      general: 允许常规机动车；
+      busOnly: 仅公交，必要时可授予应急；
+      bike/sharedBike: 自行车专用/共享；
+      parking: 时段化停车带；
+      variable/reversible: 需与 timeOfDay 策略绑定；
+      hgvRestricted: 限制重型车，按策略白名单；
+  }
+
+  时间窗策略（Time-of-Day） {
+    Schema: { windows: [{start:"07:00", end:"09:00", overrides:{use:"busOnly"|"parking"|"general", speed_kmh?, ban:{hgv?, leftTurn?}}], default:{...}}；
+    校验: 窗口不重叠且覆盖≤24h；
+    应用: UI 在“道路/截面模板”面板可配置并写入边属性；
+  }
+
+  模板库（建议值，可本地化/可覆盖） {
+    支路 st.local.minor {
+      id: st.local.minor; label: 支路；speed_kmh: 30；width_m: 14；
+      segments: [
+        {kind: sidewalk, side: left, width_m: 3.0},
+        {kind: lane, side: left, count: 1, width_m: 3.5, use: general},
+        {kind: lane, side: right, count: 1, width_m: 3.5, use: general},
+        {kind: sidewalk, side: right, width_m: 3.0}
+      ];
+      crosswalk_default: {width_m: 3.5, setback_m: 3.0};
+      turn_defaults: {left_pocket_m: 25, right_pocket_m: 12};
+      radius_min_by_speed: {20:8,30:15,40:25,50:40,60:70};
+      laneCount: [1,1]; ped_allowed: true; bike_allowed: true; truck_allowed: true;
+    }
+
+    次干路 st.collector {
+      id: st.collector; label: 次干路；speed_kmh: 40；width_m: 22；
+      segments: [
+        {kind: sidewalk, side: left, width_m: 3.5},
+        {kind: lane, side: left, count: 2, width_m: [3.5,3.5], use: general},
+        {kind: median, side: center, width_m: 2.0},
+        {kind: lane, side: right, count: 2, width_m: [3.5,3.5], use: general},
+        {kind: sidewalk, side: right, width_m: 3.5}
+      ];
+      laneCount: [2,2]; ped_allowed: true; bike_allowed: true; truck_allowed: true;
+    }
+
+    主干路 st.arterial {
+      id: st.arterial; label: 主干路；speed_kmh: 50；width_m: 30；
+      segments: [
+        {kind: sidewalk, side: left, width_m: 4.0},
+        {kind: lane, side: left, count: 3, width_m: [3.5,3.5,3.5], use: [general,general,busWithQueueJump]},
+        {kind: median, side: center, width_m: 3.0},
+        {kind: lane, side: right, count: 3, width_m: [3.5,3.5,3.5], use: [general,general,busWithQueueJump]},
+        {kind: sidewalk, side: right, width_m: 4.0}
+      ];
+      laneCount: [3,3]; ped_allowed: true; bike_allowed: 分离式优先; truck_allowed: true;
+    }
+
+    快速路 st.expressway {
+      id: st.expressway; label: 快速路；speed_kmh: 70；width_m: 36；
+      segments: [
+        {kind: shoulder, side: left, width_m: 1.0},
+        {kind: lane, side: left, count: 3, width_m: [3.5,3.5,3.5], use: general},
+        {kind: median, side: center, width_m: 4.0},
+        {kind: lane, side: right, count: 3, width_m: [3.5,3.5,3.5], use: general},
+        {kind: shoulder, side: right, width_m: 1.0}
+      ];
+      laneCount: [3,3]; ped_allowed: false; bike_allowed: false; truck_allowed: true;
+    }
+  }
+
+  校验与接口 {
+    校验: section.validate(template) → {ok, errors[], warnings[]}；
+    映射: applySectionTemplate(edgeId, templateId)；setLaneUse(edgeId,laneIdx,use[,timeWindow])；
+    兼容 blocks: blocks.sectionTemplateRef 必须存在于模板库；
+  }
+
+  UI 与可视化挂接点 {
+    面板: “道路/截面模板”页签，展示模板卡片与参数；
+    预览: 车道/人行/中分隔/路肩示意；
+    校验提示: 半径/口袋长度建议与冲突校验器联动；
+  }
+}
+
+

@@ -1,18 +1,4 @@
 城市交通模拟器 (Project: UrbanFlow) {
-  阅读指引与编排说明 {
-    目标 {
-      以“核心卷 + DLC 扩展卷”的方式重编排全文，合并重复内容，保持所有细节不丢失。
-    }
-    原则 {
-      保留原有术语与接口命名；将跨章节重复的机制（如时间/调度、路口/信号、路径与机动指令、执行点Gate判据）统一至单一权威位置；
-      将可选/扩展性较强的系统迁移至 DLC 卷，核心卷引用但不重复描述。
-    }
-    导航 {
-      核心卷：项目概述 → 架构与技术栈 → 世界与地图 → 道路与路口 → 时间与调度 → 居民/车辆/需求 → 微观行为与关键机制 → 信号控制 → 事件系统 → 物理与渲染 → UI/UX → 数据契约与消息 → 性能与多尺度 → 地图与数据 → 校准与验证 → 风险与对策 → 术语表。
-      DLC 卷：公共交通、停车与物流、环境与天气与能耗、电动车与充电、燃油与加油站、车辆市场、住房市场、政策与条例、市民满意度与人口动态、可视化与分析增强、模组与创意工坊、数据与复盘工作室。
-    }
-  }
-
   核心卷 {
     项目概述 {
       项目愿景 {
@@ -84,6 +70,15 @@
         水体: 河/湖以多边形区建模；提供溢水线与积水阈值；雨天对车速/事故率/封闭有影响钩子。
         可视化: 地形等高线/坡度热图/积水图层；编辑时实时反馈越界与净空。
       }
+      地表与路面与通行性 {
+        表面类型: surfaceKind ∈ {barren/荒地, dirt/泥路, gravel/碎石, asphalt/沥青, cement/水泥, grass/草地}；初始地图默认为荒地。
+        通行性: 所有地表默认可通车，但非铺装表面施加速度/舒适度惩罚并提升事故与抛锚概率；行人/骑行在草地/泥路允许但拥挤阈值与舒适度下降。
+        摩擦与滚阻: μ_surf 与 r_roll 随表面不同，映射到纵向最大加减速度与转弯安全速度；与“物理与渲染体系/车辆物理/轮胎-路面与天气”一致。
+        自发泥路: 荒地在时间窗T_track内若被机动车/工程车重复通行，沿最常用轨迹自动合成“泥路”tile链；雨天会扩大宽度并提高泥泞等级，长期无通行按半衰期衰减回荒地。
+        维护与升级: 泥路→碎石→沥青/水泥可通过“修路流程”升级；积水/降雨触发泥路退化与速度/事故率修正。
+        数据结构: tile.surfaceKind, tile.mudLevel∈[0,1], tile.trackUsageDecay；接口 world.setSurface(tile, kind)、world.decayTracks(window)、world.synthesizeDirtTrack(path)。
+        可视化: 地表图层与路面材质着色；泥路/车辙随雨后湿度变化；等值线叠加显示“通行难度”。
+      }
       网格系统 {
         游戏世界的基础，所有地块和道路都基于网格进行定位和建造。
         支持高度变化，以实现立交桥、隧道等。
@@ -148,6 +143,9 @@
         }
         放置与合法性 {
           不可重叠；与道路关系合法；网格对齐；拆除与替换；推土机清空区域；“替换模式”合法替换类型。
+          道路连通性（默认强制）: 绝大多数“建筑块/公共与商业/住宅/办公/服务类”放置需满足 requireRoadAccess(maxDist=1格, minEdgeWidth≥3.5 m)；否者为错误并给出最近可达道路建议。
+          例外: 公园/绿道/人行设施/临时工地等可在无道路处放置，但标记为“无车行可达”，可能影响容量/满意度与物流。
+          表面约束: 大型建筑需铺装表面(asphalt/cement)或至少碎石基层；在 dirt/荒地上放置将触发“地基与道路施工”建议卡。
         }
         连接与隐藏网络 {
           边缘连接器（Connectors）与隐藏节点/连线；
@@ -157,6 +155,7 @@
         Attach 附加系统 {
           可附着在块边/角/锚点的轻量对象（人行道、信号灯、标志、路灯、隔离栏）；
           锚点规则与生命周期；渲染批量化。
+          详规 @link: "./attachments.tree" { }
         }
         数据与接口 {
           建议组件: BlockTransform/BlockMeta/BlockConnectors/BlockOccupancy/AttachmentLink/HiddenLinkage；
@@ -176,269 +175,7 @@
           接口与事件: allocateHouseholds/allocateJobs/allocateParking 与 capacityChanged/shortageDetected。
         }
 
-        基础 Block 原型库 {
-          设计目的: 为编辑器提供可直接放置的常用原型，给出几何/连接/容量/成本的合理默认值，并与路网/行人/事件等系统解耦对齐。
-          字段 Schema {
-            id: 唯一字符串；
-            类别: {道路块/公共建筑块/商业建筑块/基础设施块/公共空间}；
-            footprint: W×H（格）；可拉伸轴: {none/W/H/both}；朝向: 0/90/180/270；
-            connectors: {edge, kind{road/ped/driveway/service}, width(m), offset(格|m), dir{in/out/both}, lanes?}[]；
-            sectionTemplateRef?: 引用“截面模板与车道用途”的模板Id；
-            oneWay?: bool；laneCount?: number[]（双向用 [上/下行]）；v_max_kmh?: number；
-            capacity?: {households?, jobs?, retailAttraction?, parking?: {onSite, shared?}}；
-            service?: {pumpCount?, serviceRateVehPerMin?, staff?, responseRadiusm?}；
-            cost: {build, maintain}/月；unlock?: 初始可用/需解锁条件；
-            styleKey?: 样式/图标引用。
-          }
-
-          道路类 {
-            水泥路·乡村1+1 {
-              id: block.road.cement.rural_1p1; 类别: 道路块; footprint: 2×8; 可拉伸轴: H;
-              sectionTemplateRef: 支路; oneWay: false; laneCount: [1,1]; v_max_kmh: 40;
-              connectors: 四边开放 edge{kind: road, width: 6.0, dir: both};
-              cost: {build: 50, maintain: 2}/格·月; styleKey: road.cement;
-              放置约束: 禁止跨水体与>8%坡; 允许与“人行道”并置。
-            }
-            单行道·1车道 {
-              id: block.road.oneway.1; 类别: 道路块; footprint: 2×8; 可拉伸轴: H;
-              sectionTemplateRef: 支路; oneWay: true; laneCount: [1,0]; v_max_kmh: 40;
-              connectors: 纵向两端 edge{kind: road, width: 3.5, dir: both};
-              cost: {build: 60, maintain: 3}/格·月; styleKey: road.oneway1;
-              放置约束: 与相邻单行方向可成对组成双行。
-            }
-            双行道·1+1 {
-              id: block.road.twoWay.1p1; 类别: 道路块; footprint: 3×8; 可拉伸轴: H;
-              sectionTemplateRef: 次干路; oneWay: false; laneCount: [1,1]; v_max_kmh: 50;
-              connectors: 纵向两端 edge{kind: road, width: 7.0, dir: both};
-              cost: {build: 90, maintain: 5}/格·月; styleKey: road.1p1;
-            }
-            四车双行道·2+2 {
-              id: block.road.twoWay.2p2; 类别: 道路块; footprint: 4×10; 可拉伸轴: H;
-              sectionTemplateRef: 主干路; oneWay: false; laneCount: [2,2]; v_max_kmh: 60;
-              connectors: 纵向两端 edge{kind: road, width: 14.0, dir: both};
-              cost: {build: 140, maintain: 9}/格·月; styleKey: road.2p2;
-            }
-            六车双行道·3+3 {
-              id: block.road.twoWay.3p3; 类别: 道路块; footprint: 6×12; 可拉伸轴: H;
-              sectionTemplateRef: 快速路; oneWay: false; laneCount: [3,3]; v_max_kmh: 70;
-              connectors: 纵向两端 edge{kind: road, width: 21.0, dir: both};
-              cost: {build: 210, maintain: 14}/格·月; styleKey: road.3p3;
-              放置约束: 弯道半径与净空按“道路曲线编辑/校验”。
-            }
-            人行道·4m {
-              id: block.ped.sidewalk.4m; 类别: 基础设施块; footprint: 1×8; 可拉伸轴: H;
-              connectors: 纵向两端 edge{kind: ped, width: 4.0, dir: both};
-              cost: {build: 20, maintain: 1}/格·月; styleKey: ped.sidewalk;
-              作用: 只接行人图；可与道路块并置以形成路侧人行道。
-            }
-          }
-
-          设施与服务类 {
-            停车场·小型 {
-              id: block.parking.lot.small; 类别: 基础设施块; footprint: 6×8; 朝向: 0/90;
-              connectors: 车行出入口×1 edge{kind: driveway, width: 6.0, dir: both}, 行人入口×2 edge{kind: ped, width: 3.0};
-              capacity: {parking: {onSite: 30}}; cost: {build: 1200, maintain: 35}/月; styleKey: facility.parking.small;
-              放置约束: 出入口需贴邻道路边；与“居民/岗位承载与停车义务”联动。
-            }
-            加油站·小型 {
-              id: block.fuel.station.small; 类别: 基础设施块; footprint: 10×8; 朝向: 0/90;
-              connectors: 车行出入口×2 edge{kind: driveway, width: 7.0, dir: in/out};
-              service: {pumpCount: 4, serviceRateVehPerMin: 1.2}; cost: {build: 6000, maintain: 120}/月; styleKey: facility.fuel.small;
-              放置约束: 禁止紧邻学校/医院≤2格；出入口不得直连高速类道路。
-            }
-            便利店·小型 {
-              id: block.retail.cstore.small; 类别: 商业建筑块; footprint: 4×4; 朝向: 任意;
-              connectors: 行人入口×1 edge{kind: ped, width: 2.0}, 车行临停位×2 edge{kind: driveway, width: 3.0};
-              capacity: {jobs: 6, retailAttraction: 1.0, parking: {onSite: 4}}; cost: {build: 1600, maintain: 45}/月; styleKey: retail.cstore;
-            }
-          }
-
-          公共空间类 {
-            公园·口袋公园 {
-              id: block.park.pocket; 类别: 公共空间; footprint: 8×8; 朝向: 任意;
-              connectors: 行人入口×2 edge{kind: ped, width: 4.0};
-              capacity: {retailAttraction: 0.6}; cost: {build: 1800, maintain: 20}/月; styleKey: park.pocket;
-              影响: 附近住宅土地价值小幅↑；噪声↓；可达性加权。
-            }
-          }
-
-          安全与执法类 {
-            公安局·小型派出所 {
-              id: block.police.station.small; 类别: 公共建筑块; footprint: 6×5; 朝向: 任意;
-              connectors: 车行出入口×1 edge{kind: driveway, width: 6.0}, 行人入口×1 edge{kind: ped, width: 3.0};
-              capacity: {jobs: 24, parking: {onSite: 6}}; service: {staff: 20, responseRadiusm: 800};
-              cost: {build: 9000, maintain: 260}/月; styleKey: civic.police.small;
-              联动: 作为“事件系统/资源池”的警车驻点，提供 unitKind=Police 的 spawn 与响应缩短。
-            }
-          }
-
-          住宅与办公类 {
-            低密住宅·联排 {
-              id: block.residential.rowhouse.low; 类别: 住宅建筑块; footprint: 6×6; 朝向: 任意;
-              connectors: 行人入口×2 edge{kind: ped, width: 2.0}, 车行出入口×1 edge{kind: driveway, width: 4.5};
-              capacity: {households: 12, parking: {onSite: 6}}; cost: {build: 3200, maintain: 55}/月; styleKey: res.rowhouse.low;
-            }
-            中密住宅·小高层 {
-              id: block.residential.midrise; 类别: 住宅建筑块; footprint: 8×10; 朝向: 任意;
-              connectors: 行人入口×2 edge{kind: ped, width: 3.0}, 车行出入口×1 edge{kind: driveway, width: 6.0};
-              capacity: {households: 60, parking: {onSite: 30}}; cost: {build: 12000, maintain: 220}/月; styleKey: res.midrise;
-            }
-            高密住宅·塔楼 {
-              id: block.residential.tower; 类别: 住宅建筑块; footprint: 8×12; 朝向: 任意;
-              connectors: 行人入口×2 edge{kind: ped, width: 3.0}, 车行出入口×1 edge{kind: driveway, width: 6.0};
-              capacity: {households: 120, parking: {onSite: 60}}; cost: {build: 24000, maintain: 450}/月; styleKey: res.tower;
-            }
-            办公楼·中型 {
-              id: block.office.mid; 类别: 办公建筑块; footprint: 8×10; 朝向: 任意;
-              connectors: 行人入口×2 edge{kind: ped, width: 3.0}, 车行出入口×1 edge{kind: driveway, width: 6.0};
-              capacity: {jobs: 200, parking: {onSite: 40}}; cost: {build: 18000, maintain: 400}/月; styleKey: office.mid;
-            }
-          }
-
-          教育与医疗类 {
-            小学·标准校 {
-              id: block.educ.school.primary; 类别: 公共建筑块; footprint: 10×12; 朝向: 任意;
-              connectors: 行人入口×2 edge{kind: ped, width: 4.0}, 校车落客区×1 edge{kind: driveway, width: 6.0};
-              capacity: {jobs: 80, parking: {onSite: 20}}; service: {studentCapacity: 800, bellTimes: ["07:50","16:30"]};
-              cost: {build: 26000, maintain: 600}/月; styleKey: civic.school.primary;
-              影响: 上下学时段周边行人与车流短时上升。
-            }
-            社区诊所·基层医疗 {
-              id: block.health.clinic.community; 类别: 公共建筑块; footprint: 6×6; 朝向: 任意;
-              connectors: 行人入口×1 edge{kind: ped, width: 3.0}, 车行出入口×1 edge{kind: driveway, width: 5.0};
-              capacity: {jobs: 30, parking: {onSite: 6}}; service: {patientCapacityPerHour: 30};
-              cost: {build: 9000, maintain: 220}/月; styleKey: health.clinic.community;
-            }
-            综合医院·区域级 {
-              id: block.health.hospital.general; 类别: 公共建筑块; footprint: 14×16; 朝向: 任意;
-              connectors: 行人入口×2 edge{kind: ped, width: 4.0}, 急救车出入口×2 edge{kind: driveway, width: 6.0, dir: in/out};
-              capacity: {jobs: 320, parking: {onSite: 120}}; service: {bedCount: 200, ambulanceSlots: 2, responseRadiusm: 1200};
-              cost: {build: 120000, maintain: 2800}/月; styleKey: health.hospital.general;
-              联动: 作为“事件系统/资源池”的救护车驻点，unitKind=Ambulance。
-            }
-          }
-
-          工业与仓储类 {
-            仓库·小型配送中心 {
-              id: block.ind.warehouse.small; 类别: 仓储建筑块; footprint: 10×12; 朝向: 任意;
-              connectors: 货运月台×2 edge{kind: service, width: 8.0}, 车行出入口×1 edge{kind: driveway, width: 7.0};
-              capacity: {jobs: 25, parking: {onSite: 10}}; service: {dockSlots: 2}; cost: {build: 16000, maintain: 280}/月; styleKey: ind.warehouse.small;
-            }
-            轻工业厂房·小型 {
-              id: block.ind.light.small; 类别: 工业建筑块; footprint: 12×12; 朝向: 任意;
-              connectors: 车行出入口×2 edge{kind: driveway, width: 7.0};
-              capacity: {jobs: 60, parking: {onSite: 20}}; cost: {build: 22000, maintain: 420}/月; styleKey: ind.light.small;
-            }
-            最后一公里配送站 {
-              id: block.logistics.depot.lastmile; 类别: 仓储建筑块; footprint: 8×10; 朝向: 任意;
-              connectors: 车行出入口×2 edge{kind: driveway, width: 6.0};
-              capacity: {jobs: 40, parking: {onSite: 12}}; service: {vanSlots: 8, dispatchRateVehPerMin: 0.4}; cost: {build: 14000, maintain: 320}/月; styleKey: logistics.depot.lastmile;
-            }
-          }
-
-          商业与娱乐类 {
-            超市·中型 {
-              id: block.retail.supermarket.mid; 类别: 商业建筑块; footprint: 10×10; 朝向: 任意;
-              connectors: 行人入口×2 edge{kind: ped, width: 3.0}, 车行出入口×1 edge{kind: driveway, width: 7.0};
-              capacity: {jobs: 40, retailAttraction: 3.0, parking: {onSite: 50}}; cost: {build: 26000, maintain: 520}/月; styleKey: retail.supermarket.mid;
-            }
-            餐馆·街角店 {
-              id: block.retail.restaurant.corner; 类别: 商业建筑块; footprint: 4×4; 朝向: 任意;
-              connectors: 行人入口×1 edge{kind: ped, width: 2.0};
-              capacity: {jobs: 10, retailAttraction: 1.2, parking: {onSite: 0}}; cost: {build: 6000, maintain: 160}/月; styleKey: retail.restaurant.corner;
-            }
-            影院·小型 {
-              id: block.entertain.cinema.small; 类别: 商业建筑块; footprint: 10×8; 朝向: 任意;
-              connectors: 行人入口×2 edge{kind: ped, width: 3.0}, 车行出入口×1 edge{kind: driveway, width: 6.0};
-              capacity: {jobs: 25, retailAttraction: 2.0, parking: {onSite: 30}}; cost: {build: 38000, maintain: 700}/月; styleKey: entertain.cinema.small;
-            }
-          }
-
-          公共交通与慢行设施 {
-            公交站·港湾式 {
-              id: block.transit.bus.bay; 类别: 基础设施块; footprint: 2×6; 可拉伸轴: H;
-              connectors: 道路侧缘 edge{kind: road, width: 3.5, dir: both}, 行人入口×1 edge{kind: ped, width: 3.0};
-              service: {routeSlots: 2, dwellBaseSec: 15}; cost: {build: 1800, maintain: 30}/月; styleKey: transit.bus.bay;
-            }
-            地铁站出入口 {
-              id: block.transit.metro.entrance; 类别: 基础设施块; footprint: 2×3; 朝向: 任意;
-              connectors: 行人入口×1 edge{kind: ped, width: 3.0};
-              service: {catchmentRadiusm: 800}; cost: {build: 12000, maintain: 90}/月; styleKey: transit.metro.entrance;
-            }
-            BRT中置站台·岛式 {
-              id: block.transit.brt.median.island; 类别: 基础设施块; footprint: 4×10; 可拉伸轴: H;
-              connectors: 行人连桥/地道 edge{kind: ped, width: 3.0};
-              service: {routeSlots: 2, dwellBaseSec: 20}; cost: {build: 28000, maintain: 180}/月; styleKey: transit.brt.median;
-              放置约束: 仅与“主干/快速路”中分隔配置兼容。
-            }
-            人行天桥 {
-              id: block.ped.overpass; 类别: 基础设施块; footprint: 2×8; 可拉伸轴: H;
-              connectors: 两端行人入口 edge{kind: ped, width: 3.0}; service: {clearanceM: 4.5};
-              cost: {build: 16000, maintain: 60}/月; styleKey: ped.overpass;
-              放置约束: 跨越道路/水体时需满足净空≥4.5 m。
-            }
-            人行地道 {
-              id: block.ped.underpass; 类别: 基础设施块; footprint: 2×8; 可拉伸轴: H;
-              connectors: 两端行人入口 edge{kind: ped, width: 3.0}; cost: {build: 14000, maintain: 70}/月; styleKey: ped.underpass;
-              风险: 雨季积水概率↑，可与“环境与天气”联动触发维护事件。
-            }
-          }
-
-          停车与能源增强 {
-            停车楼·5层 {
-              id: block.parking.garage.5f; 类别: 基础设施块; footprint: 12×12; 朝向: 任意;
-              connectors: 入口×1 edge{kind: driveway, width: 7.0, dir: in}, 出口×1 edge{kind: driveway, width: 7.0, dir: out}, 行人入口×2 edge{kind: ped, width: 3.0};
-              capacity: {parking: {onSite: 300}}; cost: {build: 52000, maintain: 900}/月; styleKey: facility.parking.garage5f;
-            }
-            充电站·快充（小型） {
-              id: block.energy.ev.fast.small; 类别: 基础设施块; footprint: 8×6; 朝向: 任意;
-              connectors: 车行出入口×2 edge{kind: driveway, width: 6.0};
-              service: {chargerCount: 6, powerKW: 120, serviceRateVehPerMin: 0.8}; capacity: {parking: {onSite: 8}};
-              cost: {build: 18000, maintain: 260}/月; styleKey: energy.ev.fast.small;
-            }
-            加气站·CNG（小型） {
-              id: block.fuel.cng.small; 类别: 基础设施块; footprint: 10×8; 朝向: 0/90;
-              connectors: 车行出入口×2 edge{kind: driveway, width: 7.0, dir: in/out};
-              service: {pumpCount: 3, serviceRateVehPerMin: 1.0}; cost: {build: 42000, maintain: 140}/月; styleKey: facility.fuel.cng.small;
-            }
-          }
-
-          公共空间扩展 {
-            社区广场 {
-              id: block.plaza.community; 类别: 公共空间; footprint: 10×10; 朝向: 任意;
-              connectors: 行人入口×2 edge{kind: ped, width: 4.0};
-              capacity: {retailAttraction: 1.0}; cost: {build: 3200, maintain: 28}/月; styleKey: plaza.community;
-            }
-            绿道·线性段 {
-              id: block.greenway.linear; 类别: 公共空间; footprint: 1×8; 可拉伸轴: H;
-              connectors: 纵向两端 edge{kind: ped, width: 3.0}; cost: {build: 1200, maintain: 10}/月; styleKey: greenway.linear;
-              作用: 提升步行/骑行可达性与环境评分；与“行人网络”耦合。
-            }
-          }
-
-          市政与社区服务 {
-            图书馆·社区级 {
-              id: block.civic.library.community; 类别: 公共建筑块; footprint: 6×6; 朝向: 任意;
-              connectors: 行人入口×1 edge{kind: ped, width: 3.0};
-              capacity: {jobs: 20, retailAttraction: 0.8}; cost: {build: 10000, maintain: 180}/月; styleKey: civic.library.community;
-            }
-            邮局·小型 {
-              id: block.civic.post.office.small; 类别: 公共建筑块; footprint: 4×6; 朝向: 任意;
-              connectors: 行人入口×1 edge{kind: ped, width: 2.5}, 车行出入口×1 edge{kind: driveway, width: 5.0};
-              capacity: {jobs: 12, parking: {onSite: 4}}; service: {parcelSlots: 4}; cost: {build: 8000, maintain: 150}/月; styleKey: civic.post.office.small;
-            }
-            社区服务中心·小型 {
-              id: block.civic.service.center.small; 类别: 公共建筑块; footprint: 8×8; 朝向: 任意;
-              connectors: 行人入口×2 edge{kind: ped, width: 3.0};
-              capacity: {jobs: 60, parking: {onSite: 10}}; cost: {build: 16000, maintain: 280}/月; styleKey: civic.service.center.small;
-            }
-          }
-
-          接口与注册 {
-            API: blocks.registerPrototype(proto), blocks.listByCategory(cat), placeBlock(protoId, pos, rot)；
-            资源: 预制图标/样式 key 与本地化名称；成本与容量可被策略面板系数调整。
-          }
-        }
+        基础 Block 原型库 @link: "./blocks.tree" { }
       }
       趣味性钩子与探索 {
         地标与景观、发现与解锁、动态挑战。
@@ -455,6 +192,7 @@
         模板库: {支路, 次干路, 主干路, 快速路, 高速}；字段=车道数/宽、路肩/非机动车道/人行道/中央分隔/绿化带/停车带。
         车道用途: 一般/公交专用/自行车/共享/可变/潮汐/停车带/应急；车辆类型限制与时间窗策略。
         港湾式停靠与动态/时段化；接口: applySectionTemplate/setLaneUse/setShoulder。
+        详规 @link: "./section-templates.tree" { }
       }
       几何与网格/车道映射 {
         网格单位与宽度占用；连续直线段合并为单边；宽度变化/分合流处生成节点。
@@ -482,6 +220,17 @@
         触发与重建: 路臂连接/宽度或允许机动变更时重建路口几何；保持已编辑锚点稳定并执行最小扰动更新。
         校验与降级: 与车行-行人冲突矩阵联动；几何不可解时给出降级建议（缩短口袋、调半径/相位、取消slip右转）。
         参数接口: roadTypeTemplates.radiusMinBySpeed、pocketDefaults、islandDefaults、crosswalkDefaults；UI在“路口配置/道路曲线编辑”处可覆盖。
+      }
+      道路施工与开通流程 {
+        目标: 将“修路”从即时生效改为多阶段过程，体现工序/时耗/天气影响与交通组织。
+        材料与表面: material ∈ {dirt/泥路, gravel/碎石, asphalt/沥青, cement/水泥}；输出 surfaceKind 与相应限速/μ。
+        状态机: Planned → Staked(放样) → Excavating(清表/挖填) → Subgrade(路基整形/压实) → Base(级配碎石) → Paving(铺装: asphalt|cement) → Curing(养护/标线) → Open(开通)。
+        时间参数: 各阶段默认工期（按米/段长度线性缩放）；天气/温度影响沥青摊铺与水泥养护时长；夜间施工效率系数与噪声限制。
+        交通影响: 施工阶段 capacity↓ 与 v_max↓；可配置半幅施工/导改/阶段性放行；接口 events.setWorkZone(edgeId,{capacity, speed}) 与“事件系统/临时组织”一致。
+        自动化与联动: 在“建筑放置”触发器上，若表面/连通性不足→自动创建 Roadwork 计划；与“基础设施老化与维护/维护策略”共用资源池。
+        资源与设备: 选配工程车辆与人员资源（挖机/压路机/摊铺机/自卸车），影响实际工期与费用；支持预算与加班策略。
+        接口: roads.planConstruction(path, material)、roads.startConstruction(id)、roads.advance(id, dt)、roads.cancel(id)；事件 roadworkPlanned/started/phaseChanged/paused/completed/cancelled。
+        可视化: 施工围挡/机械/临时标线/导改箭头；时间轴显示工期与关键里程碑；完成时触发“开通”提示与性能对比。
       }
     }
 
@@ -531,6 +280,54 @@
       确定性与回放一致性 {
         RNG: 全局seed + counter-based子流(pathing/microAI/incidents/demand等)；记录消费计数保证重放一致性。
         可重放: 相同输入/版本/seed→逐帧一致；时间比例切换仅影响推进速率，不改变结果。
+      }
+      随机性与噪声与分布策略 {
+        目标: 在“拟真+可控+可重放”的前提下，为不同尺度的现象选用合适的时空噪声与概率分布。
+        随机源与子流 {
+          PRNG: PCG32/xoshiro128**(可替换)，以 SplitMix64 作为播种；严格counter/skip-ahead保证并行一致。
+          子流域分离: rng.getStream(key)；key∈{pathing,microAI,incidents,demand,weather,maintenance,renderJitter,uiPreview}，禁止跨域复用以免重放漂移。
+          消费策略: 固定顺序/批量抽样，避免条件分支导致的随机消费差异；重要序列采用“预取环形缓冲”。
+        }
+        时域噪声 {
+          白噪声: tick级独立扰动（车辆微抖动、动画/粒子采样、蒙特卡洛近似）。
+          粉噪声(1/f): 低频强、具记忆的过程（出行需求强度、天气扰动、背景合规度/情绪漂移）；实现=IIR滤波/Voss-McCartney；参数α∈[0.8,1.2]。
+          OU/AR(1): 均值回归过程，用于“驾驶性格/满意度/资产健康”缓慢漂移；x_{t+Δ}=μ+(x_t−μ)·e^{−Δ/τ}+σ·√(1−e^{−2Δ/τ})·N(0,1)。
+          fBm/多Octave: 连续多尺度波动（土地价值/风险热力的慢变项）。
+        }
+        空域噪声与采样 {
+          蓝噪声/泊松盘: 空间均匀但无规则的点集（设施/事件落点/初始建筑分布）；Bridson 采样，半径 r(x)=r0/√ρ(x) 支持密度场。
+          Perlin/Simplex/Worley: 连续标量场（地形/土地价值微纹理/事故风险底图）；fBm(octaves=3–6, lacunarity≈2, gain≈0.5)。
+          相关结构: 时空耦合噪声支持同seed下的跨尺度一致性，使用 keyed hashing 做 tile 对齐，避免缝。
+        }
+        分布选择（建议映射） {
+          正态/截断正态: 传感器误差、反应时间、速度波动；建议截断到物理可行域。
+          对数正态: 间隙接受临界时间、停站/装卸/维修时长。
+          Gamma/Erlang: 服务时间/到达-服务差、恢复时间。
+          Weibull: 故障寿命与老化。
+          Beta: 比例/遵从度/合规度/驾驶礼让度。
+          泊松/二项/负二项: 计数事件与到达过程。
+          混合分布/类别混合: 人群异质性（保守/普通/激进）或多峰偏好；支持权重随政策/时段调整。
+          Laplace/Student-t: 厚尾误差与突发跳变的稳健建模。
+        }
+        API（统一入口） {
+          rng.getStream(key): PRNG 子流；
+          rng.normal(μ,σ,{trunc:[min,max]}), rng.logNormal(μ,σ), rng.gamma(k,θ), rng.beta(α,β), rng.poisson(λ), rng.binomial(n,p), rng.t(ν), rng.laplace(μ,b)；
+          noise.perlin2/3(), noise.simplex2/3(), noise.worley2/3(), noise.fbm(f,octaves,...)；
+          noise.pink1f(): 1/f 时域序列；proc.ou(μ,τ,σ,dt)；
+          spatial.poissonDisk(area,{r|rField})；
+        }
+        参数与配置 {
+          配置文件: random.config.json {seed, streams, defaults{varianceScale, truncation}, noisePresets, difficulty→方差映射}；
+          难度/模式: 调整方差与相关时间常数（τ），不改变均值；回放模式强制冻结可选随机钩子。
+          单位与边界: 明确输入输出单位，所有截断在接口层完成并记录原因。
+        }
+        校准与验证 {
+          统计检验: KS/AD 对采样分布做回归测试；自相关/功率谱验证噪声目标（白/粉/蓝）。
+          稳定性: 随机消费计数监控与报警；跨平台位宽差异导致的细微偏差需屏蔽。
+        }
+        采用原则小结 {
+          白噪声用于微观独立扰动；粉噪声用于慢变外生驱动；蓝噪声用于空间点布；正态优先用于可叠加小扰动且经截断；其余过程按上表匹配。
+        }
       }
       性能与背景行为 {
         背景标签页：暂停或低频推进并冻结时间，回前台后在关键帧对齐处恢复，确保一致性。
@@ -614,14 +411,16 @@
         输出: 事故风险基线与违章概率，输入事件系统权重与执法反馈。
       }
       执行点/停止线外溢与“禁止进入路口”(Gate) {
-        判据: 
+        判据 {
           信号/优先约束：绿/允许放行或黄灯“可清空”条件；
           下游空间：L_free ≥ L_min = L_vehicle + s_safe，s_safe = s0 + v*T；
           预测窗口：在t_arr内，预计释放ΔL_release（由队头出清与剩余绿推估），若L_free+ΔL_release ≥ L_min则允许进入；
           应急放宽：κ_emg∈[0.5,1.0]；行人冲突不可跳过。
-        外溢与处罚:
+        }
+        外溢与处罚{
           外溢定义：鼻端越停止线>ε_stop(0.5–1.0 m)且L_free<L_min→阻塞候选；
           超时：累积>τ_block→对冲突向施加阻塞惩罚/鸣笛压力↑/违章记录；UI显示“网格锁死”计时徽标。
+        }
         数值稳定: 相位切换前Δt_guard冻结判据；结果缓存至下一tick；接口 canEnterIntersection()/reportBlocking()。
       }
       鸣笛催促（局部行为偏置） {
@@ -661,19 +460,21 @@
         Agent与属性: {v_pref∈[1.0,1.6] m/s, bodyRadius≈0.25–0.35 m, a_max≈1.5–3.0 m/s², perceptionRange=6–12 m, compliance∈[0,1], attention∈[0,1], groupId?}；分布受年龄/时段/天气影响。
         动力学与避让: 采用社会力(SFM)或ORCA近似做局部避碰；各向异性排斥与边界约束；急停/回避限幅，保证数值稳定；在高密度ρ→ρ_jam时切换“流体近似”降低震荡。
         速度-密度关系: 参照Weidmann曲线 v(ρ)=v0·(1−ρ/ρ_max) 的简化实现；ρ_max≈5–6 人/m²；在ρ>ρ_thr(≈3–3.5)进入拥挤状态，输出拥挤度与舒适度指标。
-        过街与等待: 
+        过街与等待 {
           信号控制: 绑定行人相位/按钮；红灯禁止进入斑马线，黄闪/全红受“清空窗口”Gate判据；绿灯剩余时间估计不足→阻止进入，降低“路中等待”。
           无信号过街: 间隙接受(gap acceptance)；临界间隙t_c∼LogNormal(μ≈3–5 s)随compliance/队列压力调整；组团过街提升t_c需求；转向冲突(右转/掉头)依让行规则仲裁。
           二次过街: 宽路口/中央分隔带存在“庇护岛”，允许分段过街并在岛上排队；PET与TTC用于“近失”检测与UI提示。
+        }
         冲突仲裁与安全: 行人×车道/转向冲突矩阵；Gate判据扩展为 L_free 与相位+行人优先联合；指标: PET、TTC、yield率、违章率；近失/冲突事件上报incident.nearMiss{pedId, vehicleId, pet, ttc}。
         群体与编队: groupId 共享目的地与步速；编队保持松散行列与等待同伴；队列在站台/入口按容量与服务率排队，输出等候时间分布。
         路径与目的地: 多目标序列(起点→路口角点→斑马线→目的地入口)；代价=距离+拥挤惩罚+楼梯/坡道惩罚；支持“更安全路径”偏好与无障碍优先(坡道/电梯)。
         天气与设施影响: 雨雪→v_pref↓、compliance↓；积水/施工区段附加绕行成本；遮阳/雨棚/宽人行道对拥挤阈值与舒适度的正向修正。
         性能与调度: 默认5–10 Hz子步长，嵌入主tick；高密度区域触发局部子步长与群体近似；SoA布局与栅格桶邻域查询。
-        接口与事件: 
+        接口与事件 {
           组件: Pedestrian/WalkerState/Crosswalk/Queue/Group/AmenityEntrance。
           命令: spawnPedestrian, planWalk, setCrosswalkPolicy, setPedCompliance, setPedestrianLayerVisible。
           事件: pedestrianSpawned, crosswalkQueueUpdated, pedestrianCrossStarted, pedestrianCrossFinished, nearMissPedVehicle, pedestrianArrived。
+        }
         可视化与调试: 行人实例点/简化小人；过街相位与禁止进入高亮；斑马线排队长度/等待时间热力；PET/TTC近失标注；性能叠加(行人实体数/密度网格)。
       }
     }
@@ -909,7 +710,13 @@
           守恒近似: 仅用于严重度等级；不做弹性解，重在稳定与可玩。
         }
         轮胎-路面与天气 {
-          μ: 干/湿/雪/冰；影响b_eff与可用加速度；工作区追加减速。
+        μ: 干/湿/雪/冰；影响b_eff与可用加速度；工作区追加减速。
+        路面类型映射: surfaceKind→μ系数 与 速度系数：
+          cement/asphalt: μ≈1.0(干)/0.7(湿)；速度系数=1.0；
+          gravel: μ≈0.7/0.5；速度系数≈0.8；
+          dirt: μ≈0.5/0.35；速度系数≈0.65；
+          barren/grass: μ≈0.4/0.25；速度系数≈0.55；雨后泥泞时再×0.8。
+        车辆能力: offroadRating∈[0,1] 与 driveType∈{fwd,rwd,awd,4x4,tracked} 共同修正可用牵引与安全转弯速度；allTerrain/mud 轮胎在非铺装上给予额外加成。
           水膜/积雪: 区段标志位触发“打滑概率↑/b_eff↓”，与事故风险挂钩。
         }
         反馈与动画 {
@@ -943,149 +750,40 @@
       }
     }
 
-    玩家交互与UI {
-      目标与原则 {
-        低占用/高信息密度；一致操作模型（选择→命令→反馈）；可撤销；键鼠友好与可触控；信息层级清晰。
-      }
-      界面框架与布局 {
-        顶栏: 场景/存档、撤销/重做、模式切换、搜索/命令面板、全局设置。
-        左侧工具栏: 道路/分区/推土机/选择/测量/曲线编辑等，长按二级菜单。
-        右侧面板区: 属性检查器、统计/诊断、路口/信号编辑器、图层管理；可折叠与标签切换。
-        底栏: 时间控制(暂停/1x/2x/4x/8x)、时间轴事件标记、性能指标(FPS/Agent数)。
-        中央画布: 拾取/平移/缩放/框选/就地编辑；小地图与相机预设；布局持久化。
-      }
-      模式与选择 {
-        模式: 道路/分区/推土机/选择/测量/信号编辑/块与附件。
-        选择: 单选/多选/框选；选择相似；区域过滤（类型/属性）；图层可选性与“优先策略”（较新编辑/优先道路/优先节点）。
-        反馈: 悬浮预览（道路几何/成本/合法性）、吸附与约束图标、错误/冲突高亮与修复建议。
-        撤销/重做: 原子命令与组合命令；跨面板一致回退。
-      }
-      数据流与状态 {
-        单向数据流: UI→命令/意图→核心（ECS/Worker）→事件/快照→UI。
-        状态分层: 全局(设置/主题/快捷键)/场景(地图/图层/布局)/临时(悬浮/选择/拖拽)。
-        命令系统: 不可变数据与差分快照；批量操作与进度反馈。
-        事件总线: 主线程与Worker消息分派/节流/背压；UI只订阅精选指标与告警。
-      }
-      可视化图层 {
-        基础: 网格、地形、道路/车道、建筑/地块、过街与标线。
-        分析: 速度/流量/排队热力、相位利用率、事故与封闭、OD 流与等时圈。
-        调试: 节点/边 ID、车道索引、冲突区/合流、路径与机动序列回放。
-        管理: 图层开关、透明度、渲染顺序、采样窗口、空间过滤（视野/区域/类型）。
-      }
-      面板与仪表 {
-        属性检查器: 实体（道路/节点/相位/地块/车辆）关键字段；批量编辑与校验。
-        统计面板: 人口/车辆/模式分担率、平均旅行时间、延误、可靠性、近失、碳排；支持时间序列与导出。
-        Agent追踪: 路径/机动序列/约束与延误分解；固定追踪与两车对比。
-        路口控制: 相位/阶段/配时编辑、检测器与优先策略，队列推进预演与冲突检查。
-      }
-      通用组件与交互 {
-        表单: 数字/单位输入(限速/周期)、区间滑条、颜色选择器、开关/单/多选，支持键盘操作与校验。
-        快捷键/命令面板: 可视化Cheatsheet；自定义映射导入/导出；冲突自动建议修正。
-        搜索与跳转: 名称/ID/属性定位实体；“跳到下一个瓶颈/事故/过饱和路口”。
-        新手引导: 任务式分层教程；随时可打开帮助与示例工程。
-      }
-      响应式与国际化 {
-        布局自适应: 侧栏可停靠/悬浮；小屏保留核心工具与时间控制。
-        主题与无障碍: 明/暗色、色盲友好调色板、字号缩放、对比度与键盘可达性。
-        i18n: 文案键值化与按需加载；数值/单位/日期本地化与公英制切换。
-      }
-      性能与异步 {
-        UI虚拟化: 列表/树/时间序列按需渲染；面板惰性挂载与后台暂停更新。
-        解耦: 指标聚合与降采样；跨线程消息批量合并、节流/防抖。
-        故障保护: Worker崩溃/超时重启与快照恢复；非阻塞通知与错误上报。
-      }
-      可扩展性 {
-        插件面板位: 允许第三方添加面板/图层/工具按钮，声明权限与资源配额。
-        自定义图层: 通过脚本API订阅数据与绘制回调；统一样式与图例系统。
-        布局预设与分享: 导出当前面板布局与图层配置，便于复盘与协作。
-      }
-      建造工具 {
-        道路工具: 绘制/升级/拆除；曲线与立交；车道数/限速/方向；所见即所得合法性。
-        转向编辑: 入口×车道设置允许机动(L/T/R/U)；几何推断默认值与冲突校验。
-        路口配置: 斑马线连通、相位/配时编辑、检测器安放与绑定、优先策略。
-        区域规划: 笔刷式填充住宅/商业/办公区；权重与强度；合法性提示。
-        推土机: 清理地块与建筑；支持区域选择与撤销。
-        块与附件: 放置/旋转矩形块，吸附/对齐与合法性预览；附件锚点吸附；自动连接与冲突提示。
-        道路曲线编辑 {
-          控制点与样条: 三次Bezier/B样条；手柄对称/非对称、等长/自由；C0/C1/C2约束切换。
-          操作: 添加/删除/拆分段、拖拽、数值输入；吸附到网格/角度/端点/切线；沿切线移动/法向偏移与多选对齐。
-          采样: 弧长参数化与按曲率自适应细分；显示曲率热点与半径指示。
-          校验: R_min与κ_max=1/R_min越界高亮（红/橙），提示修复（增大半径/缓和曲线/降限速）。
-          默认映射: 20→8 m, 30→15 m, 40→25 m, 50→40 m, 60→70 m（可配置）。
-          自动修正: 一键圆角/缓和（Clothoid近似）；最小扰动更新；输出差分与缓存失效。
-        }
-      }
-      信息与数据可视化 {
-        交通流量图层：绿/黄/红；可叠加等值线与流向箭头；时间窗口与空间过滤。
-        Agent追踪：车辆/居民状态、目的地与路径；效用/约束分解；导出追踪报告。
-        城市统计：人口、就业率、交通效率、碳排等；支持导出CSV/Parquet。
-      }
-      时间控制 {
-        档位：暂停/正常/快速/超快速；“自动慢放”开关与阈值配置。
-      }
-      命令面板与快捷操作增强 {
-        模糊搜索与自然语言：拼音/别名匹配；自然语言解析日志可回放与撤销审计。
-        最近/收藏/历史：参数预设与“一键重做”。
-        宏与批处理：录制操作序列成宏；占位符参数与回放前预览影响范围。
-        多步预览：执行前显示“影响对象计数/合法性/潜在冲突”；不通过给出修复建议。
-        权限与预算：插件命令显示权限来源与资源预算。
-      }
-      画布交互与手势 {
-        平移/缩放：滚轮以指针为中心；Alt为“语义缩放”（优先选中对象）。
-        径向菜单：Space/长按打开，展示最相关5–8个操作与当前状态。
-        吸附切换：按住Shift取消吸附；Alt切换角度吸附；状态栏显示当前规则。
-        批量选择与过滤：框选后按类型/属性过滤；展示计数与示例。
-        就地数值编辑：在画布直接拖拽编辑限速/半径/长度；弹出数值输入与单位转换。
-      }
-      智能助手与预测预览 {
-        建议卡：如“建议右转口袋+15 m”，一键应用并可撤销。
-        指标Δ预估：编辑预览时显示对延误/排队/可靠性/碳排的即时影响（快速近似模型）。
-        方案对比：加入“比较篮”形成A/B；时间轴分屏回放差异。
-        风险提醒：潜在网格锁死/冲突/半径或净空不足定位与一键修复入口。
-      }
-      教学/挑战/趣味化 {
-        引导任务：新手→进阶→高手，按步骤仅展示相关UI；失败显示原因与提示。
-        挑战卡：时限目标与评分（S/A/B/C），支持复盘与自动分享图。
-        成就：解锁干线/绿波/事故零发生等，授予徽章与主题皮肤。
-        叙事事件UI：重要事件以气泡/播报条/镜头强调呈现，可点击跳转处置。
-      }
-      通知与告警中心 {
-        层级：Info/Warning/Critical；相近事件合并/折叠；静音时段与勿扰。
-        行动化：通知内含“跳转/预览/一键修复/忽略/屏蔽此类”。
-        来源与追踪：标注来源（系统/插件/AI/玩家）；溯源与影响面查看。
-      }
-      录制·回放与分享工作室（概览，扩展详见 DLC-L） {
-        片段标注：时间轴书签与字幕；自动抓取关键帧（事故/阈值越界）。
-        导出预设：短视频比例与水印；导出GIF/MP4/JSON回放索引。
-        摄影机脚本：关键帧插值+镜头脚本；跟车与戏剧化镜头模板；路径可视化。
-        分享链接：场景快照+回放索引的只读分享。
-      }
-      自定义与无障碍增强 {
-        HUD密度（紧凑/标准/宽松）与主题色；色盲模拟与安全调色板。
-        可见性：轮廓高亮/放大镜/高对比；朗读与焦点导航。
-        单位与格式：公英制切换、时速/时耗格式、坐标与方位显示可配置。
-      }
-      输入设备与控制支持 {
-        手柄：导航/缩放/径向菜单/常用建造；震动反馈（可关）。
-        触控：双指缩放/长按径向/三指撤销；边缘滑出召回面板。
-        平台适配：小屏“工具浮岛”模式与最小触点尺寸保障。
-      }
-      性能与诊断 UI {
-        预算可视：右下角渲染/模拟/粒子预算条；超限高亮与降级建议。
-        线程健康：Worker心跳/消息队列长度/丢帧计数；异常重启与日志导出。
-        调优向导：定位最重图层与热点区域；一键关闭/降级开关。
-      }
-    }
+    玩家交互与UI @link: "./ui.tree" { }
 
     数据契约与消息协议 {
       ECS 组件清单 {
         Transform、Vehicle、LaneFollower、TrafficSignal、Detector、Lot/Parcel、Building、Household、Resident、JobSlot、Employer、ParkingFacility、Schedule、VehicleEnergy、FuelStation、ChargingStation、Dealership、RentalAgency、PropertyUnit、Tenancy、HouseholdInventory、RetailOutlet、ShoppingList。
+      }
+      实体类型库与外观配置 {
+        文件: entities.tree；定义人物(human)/动物(animal)/车辆(vehicle) 的原型、外观样式(styleKey/调色板)与默认物理规格；
+        对齐: 与“车辆物理/行人微观/事件系统/需求与 Agent 系统”字段一致；
+        接口: entities.registerType/list/get/spawnEntity；
+        版本: 与回放/快照版本一致管理；样式与调色板支持热更新。
+      }
+      统一命名与单位规范 {
+        ID: block.*, ent.*, style.*, node.*, edge.*, lane.*, signal.*；
+        单位: 长度=米(m)、速度= m/s（UI 显示 km/h）、时间=秒/分钟、角度=弧度（UI 显示度）、网格=格(1格=4 m)；
+        坐标: World/Grid/Lane 参见“世界与地图系统/世界尺度与坐标”；朝向∈{0,90,180,270}；
+        版本: schemaVersion 用于快照/回放/导入导出迁移；
+      }
+      连接器与字段约定 {
+        connectors.kind ∈ {road,ped,driveway,service}；dir ∈ {in,out,both}；
+        laneCount: 单向 [n,0]；双向 [n_up,n_down]；
+        sectionTemplateRef 必须存在于“截面模板与车道用途”；
+      }
+      错误码与校验器 {
+        错误码: E_SCHEMA_RANGE/E_ID_DUP/E_OVERLAP/E_WATER/E_SLOPE/E_CONNECTOR_MISMATCH/E_CLEARANCE/E_RADIUS_UNDERFLOW；
+        校验接口: PlacementValidator.validate、entities.registerType 校验范围与一致性；
       }
       标识与索引：ID策略（32位分段编码）；空间索引：tile→entityId[]。
       主线程⇄Worker 消息总线：通道、模式（命令/事件/快照/RPC）、频率与背压。
       命令与事件模式：
         命令：placeRoad, setSignalPlan, startSim, pause, setPolicy, zoneArea, synthesizeBuildings, setBuildingPolicy, allocateHouseholds, allocateJobs, allocateParking, hire, onboard, resign, takeLeave, emergencyLeave, buyCar, sellCar, rentCar, returnCar, buyHouse, rentHouse, endLease, transferOwnership, bookCharging, bookRefuel, updateInventoryPolicy, generateShoppingList, purchaseItems, restockStore, trackVehicle, rerouteVehicle, forceUturn, setVehicleStyle, injectMission, setConvoy。
         事件：vehicleSpawned, queueUpdated, signalChanged, incidentCreated, energyLow, refuelQueued, refuelStarted, refuelFinished, chargeQueued, chargeStarted, chargeFinished, purchaseCompleted, leaseSigned, leaseTerminated, inventoryLow, shoppingPlanned, shoppingStarted, shoppingFinished, storeRestocked, stockOut, nearMiss, honk, intersectionUnreachable, rerouteRequested, rerouteApplied, uTurnExecuted。
+        事件（构建与容量）：blockPlaced, blockReplaced, blockRemoved, capacityChanged。
+        事件（附件）：attachAdded, attachRemoved, attachUpdated。
         序列化：JSON + 二进制缓冲与schema版本。
     }
 

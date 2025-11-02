@@ -1,0 +1,460 @@
+UI 与交互（详规） {
+  目标与原则 {
+    体验目标: 低占用/高信息密度/一致操作模型（选择→命令→反馈），实时但可控；构建-观察-干预-复盘的闭环顺滑。
+    设计原则: 职责单一、数据单向、渐进披露、可撤销、性能优先、可复盘、可扩展、可无障碍与可本地化。
+    渲染分工: UI 组件由 Solid.js 管理、画布场景由 Canvas2D/WebGL/WebGPU 渲染；二者通过受控 API/事件总线解耦。
+  }
+
+  架构与职责分离 {
+    Solid.js（UI 壳） {
+      负责: 布局/路由、工具栏/面板/表单、HUD 容器、图层开关、通知中心、命令面板、搜索/跳转、性能/健康度面板。
+      状态: App 级状态与面板局部状态（使用 core/state/createAppStore & createFeatureStore）。
+      数据来源: 订阅“指标聚合/事件/快照”（1–2 Hz 节流），通过选择器与虚拟化渲染。
+      输出: 命令（placeRoad/setSignalPlan/...）、图层可见性/参数、渲染样式配置（style.json）与主题切换。
+    }
+    Canvas/WebGL/WebGPU（场景与叠加） {
+      负责: 地形/网格、道路/车道与标线、建筑/地块、车辆/行人/附件实例化、分析热力、调试叠加、拾取与命中测试。
+      输入: 统一指针/键盘事件流（platform/input），来自场景容器。
+      输出: 拾取结果、命中信息、光标提示、框选/测量几何、可视化预算回传（渲染耗时/实例数/热力采样分辨率）。
+      后端选择: 由 RendererRegistry 依据 graphics.json 决定 canvas2d/webgpu，UI 不感知后端差异。
+    }
+    边界与协议 {
+      数据流: UI→命令→Worker→事件/快照→UI；画布仅消费“可绘制快照+样式”，不可直接写业务状态。
+      选取/拾取: 由渲染层返回“选取候选集合与优先级”，UI 决策实际选择并下发命令。
+      性能背压: 渲染回报 budget，UI 触发降级阶梯（关闭后处理→抽稀→热力降分辨率→相机降刷新）。
+    }
+    落地接口与 Schema {
+      AppEvents 主题 {
+        metrics.* / events.* / snapshot.* / render.* / ui.*
+      }
+      UI 订阅默认 {
+        metrics.update(scene): {ts, kpis{avgDelay_s, queue_len, reliability, nearMissRate, co2_kgph}}
+        events.batch: {ts, items[]}
+        snapshot.scene: {version, schemaVersion, view{camera, layers}, counts{vehicles, peds, blocks}}
+      }
+      受控 API（UI→引擎） {
+        commands.dispatch(name, payload) → Result{ok, warnings?, errors?}
+        renderer.configure(style, layers, budget)
+        time.setScale(scale|pause|stepN)
+        selection.set(ids, mode)
+      }
+      IRenderer 关键方法 {
+        mount(canvas, opts{backend, dpi})
+        update(snapshot, style)
+        pick(screenPos, opts) → PickResult{candidates[], hovered?}
+        drawOverlays(overlays, budget)
+        dispose()
+      }
+      数据节流 {
+        metrics: 1–2 Hz；
+        events: 4–8 Hz 合并；
+        snapshot: 按相机帧率/变化阈值推送。
+      }
+      交互序列（示例：画一段道路） {
+        1) RoadTool.onPointerDown → 生成几何预览(getPreview) → Canvas 绘制预览；
+        2) 用户确认 → commit() → dispatch('placeRoad', payload) → Worker 执行并返回 'snapshot.delta'；
+        3) UI 合并快照 → 渲染更新；同时收到 'metrics.update' 用于 HUD KPI 刷新；
+        4) 如失败 → 返回 errors[] 与 E_* 错误码，HUD 弹出修复建议。
+      }
+      错误码约定（UI 侧最小集） {
+        E_VALIDATION（非法输入/越界/半径不足）；E_BUSY（系统繁忙/背压）；E_PERMISSION（插件/命令越权）；E_TIMEOUT（超时）。
+      }
+    }
+  }
+
+  布局与路由（AppShell） {
+    布局分区 {
+      顶栏 TopBar: 场景/存档、撤销/重做、模式切换、搜索/命令面板、全局设置与主题。
+      左侧工具栏 Tools: 道路/分区/推土机/选择/测量/信号编辑/块与附件/曲线工具；长按展开二级菜单。
+      右侧面板区 Panels: 属性检查器、统计/诊断、路口/信号、图层管理、插件面板（可折叠/标签切换）。
+      底栏 BottomBar: 时间控制（暂停/1x/2x/4x/8x）、时间轴事件标记、性能指标（FPS/Agent数）。
+      中央画布 Stage: 场景绘制/拾取/框选/就地编辑；小地图与相机预设；HUD 叠加与提示气泡。
+    }
+    路由与持久化 {
+      路由: routes 中声明 UI 子路由（/scene, /replay, /analytics），面板布局状态持久化至 localStorage。
+      视图恢复: 恢复相机/图层/主题与面板折叠状态；快照加载后在关键帧对齐处恢复时间轴。
+    }
+    实现清单 {
+      路由 {
+        /scene: 场景编辑与运行（默认）
+        /replay: 回放工作室
+        /analytics: 分析页
+      }
+      文件映射（建议） {
+        app/layout/AppShell.tsx: 布局与 Dock 管理
+        app/routes.ts: 路由声明
+        ui/components/common: Toolbar/Timebar/NotificationCenter
+        ui/components/panels: 见“组件目录建议”
+      }
+      状态持久化键 {
+        uf.ui.layout, uf.ui.theme, uf.ui.layers, uf.ui.cameraPreset
+      }
+      快捷键范围 {
+        全局: TopBar/Timebar/CommandPalette 可焦点，但不拦截编辑工具热键
+      }
+    }
+  }
+
+  HUD 设计与交互 {
+    HUD 元素清单 {
+      时钟与速度: now{date,timeOfDay,scale} 与档位；自动慢放徽标与回弹延迟提示；单步推进入口。
+      指标速览: 平均延误/队列/可靠性/近失/碳排等关键 KPI，窗口可切换（5/15/60 min）。
+      通知与告警: Info/Warning/Critical 分级；合并/折叠；含行动按钮（跳转/一键修复/忽略）。
+      工具提示与合法性: 吸附/约束图标、越界/净空不足/半径不足红橙高亮与修复建议卡。
+      性能预算条: 渲染/模拟/粒子预算与降级提示；点击展开诊断面板。
+    }
+    交互规则 {
+      密度与可见: HUD 密度（紧凑/标准/宽松）与“聚焦模式”自动隐藏非关键 HUD；截图/摄影模式一键净空。
+      响应式: 小屏保留核心 HUD；重要告警浮于画布之上并支持键盘确认/跳转。
+      无障碍: 高对比/可读字号/色盲安全调色板；所有 HUD 图标具文本替代与 ARIA。
+    }
+    职责划分 {
+      Solid: HUD 容器与交互逻辑、KPI 卡片与图例、通知中心、速度档位控件。
+      Canvas: HUD 轻量叠加（例如选中轮廓/近失标注轨迹）与屏幕空间度量；重绘受 budget 控制。
+    }
+    状态与数据形状（草案） {
+      NowState: {date:string, timeOfDay:number[0..24), scale:0.5|1|2|4|8, paused:boolean}
+      KPI: {name:string, value:number, unit:string, windowMin:5|15|60, trend?:'up'|'down'|'flat'}
+      HudState: {density:'compact'|'standard'|'relaxed', autoSlowMo:{enabled:boolean, thresholds{queue, nearMiss, incident}}, visible:boolean}
+    }
+    KPI 名称与单位（最小集合） {
+      avgDelay_s: s/veh
+      queue_len: veh
+      reliability: %
+      nearMissRate: 1/h
+      co2_kgph: kg/h
+    }
+    事件到行为映射 {
+      incidentCreated → 通知中心 Critical；自动慢放可选
+      nearMiss → HUD 叠加标注短暂闪烁
+      budgetExceeded → 性能预算条高亮并弹出建议
+    }
+  }
+
+  图层系统与叠加 {
+    图层分类 {
+      基础: 地形/网格/道路与标线/建筑与地块/车辆/行人/附件。
+      分析: 速度/流量/排队热力、相位利用率、事故/封闭、OD 流与等时圈。
+      调试: 节点/边 ID、车道索引、冲突区/合流、路径与机动序列、实例计数。
+    }
+    控制与样式 {
+      UI 控件: 图层开关、透明度、渲染顺序、采样窗口、空间过滤（视野/区域/类型）。
+      样式: style.json 统一颜色/粗细/标线/灯态调色板；明/暗/色盲友好主题。
+    }
+    Canvas 侧实现 {
+      注册: features/*/renderer/layers.ts 注册各自图层；IRenderer 适配器渲染。
+      降级: 远距抽稀车辆实例/热力降分辨率/相机降刷新，按 budget 回传阶梯降级。
+    }
+    注册接口与样式 Schema {
+      LayerId 命名: "<domain>.<name>"（例 road.lanes, blocks.outline, heat.queue）。
+      RendererRegistry.registerLayer(id, draw(snapshot, style, budget))。
+      style.json 片段 {
+        { "road": { "lane": {"width": 1.0, "color": "#9aa4"} },
+          "heat": { "queue": {"colormap": "YlOrRd", "alpha": 0.7} } }
+      }
+      图层控制状态 {
+        LayersState: { [id:string]: {visible:boolean, opacity:number(0..1), order:number} }
+      }
+    }
+  }
+
+  输入与工具（Tools） {
+    输入源与分发 {
+      统一输入: platform/input/pointer.ts & keyboard.ts 产生标准事件；命令区分“预览/落定”。
+      事件阶段: pointerdown→drag/hover→up/cancel；长按触发径向菜单；修饰键切换吸附/约束。
+    }
+    模式与工具 {
+      模式: 道路/分区/推土机/选择/测量/信号编辑/块与附件/曲线编辑。
+      工具行为: 每种工具实现 ToolController，消费输入并发出命令与几何预览（由 Canvas 绘制）。
+      径向菜单: Space/长按打开上下文敏感菜单，展示最相关 5–8 操作与状态。
+    }
+    吸附与约束 {
+      吸附: 网格/角度/道路/控制点吸附；实时显示捕捉目标与阈值；Shift 临时取消吸附。
+      约束: 轴向/等距/平行/垂直/共线；临时约束优先；数值输入支持单位转换（m/格/°/km/h）。
+    }
+    ToolController 接口与生命周期 {
+      methods {
+        onAttach(ctx) / onDetach()
+        onPointerDown/Move/Up(ctx, PointerEvent)
+        onKeyDown/Up(ctx, KeyboardEvent)
+        getPreview(): Overlay[]
+        commit(): Command[] | void
+        cancel(): void
+      }
+      上下文 ctx: {dispatch, pick, snap, selection, hud}
+    }
+    PointerEvent（标准化） {
+      {type:'down'|'move'|'up'|'cancel', posPx:[x,y], world?:[x,y], buttons, modifiers:{shift,alt,ctrl,meta}, ts}
+    }
+    快捷键映射（默认） {
+      选择(S): SelectTool
+      道路(R): RoadTool
+      块与附件(B): BlockTool
+      信号(I): SignalTool
+      测量(M): MeasureTool
+      推土机(D): BulldozeTool
+      撤销 Ctrl+Z / 重做 Ctrl+Shift+Z
+      径向菜单 Space（长按/按下）
+      吸附切换 Shift（按住禁用），角度吸附 Alt
+      语义缩放 Alt + 滚轮
+      删除 Delete（按类型确认）
+    }
+    画布就地编辑 {
+      限速/半径/长度/车道用途的就地编辑句柄；拖拽与文本输入双模；非法输入警示与自动修正选项。
+    }
+    选择与反馈 {
+      选择: 单选/多选/框选；选择相似；区域过滤（类型/属性）；图层可选性与“优先策略”（较新编辑/优先道路/优先节点）。
+      反馈: 悬浮预览（道路几何/成本/合法性）、吸附与约束图标、错误/冲突高亮与修复建议。
+      撤销/重做: 原子命令与组合命令；跨面板一致回退。
+    }
+  }
+
+  状态管理与命令/撤销 {
+    状态分层: 全局(设置/主题/快捷键)/场景(地图/图层/布局)/临时(悬浮/选择/拖拽)。
+    命令系统: 不可变数据、差分快照、批量操作与进度反馈；支持组合命令与跨面板一致回退。
+    事件总线: 主线程与 Worker 消息分派/节流/背压；UI 订阅精选指标与告警（incident/nearMiss/queueUpdated 等）。
+    快照与回放: 关键帧+差分事件日志；时间轴跳转与 A/B 分屏；命令面板保留可回放与撤销审计。
+    AppStore 结构（建议最小版） {
+      ui: {theme:'light'|'dark', locale:string, hud:HudState, panels:{openIds:string[]}}
+      time: NowState
+      layers: LayersState
+      selection: {type?:'edge'|'node'|'block'|'vehicle'|'ped', ids:string[], mode:'single'|'multi'}
+      perf: {rendererMs:number, simMs:number, particlesMs:number, budget:{renderer:4, sim:30, postfx:0.8}}
+    }
+    命令系统接口 {
+      Command: {name:string, payload:any, do(state), undo(state)}
+      dispatch(cmd|cmd[]): Result{ok, errors?, warnings?}
+      history: {canUndo, canRedo, undo(), redo(), clear()}
+    }
+    选择器与订阅 {
+      selectors: getSelected(), getKPI(name), getLayer(id)
+      subscribe(keys:string[]|fn, {throttle?:ms, distinct?:true})
+    }
+  }
+
+  Worker 通信与节流策略 {
+    订阅模型: metrics.subscribe(names[], {hz:1-2}); events.subscribe(types[], {debounce, coalesce});
+    背压: 渲染与消息队列长度超阈→自动降采样/延长聚合窗口；UI 提示“数据已降采样”。
+    一致性: 固定随机子流与消费计数，回放模式冻结随机钩子；时间比例切换不改变结果，仅改变推进速率。
+    消息主题与负载（UI 侧） {
+      'metrics.update': KPI[]
+      'events.batch': {items:[{type, ts, severity?, refIds[]}]} 
+      'snapshot.delta': {version, changed:{nodes?, edges?, lanes?, vehicles?}, removedIds?}
+      'render.budget': {rendererMs, simMs, particlesMs}
+    }
+    频率与背压阈值 {
+      metrics: 1–2 Hz；events: 4–8 Hz；snapshot.delta: ≤30 FPS 且帧间变化<5%则跳帧
+      背压阈: 队列>200 或 丢帧>5% → 请求降级
+    }
+  }
+
+  性能与工程实践 {
+    UI 性能: 列表/树/时间序列虚拟化；面板惰性挂载与后台暂停；memo 与选择器剪枝。
+    绘制预算: 主线程绘制≤4 ms/帧；粒子≤1 ms；后处理≤0.8 ms；达阈触发降级阶梯与提示。
+    大文件与日志: 指标批量聚合/节流；错误与告警非阻塞；Worker 崩溃/超时重启与快照恢复。
+    KPI 阈值与降级阶梯 {
+      rendererMs>4 → 关闭后处理
+      instances>200k → 抽稀车辆实例（1/2）
+      heat.res>1.0 → 降至 0.5
+      cameraHz>60 → 降至 30
+    }
+    虚拟化优先组件 {
+      时间序列图: windowed-stream
+      事件时间轴: virtual-timeline
+      面板树: virtual-tree
+    }
+  }
+
+  主题、样式与无障碍（A11y） {
+    主题: UnoCSS token 与主题切换；色盲友好与高对比方案；暗色默认降低发光与提高对比。
+    无障碍: 键盘可达性（焦点环/快捷键可视）、ARIA/朗读、文本缩放、单位/日期本地化。
+    国际化: 文案键值化与按需加载；公英制切换与数值格式本地化。
+    主题 token（示例） {
+      color.primary/secondary/success/warn/danger, surface.bg/surface.panel, text.primary/secondary, grid.major/minor
+      spacing.xs/sm/md/lg, radius.sm/md, z.hud/z.overlay/z.panel
+    }
+    色盲安全调色轴 {
+      连续: Viridis/Turbo（可选）
+      类别: Set2/Paired；避免红绿组合；警告色使用 amber/blue 辅助
+    }
+    A11y 细则 {
+      文本最小 12px；高对比模式对比≥4.5
+      焦点环可视，所有交互具 aria-label
+    }
+  }
+
+  插件与扩展位（Plugin Surface） {
+    面板与工具: 第三方可注册面板/图层/工具按钮；声明权限与资源配额；在“插件面板位”渲染。
+    能力边界: 数据读/写白名单、Worker 隔离、超时与内存上限；UI 侧提供沙盒化订阅与绘制回调。
+    API: plugins.registerPanel/layer/tool；subscribeMetric/registerLayer；权限提示与审计日志。
+    Manifest 与权限 Schema（摘要） {
+      plugin.manifest.json:
+        { id, name, version, permissions:{read:['metrics','snapshot'], write:['commands.placeRoad']}, ui:{panels?, layers?, tools?} }
+    }
+    生命周期与 Hook {
+      onLoad(ctx), onEnable(), onDisable(), onTick(dt), onMessage(msg)
+      ctx: {subscribeMetric, registerLayer, registerPanel, registerTool, dispatch, getState}
+    }
+  }
+
+  组件目录建议（Solid） {
+    ui/components/panels {
+      WorldPanel/AnalyticsPanel/IntersectionPanel/TransitPanel/DisasterPanel/EnergyPanel/Inspector/PerformancePanel/LayerToggles。
+    }
+    ui/components/overlays {
+      DebugOverlay/WorldGridLayer/BlocksLayer/RoadLayer/AttachmentLayer/PedestrianLayer/AnalyticsHeatmap/IncidentOverlay。
+    }
+    ui/components/common {
+      FormControls（数字/单位输入、区间滑条、颜色选择、单/多选）、Toolbar、DockablePanel、Timebar、NotificationCenter。
+    }
+    典型 Props（最小集） {
+      PanelProps {title:string, onClose():void}
+      WorldPanelProps extends PanelProps {worldSummary, onCenter(pos)}
+      IntersectionPanelProps extends PanelProps {nodeId, plan, onChange(plan)}
+      InspectorProps extends PanelProps {selection, onEdit(changes)}
+      PerformancePanelProps extends PanelProps {perf, onSetBudget(budget)}
+    }
+  }
+
+  面板与仪表 {
+    属性检查器: 实体（道路/节点/相位/地块/车辆）关键字段；批量编辑与校验。
+    统计面板: 人口/车辆/模式分担率、平均旅行时间、延误、可靠性、近失、碳排；支持时间序列与导出。
+    Agent追踪: 路径/机动序列/约束与延误分解；固定追踪与两车对比。
+    路口控制: 相位/阶段/配时编辑、检测器与优先策略，队列推进预演与冲突检查。
+    面板与事件交互 {
+      属性检查器: 监听 selection 与 snapshot.delta；提交 edit 命令序列
+      路口控制: 订阅 signalChanged；命令 setSignalPlan/extendGreen
+      统计面板: 订阅 metrics.update；导出 CSV
+    }
+    面板局部 Store（建议） {
+      createFeatureStore<T>(initial): {state, set, reset}
+    }
+    MVP 交付清单 {
+      Inspector 可编辑 v_max/radius 并通过命令系统落定，可撤销；
+      IntersectionPanel 可修改一个阶段参数并触发 setSignalPlan；
+      PerformancePanel 可调整 budget 并实时反馈。
+    }
+  }
+
+  信息与数据可视化 {
+    交通流量图层：绿/黄/红；可叠加等值线与流向箭头；时间窗口与空间过滤。
+    Agent追踪：车辆/居民状态、目的地与路径；效用/约束分解；导出追踪报告。
+    城市统计：人口、就业率、交通效率、碳排等；支持导出CSV/Parquet。
+    图层 ID 与采样窗口建议 {
+      heat.queue, heat.delay, heat.nearMiss
+      timeline.windowMin: 5/15/60；空间过滤: {bbox|view|tileIds}
+    }
+  }
+
+  时间控制 {
+    档位：暂停/正常/快速/超快速；“自动慢放”开关与阈值配置；单步推进/关键帧跳转。
+    动作接口 {
+      setTimeScale(scale), pause(), resume(), step(nTicks), jumpTo(ts)
+    }
+    快捷键 {
+      空格: 切换“自动慢放”开关；,/.: 减/增速度档；P: 暂停/恢复
+    }
+  }
+
+  命令面板与快捷操作增强 {
+    模糊搜索与自然语言：拼音/别名匹配；自然语言解析日志可回放与撤销审计。
+    最近/收藏/历史：参数预设与“一键重做”。
+    宏与批处理：录制操作序列成宏；占位符参数与回放前预览影响范围。
+    多步预览：执行前显示“影响对象计数/合法性/潜在冲突”；不通过给出修复建议。
+    权限与预算：插件命令显示权限来源与资源预算。
+    命令注册 API（UI 壳） {
+      registerCommand({id, label, keywords[], run(ctx, params), preview?(params)})；来源=core/commands
+    }
+    命令 Schema {
+      placeRoad: {protoId, points[], options{snap?:true}}
+      setSignalPlan: {nodeId, plan}
+      zoneArea: {polygon, kind, strength}
+    }
+  }
+
+  画布交互与手势 {
+    平移/缩放：滚轮以指针为中心；Alt 为“语义缩放”（优先选中对象）。
+    径向菜单：Space/长按打开，展示最相关 5–8 个操作与当前状态。
+    吸附切换：按住 Shift 取消吸附；Alt 切换角度吸附；状态栏显示当前规则。
+    批量选择与过滤：框选后按类型/属性过滤；展示计数与示例。
+    就地数值编辑：画布直接拖拽编辑限速/半径/长度；弹出数值输入与单位转换。
+    光标状态与提示 {
+      cursor.kind ∈ {default, crosshair, rotate, resize, not-allowed, edit}
+      提示: statusBar 显示吸附/约束/单位；非法输入显示红色边与原因
+    }
+    语义缩放（简述） {
+      Alt+滚轮 → 以拾取对象为中心缩放并将其设为优先选择候选
+    }
+    就地编辑字段（最小集） {
+      edge: {v_max, radius}
+      lane: {use}
+      block: {rotation}
+    }
+  }
+
+  录制·回放与分享工作室（概览） {
+    片段标注：时间轴书签与字幕；自动抓取关键帧（事故/阈值越界）。
+    导出预设：短视频比例与水印；导出 GIF/MP4/JSON 回放索引。
+    摄影机脚本：关键帧插值+镜头脚本；跟车与戏剧化镜头模板；路径可视化。
+    分享链接：场景快照+回放索引的只读分享。
+    关键帧 Schema（最小集） {
+      Keyframe {ts, camera, layers, metrics[], notes?}
+      LogEvent {ts, type, payload}
+      ReplayIndex {version, keyframes[], events[]}
+    }
+    导出格式 {
+      JSON(.ufr) + 资源引用（压缩可选）；视频导出使用 canvas-capture
+    }
+  }
+
+  输入设备与控制支持 {
+    手柄：导航/缩放/径向菜单/常用建造；震动反馈（可关）。
+    触控：双指缩放/长按径向/三指撤销；边缘滑出召回面板。
+    平台适配：小屏“工具浮岛”模式与最小触点尺寸保障。
+    手柄映射（XInput） {
+      左摇杆: 平移；右摇杆: 缩放/旋转；A: 确认；B: 取消；X: 径向菜单；Y: 切换工具
+      震动: 事件/近失触发短震；可关闭
+    }
+    触控要点 {
+      两指缩放、三指撤销、长按径向；最小触点 40dp；边缘滑动呼出面板
+    }
+  }
+
+  性能与诊断 UI {
+    预算可视：右下角渲染/模拟/粒子预算条；超限高亮与降级建议。
+    线程健康：Worker 心跳/消息队列长度/丢帧计数；异常重启与日志导出。
+    调优向导：定位最重图层与热点区域；一键关闭/降级开关。
+    数据来源与刷新 {
+      perf 来自 render.budget 与本地 Performance.now() 采样；1 Hz 刷新
+      Worker 心跳: 每 2s；队列长度阈值=200
+      异常自动重启: 连续 3 次心跳丢失→重启并提示恢复快照
+    }
+  }
+
+  接口与事件（与其它卷对齐） {
+    命令（节选）: placeRoad, setSignalPlan, zoneArea, placeBlock, attach, bulldoze, setPolicy, setTimeScale, step, trackVehicle。
+    事件（节选）: vehicleSpawned, queueUpdated, signalChanged, incidentCreated, nearMiss, intersectionUnreachable, rerouteApplied, blockPlaced。
+    渲染注册: features/*/renderer/layers.ts；UI 不直接依赖具体后端，仅依赖 IRenderer 协议。
+    事件命名规范 {
+      范式: <domain>.<past-tense>；批量: <domain>.batch；状态变更: <domain>.changed
+      示例: vehicle.spawned, queue.updated, signal.changed, incident.created
+    }
+  }
+
+  测试与度量 {
+    性能 KPI: UI commit 次数/帧、面板重绘时间、输入到反馈延迟、拾取命中率、降级触发次数。
+    可用性: 关键任务流程（画道路、调相位、查看指标）步骤/时长；新手引导转化与失败原因分解。
+    回归: 录制交互脚本与回放；截图像素对齐阈值比较；事件与指标快照比对。
+    验收用例（节选） {
+      画道路 10 段并撤销/重做，状态一致且无泄漏
+      相位编辑保存→信号变化事件触发且可回放
+      事件创建 100/s 背压不掉帧>10%，UI 正确降级
+    }
+    可执行验收清单（断言级） {
+      dispatch(placeRoad) 返回 ok 且 snapshot.delta 包含新增 edge≥1；
+      Undo 后 selection/metrics 不增量抖动（ΔKPI≤阈值）；
+      背压触发后 render.budget.rendererMs 降至≤4 ms；
+      NotificationCenter 合并相同 type 的重复消息（计数+1）。
+    }
+  }
+}

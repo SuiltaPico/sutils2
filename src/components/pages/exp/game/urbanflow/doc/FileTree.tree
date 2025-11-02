@@ -1,0 +1,394 @@
+文件树{
+  ```txt
+  src/
+    index.tsx
+
+    app/
+      main.tsx
+      routes.ts
+      layout/
+        AppShell.tsx
+      providers/
+        FeatureLoader.tsx           # 基于清单按需装配特性模块
+        RendererProvider.tsx        # 渲染上下文注入（Canvas2D/WebGPU）
+
+    core/
+      config/
+        features.manifest.json      # 特性开关（可禁用/裁剪模块）
+        graphics.json               # 渲染后端与画质配置
+        tuning.json                 # 全局参数（时间步长/预算等）
+      plugin/
+        types.ts
+        registry.ts                 # 模块注册/启停/依赖声明与校验
+      events/
+        types.ts
+        bus.ts                      # 统一事件总线（发布/订阅）
+      state/
+        createAppStore.ts           # App级 store（Solid createStore/signal 封装）
+        createFeatureStore.ts       # 特性内局部 store 工具
+      time/
+        clock.ts
+        scheduler.ts                # Tick 调度（模拟/UI节流）
+      rng/
+        rng.ts                      # 统一随机子流管理（可重放）
+      sim/
+        loop.ts                     # 模拟主循环（可托管到 Worker）
+        systems.ts                  # 系统执行编排与优先级
+      workers/
+        host.ts                     # Worker 生命周期与消息编排
+        sim.worker.ts               # 模拟Worker入口（可选）
+
+    platform/
+      render/
+        IRenderer.ts                # 渲染后端接口（抽象）
+        RendererRegistry.ts         # 后端选择与实例化（canvas2d/webgpu）
+        layers/
+          LayerTypes.ts             # 图层类型与绘制协议
+        adapters/
+          canvas2d/
+            renderer.ts
+            helpers.ts
+          webgpu/
+            renderer.ts
+            pipelines/
+              common.ts
+      input/
+        pointer.ts
+        keyboard.ts
+      assets/
+        index.ts                    # 资产加载与别名
+
+    shared/
+      math/
+        vec2.ts
+        curves.ts
+      geometry/
+        polyline.ts
+        sampling.ts
+      utils/
+        result.ts
+        memo.ts
+        fn.ts
+      types/
+        ids.ts                      # 统一ID/命名约定
+        units.ts                    # 单位/换算规范
+      constants/
+        index.ts
+
+    ui/                             # 应用级通用UI（非领域专属）
+      components/
+        panels/
+          PerformancePanel.tsx
+          LayerToggles.tsx
+        overlays/
+          DebugOverlay.tsx
+      theme/
+        tokens.ts                   # UnoCSS/主题token（无CSS文件）
+
+    features/
+      world/
+        index.ts                    # 注册入口（对外暴露的最小API）
+        api.ts                      # 跨模块可用的受控API
+        model/
+          types.ts
+          state.ts
+        systems/
+          terrain.ts
+          tiles.ts
+        ui/
+          overlays/WorldGridLayer.tsx
+          panels/WorldPanel.tsx
+        renderer/
+          layers.ts                 # 注册世界图层
+
+      roads/                        # 对应 section-templates / 道路横断面
+        index.ts
+        api.ts
+        model/
+          types.ts
+          state.ts
+          section-templates.schema.json
+          section-templates.json
+        services/
+          geometry.ts
+          validators.ts
+        systems/
+          build.ts
+          upgrade.ts
+        ui/
+          panels/RoadEditor.tsx
+          overlays/RoadLayer.tsx
+        renderer/
+          canvas2d.ts
+          webgpu.ts
+          layers.ts
+        data/
+          defaults.json
+
+      intersections/                # 路口/信号（与 roads 解耦）
+        index.ts
+        api.ts
+        model/
+          types.ts
+          state.ts
+        systems/
+          auto-geometry.ts
+          signals.ts
+        ui/
+          panels/IntersectionPanel.tsx
+        renderer/
+          layers.ts
+
+      blocks/                       # 对应 blocks.tree
+        index.ts
+        api.ts
+        model/
+          types.ts
+          state.ts
+        data/
+          prototypes.schema.json
+          prototypes.json
+        systems/
+          placement.ts
+          validator.ts
+        ui/
+          panels/BlockLibrary.tsx
+          overlays/BlocksLayer.tsx
+        renderer/
+          layers.ts
+
+      attachments/                  # 对应 attachments.tree
+        index.ts
+        api.ts
+        model/
+          types.ts
+          state.ts
+        data/
+          prototypes.schema.json
+          prototypes.json
+        systems/
+          placement.ts
+        ui/
+          panels/AttachmentPanel.tsx
+          overlays/AttachmentLayer.tsx
+        renderer/
+          layers.ts
+
+      entities/                     # 对应 entities.tree
+        index.ts
+        api.ts
+        model/
+          types.ts
+          state.ts
+        data/
+          entities.schema.json
+          entities.json
+        systems/
+          spawn.ts
+        ui/
+          panels/EntityPanel.tsx
+        renderer/
+          layers.ts
+
+      traffic/                      # 路网/路径/再路由
+        index.ts
+        api.ts
+        model/
+          types.ts
+          state.ts
+        systems/
+          pathfind.ts
+          reroute.ts
+        services/
+          graph.ts
+          cost.ts
+
+      pedestrians/
+        index.ts
+        api.ts
+        model/
+          types.ts
+          state.ts
+        systems/
+          sim.ts
+        ui/
+          overlays/PedestrianLayer.tsx
+
+      transit/                      # 公交/轨道（可选）
+        index.ts
+        api.ts
+        model/
+          types.ts
+          state.ts
+        systems/
+          routing.ts
+          dwell.ts
+        ui/
+          panels/TransitPanel.tsx
+
+      incidents/                    # 事件系统（对应 doc.tree 事件卷）
+        index.ts
+        api.ts
+        model/
+          types.ts
+          state.ts
+        systems/
+          lifecycle.ts
+          responders.ts
+        ui/
+          panels/IncidentConsole.tsx
+
+      environment/                  # 天气/地表/能见度等
+        index.ts
+        api.ts
+        model/
+          types.ts
+          state.ts
+        systems/
+          weather.ts
+          surface.ts
+        data/
+          presets.json
+
+      analytics/                    # 指标/热力/回放索引
+        index.ts
+        api.ts
+        model/
+          types.ts
+          state.ts
+        systems/
+          heatmap.ts
+          metrics.ts
+        ui/
+          panels/AnalyticsPanel.tsx
+
+      editor/                       # 编辑器工具（选择/吸附/测量）
+        index.ts
+        api.ts
+        model/
+          types.ts
+          state.ts
+        services/
+          snapping.ts
+          selection.ts
+        ui/
+          tools/
+            RoadTool.tsx
+            BlockTool.tsx
+            SelectTool.tsx
+          panels/Inspector.tsx
+
+      disasters/                    # 灾害（可禁用）
+        index.ts
+        api.ts
+        model/
+          types.ts
+          state.ts
+        systems/
+          earthquake.ts
+          flood.ts
+        ui/
+          panels/DisasterPanel.tsx
+
+      energy/                       # 充电/加油/能源（可禁用）
+        index.ts
+        api.ts
+        model/
+          types.ts
+          state.ts
+        systems/
+          charging.ts
+          fueling.ts
+        ui/
+          panels/EnergyPanel.tsx
+
+      _template/                    # 新功能模块脚手架（复制即用）
+        index.ts
+        api.ts
+        model/{types.ts,state.ts}
+        systems/.keep
+        ui/{panels/.keep,overlays/.keep}
+        renderer/layers.ts
+        data/.keep
+
+    plugins/
+      examples/
+        my-plugin/
+          plugin.manifest.json
+          index.ts
+          api.ts
+          renderer/layers.ts
+          ui/panels/MyPluginPanel.tsx
+
+    data/
+      saves/.gitkeep
+      samples/tiny-grid-city.json
+
+    assets/
+      icons/
+      textures/
+      fonts/
+  ```
+
+  关键目录说明与设计要点 {
+    app {
+      负责应用外壳、路由与依赖注入。`FeatureLoader` 根据 `features.manifest.json` 动态装配模块，允许“增/删特性”无需侵入其它代码。
+    }
+    core {
+      框架核心，提供“插件注册/事件总线/全局状态/调度/随机/Worker托管”。模块间通信走 `events.bus` 或对方 `api.ts`，不做直接内部引用，保证低耦合。
+      `config/features.manifest.json` 提供运行期/构建期开关：禁用模块即不注册事件/不挂图层，且通过动态 import 实现按需打包与摇树优化。
+    }
+    platform {
+      平台适配层。`render/IRenderer` 抽象渲染后端；`adapters/canvas2d` 与 `adapters/webgpu` 并存，`RendererRegistry` 依据 `graphics.json` 选择后端，实现无侵入切换。
+      `input` 统一输入源；`assets` 统一资产加载与别名。
+    }
+    shared {
+      纯工具/基础类型/数学/几何，不依赖任何领域模块，可被任意模块安全引用。
+    }
+    ui {
+      应用级通用UI与主题（非领域专属），领域内UI放各自 `features/<name>/ui`。
+    }
+    features/* {
+      每个功能模块“高内聚自包含”：`model`(类型与局部store/信号) + `systems`(业务系统/模拟逻辑) + `services`(纯函数/算法) + `ui`(面板/叠加) + `renderer`(图层注册) + `data`(JSON原型/模板)。
+      `index.ts` 为注册入口，仅导出注册函数；`api.ts` 暴露最小稳定API供跨模块调用；其它文件视为内部实现。
+      典型映射 {
+        blocks/attachments/entities/roads 与现有规格文档逐一对应，`data/*.json` 存放原型与模板，`schema.json` 约束导入校验。
+        intersections/traffic/pedestrians/incidents/environment 与 `doc.tree` 中对应章节概念一一落位，便于持续扩展。
+      }
+    }
+      
+    plugins {
+      第三方/实验性扩展的落点。与 `core/plugin/registry.ts` 对接，具独立清单与UI/图层注册能力，便于完全拆卸。
+    }
+    data / assets {
+      运行期样例/存档与媒体资产，均与模块解耦，按需加载。
+    }
+  }
+
+  设计原因 {
+    按功能组织 {
+      `features/*` 完全按领域拆分（道路/路口/建筑块/附件/实体/交通/事件/环境等），每个模块自带模型/系统/UI/渲染层注册，天然高内聚。
+    }
+    易扩展与切换渲染引擎 {
+      `platform/render` 的 `IRenderer` 抽象+`RendererRegistry` 选择后端；各模块仅注册图层协议，不感知具体后端，实现 Canvas2D→WebGPU 平滑切换与并行支持。
+    }
+    模块启停/删除容易 {
+      `core/config/features.manifest.json` 控制加载；`app/providers/FeatureLoader` 与 `core/plugin/registry` 只装配启用模块，构建时通过动态 import 摇树裁剪未启用代码。
+    }
+    低耦合高内聚 {
+      跨模块交互限定为“事件总线”或对方 `api.ts`；禁止引用对方内部实现。`shared` 与 `core` 提供稳定底座，避免环依赖。
+    }
+    面向未来 {
+      新增“河流/水电站/物流/应急/病毒/军队/灾害”等，仅需在 `features/` 新增模块（可从 `_template/` 复制），在 `features.manifest.json` 打开即可；现有模块零/极少改动。
+    }
+    Solid 状态管理友好 {
+      `core/state` 提供 createStore/signal 封装；模块内 `model/state.ts` 自管理局部状态，App 级状态通过 `createAppStore` 汇总，UI天然响应式。
+    }
+    配置与数据驱动 {
+      领域原型与模板以 `.json` 与 `schema.json` 存放，便于热更新/导入导出，与现有 `attachments.tree / blocks.tree / entities.tree / section-templates.tree / doc.tree` 概念一一对应，实施时可迁移为 JSON 数据源与类型约束。
+    }
+    插件化 {
+      `plugins/` 与注册表允许外部团队独立开发/分发功能，隔离风险，方便在不同游戏模式中启停。
+    }
+  }
+}

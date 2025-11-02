@@ -1,0 +1,332 @@
+基础 Block 原型库 {
+  设计目的: 为编辑器提供可直接放置的常用原型，给出几何/连接/容量/成本的合理默认值，并与路网/行人/事件等系统解耦对齐。
+  字段 Schema {
+    id: 唯一字符串；
+    类别: {道路块/公共建筑块/商业建筑块/基础设施块/公共空间}；
+    footprint: W×H（格）；可拉伸轴: {none/W/H/both}；朝向: 0/90/180/270；
+    connectors: {edge, kind{road/ped/driveway/service}, width(m), offset(格|m), dir{in/out/both}, lanes?}[]；
+    sectionTemplateRef?: 引用“截面模板与车道用途”的模板Id；
+    oneWay?: bool；laneCount?: number[]（双向用 [上/下行]）；v_max_kmh?: number；
+    surfaceKind?: {barren|dirt|gravel|asphalt|cement}（道路/表面类专用）；
+    requireRoadAccess?: {maxDistGrid: number, minEdgeWidthM?: number, strict?: boolean}；
+    synthesized?: {by?: traffic|import, decayDays?: number}；
+    capacity?: {households?, jobs?, retailAttraction?, parking?: {onSite, shared?}}；
+    service?: {pumpCount?, serviceRateVehPerMin?, staff?, responseRadiusm?}；
+    cost: {build, maintain}/月；unlock?: 初始可用/需解锁条件；
+    styleKey?: 样式/图标引用。
+  }
+
+  命名与单位规范 {
+    ID 规则: block.<domain>.<type>.<name>（小写·点分），示例: block.road.twoWay.2p2；
+    单位: 长度/宽度=米(m)；速度=km/h（内部以 m/s 存储与计算）；面积=格；时间=秒/分钟；
+    网格: 1格=4 m；footprint 与 offset 的“格”与“米”均可用，优先以格表达并在导入时转换；
+    朝向: 取值∈{0,90,180,270}，以北向为+Y，顺时针为正；
+    计费: cost 默认单位=“每块/每月”；若原型特殊声明“/格·月”，以每格计；
+  }
+
+  Connectors Schema 与坐标 {
+    位置约束: 仅允许落在 footprint 外轮廓的边上或角点，随朝向旋转；
+    坐标系: offset 可为“格”或“米”；0 原点为左上角(朝向=0)；H 方向沿+X，V 方向沿+Y；
+    字段规范: edge{kind∈{road/ped/driveway/service}, width(m)>0, dir∈{in/out/both}, lanes?}；
+    车道计数: 双向用 laneCount=[上行,下行]；单向为 oneWay=true 且 laneCount=[n,0]；
+    校验: connector.width 应与 sectionTemplateRef 的道路边宽一致或由 UI 自动过渡；不一致时给出提示而非直接拒绝；
+    自动连接: 相邻格边对齐且 kind 相同→建立隐藏网络连通；dir 相容性必须成立（in/out/both）；
+  }
+
+  默认值与范围 {
+    width(m): 道路边 3.0–21.0；人行 2.0–6.0；
+    v_max_kmh: 10–120；道路模板给出建议映射；
+    laneCount: 单向 0–6；双向各向 0–6；
+    capacity.parking.onSite: ≥0；households/jobs: ≥0；
+    service.*: 非负；responseRadiusm/clearanceM/功率等需>0；
+  }
+
+  放置约束 DSL {
+    语法: 以“谓词(参数)”链式且/或组合；支持 not/and/or/()/比较；
+    原子谓词示例: 
+      noWater, maxSlope(pct), minClearance(m), adjacent(kind, side?), 
+      edgeTouch(kind), forbidNear(tag, radius格), requireFrontage(kind, min格),
+      requireRoadAccess(max格, minWidthM?), preferRoadAccess(max格), onSurface(kind|kinds[])
+      ；
+    例: "noWater and maxSlope(8) and edgeTouch(road) and requireRoadAccess(1,3.5)"；
+    评估: 编辑预览阶段做快速近似；落定时由 PlacementValidator 做精确校验并返回修复建议；
+  }
+
+  合法性与校验器 {
+    规则: 不重叠/不越界/净空满足/连接器相容/道路曲线与半径可解；
+    默认道路可达: 类别∈{公共建筑块/商业建筑块/住宅建筑块/工业与仓储类/设施与服务类} 默认启用 requireRoadAccess(maxDistGrid=1, minEdgeWidthM=3.5, strict=true)；
+    表面默认: 道路块默认 surfaceKind=asphalt|cement（按模板），“土路/碎石路”原型设置为 dirt/gravel；
+    接口: PlacementValidator.validate(protoId, pos, rot) → {ok, warnings[], errors[], autoFix?}；
+    错误码: E_OVERLAP, E_WATER, E_SLOPE, E_CONNECTOR_MISMATCH, E_CLEARANCE, E_RADIUS_UNDERFLOW；
+  }
+
+  道路类 {
+    土路·乡村1+1 {
+      id: block.road.dirt.1p1; 类别: 道路块; footprint: 3×8; 可拉伸轴: H;
+      surfaceKind: dirt; sectionTemplateRef: 支路; oneWay: false; laneCount: [1,1]; v_max_kmh: 30;
+      connectors: 纵向两端 edge{kind: road, width: 6.0, dir: both};
+      cost: {build: 20, maintain: 1}/格·月; styleKey: road.dirt;
+      放置约束: 允许跨荒地/草地；雨后速度与事故率由“地表与路面与通行性/天气”修正；
+    }
+    越野轨迹·泥路（自动生成） {
+      id: block.road.dirt.track.auto; 类别: 道路块; footprint: 2×8; 可拉伸轴: H;
+      surfaceKind: dirt; oneWay: false; laneCount: [1,0]; v_max_kmh: 20;
+      connectors: 纵向两端 edge{kind: road, width: 3.5, dir: both};
+      synthesized: {by: traffic, decayDays: 30}; cost: {build: 0, maintain: 0}/格·月; styleKey: road.dirt.track;
+      放置约束: 仅由系统在荒地上按“自发泥路”逻辑生成/衰减，UI 只读；
+    }
+    水泥路·乡村1+1 {
+      id: block.road.cement.rural_1p1; 类别: 道路块; footprint: 2×8; 可拉伸轴: H;
+      sectionTemplateRef: 支路; oneWay: false; laneCount: [1,1]; v_max_kmh: 40;
+      connectors: 四边开放 edge{kind: road, width: 6.0, dir: both};
+      cost: {build: 50, maintain: 2}/格·月; styleKey: road.cement;
+      放置约束: 禁止跨水体与>8%坡; 允许与“人行道”并置。
+    }
+    单行道·1车道 {
+      id: block.road.oneway.1; 类别: 道路块; footprint: 2×8; 可拉伸轴: H;
+      sectionTemplateRef: 支路; oneWay: true; laneCount: [1,0]; v_max_kmh: 40;
+      connectors: 纵向两端 edge{kind: road, width: 3.5, dir: both};
+      cost: {build: 60, maintain: 3}/格·月; styleKey: road.oneway1;
+      放置约束: 与相邻单行方向可成对组成双行。
+    }
+    双行道·1+1 {
+      id: block.road.twoWay.1p1; 类别: 道路块; footprint: 3×8; 可拉伸轴: H;
+      sectionTemplateRef: 次干路; oneWay: false; laneCount: [1,1]; v_max_kmh: 50;
+      connectors: 纵向两端 edge{kind: road, width: 7.0, dir: both};
+      cost: {build: 90, maintain: 5}/格·月; styleKey: road.1p1;
+    }
+    四车双行道·2+2 {
+      id: block.road.twoWay.2p2; 类别: 道路块; footprint: 4×10; 可拉伸轴: H;
+      sectionTemplateRef: 主干路; oneWay: false; laneCount: [2,2]; v_max_kmh: 60;
+      connectors: 纵向两端 edge{kind: road, width: 14.0, dir: both};
+      cost: {build: 140, maintain: 9}/格·月; styleKey: road.2p2;
+    }
+    六车双行道·3+3 {
+      id: block.road.twoWay.3p3; 类别: 道路块; footprint: 6×12; 可拉伸轴: H;
+      sectionTemplateRef: 快速路; oneWay: false; laneCount: [3,3]; v_max_kmh: 70;
+      connectors: 纵向两端 edge{kind: road, width: 21.0, dir: both};
+      cost: {build: 210, maintain: 14}/格·月; styleKey: road.3p3;
+      放置约束: 弯道半径与净空按“道路曲线编辑/校验”。
+    }
+    人行道·4m {
+      id: block.ped.sidewalk.4m; 类别: 基础设施块; footprint: 1×8; 可拉伸轴: H;
+      connectors: 纵向两端 edge{kind: ped, width: 4.0, dir: both};
+      cost: {build: 20, maintain: 1}/格·月; styleKey: ped.sidewalk;
+      作用: 只接行人图；可与道路块并置以形成路侧人行道。
+    }
+  }
+
+  设施与服务类 {
+    停车场·小型 {
+      id: block.parking.lot.small; 类别: 基础设施块; footprint: 6×8; 朝向: 0/90;
+      connectors: 车行出入口×1 edge{kind: driveway, width: 6.0, dir: both}, 行人入口×2 edge{kind: ped, width: 3.0};
+      capacity: {parking: {onSite: 30}}; cost: {build: 1200, maintain: 35}/月; styleKey: facility.parking.small;
+      放置约束: 出入口需贴邻道路边；与“居民/岗位承载与停车义务”联动。
+    }
+    加油站·小型 {
+      id: block.fuel.station.small; 类别: 基础设施块; footprint: 10×8; 朝向: 0/90;
+      connectors: 车行出入口×2 edge{kind: driveway, width: 7.0, dir: in/out};
+      service: {pumpCount: 4, serviceRateVehPerMin: 1.2}; cost: {build: 6000, maintain: 120}/月; styleKey: facility.fuel.small;
+      放置约束: 禁止紧邻学校/医院≤2格；出入口不得直连高速类道路。
+    }
+    便利店·小型 {
+      id: block.retail.cstore.small; 类别: 商业建筑块; footprint: 4×4; 朝向: 任意;
+      connectors: 行人入口×1 edge{kind: ped, width: 2.0}, 车行临停位×2 edge{kind: driveway, width: 3.0};
+      capacity: {jobs: 6, retailAttraction: 1.0, parking: {onSite: 4}}; cost: {build: 1600, maintain: 45}/月; styleKey: retail.cstore;
+    }
+  }
+
+  公共空间类 {
+    公园·口袋公园 {
+      id: block.park.pocket; 类别: 公共空间; footprint: 8×8; 朝向: 任意;
+      connectors: 行人入口×2 edge{kind: ped, width: 4.0};
+      capacity: {retailAttraction: 0.6}; cost: {build: 1800, maintain: 20}/月; styleKey: park.pocket;
+      影响: 附近住宅土地价值小幅↑；噪声↓；可达性加权。
+    }
+  }
+
+  安全与执法类 {
+    公安局·小型派出所 {
+      id: block.police.station.small; 类别: 公共建筑块; footprint: 6×5; 朝向: 任意;
+      connectors: 车行出入口×1 edge{kind: driveway, width: 6.0}, 行人入口×1 edge{kind: ped, width: 3.0};
+      capacity: {jobs: 24, parking: {onSite: 6}}; service: {staff: 20, responseRadiusm: 800};
+      cost: {build: 9000, maintain: 260}/月; styleKey: civic.police.small;
+      联动: 作为“事件系统/资源池”的警车驻点，提供 unitKind=Police 的 spawn 与响应缩短。
+    }
+  }
+
+  住宅与办公类 {
+    低密住宅·联排 {
+      id: block.residential.rowhouse.low; 类别: 住宅建筑块; footprint: 6×6; 朝向: 任意;
+      connectors: 行人入口×2 edge{kind: ped, width: 2.0}, 车行出入口×1 edge{kind: driveway, width: 4.5};
+      capacity: {households: 12, parking: {onSite: 6}}; cost: {build: 3200, maintain: 55}/月; styleKey: res.rowhouse.low;
+    }
+    中密住宅·小高层 {
+      id: block.residential.midrise; 类别: 住宅建筑块; footprint: 8×10; 朝向: 任意;
+      connectors: 行人入口×2 edge{kind: ped, width: 3.0}, 车行出入口×1 edge{kind: driveway, width: 6.0};
+      capacity: {households: 60, parking: {onSite: 30}}; cost: {build: 12000, maintain: 220}/月; styleKey: res.midrise;
+    }
+    高密住宅·塔楼 {
+      id: block.residential.tower; 类别: 住宅建筑块; footprint: 8×12; 朝向: 任意;
+      connectors: 行人入口×2 edge{kind: ped, width: 3.0}, 车行出入口×1 edge{kind: driveway, width: 6.0};
+      capacity: {households: 120, parking: {onSite: 60}}; cost: {build: 24000, maintain: 450}/月; styleKey: res.tower;
+    }
+    办公楼·中型 {
+      id: block.office.mid; 类别: 办公建筑块; footprint: 8×10; 朝向: 任意;
+      connectors: 行人入口×2 edge{kind: ped, width: 3.0}, 车行出入口×1 edge{kind: driveway, width: 6.0};
+      capacity: {jobs: 200, parking: {onSite: 40}}; cost: {build: 18000, maintain: 400}/月; styleKey: office.mid;
+    }
+  }
+
+  教育与医疗类 {
+    小学·标准校 {
+      id: block.educ.school.primary; 类别: 公共建筑块; footprint: 10×12; 朝向: 任意;
+      connectors: 行人入口×2 edge{kind: ped, width: 4.0}, 校车落客区×1 edge{kind: driveway, width: 6.0};
+      capacity: {jobs: 80, parking: {onSite: 20}}; service: {studentCapacity: 800, bellTimes: ["07:50","16:30"]};
+      cost: {build: 26000, maintain: 600}/月; styleKey: civic.school.primary;
+      影响: 上下学时段周边行人与车流短时上升。
+    }
+    社区诊所·基层医疗 {
+      id: block.health.clinic.community; 类别: 公共建筑块; footprint: 6×6; 朝向: 任意;
+      connectors: 行人入口×1 edge{kind: ped, width: 3.0}, 车行出入口×1 edge{kind: driveway, width: 5.0};
+      capacity: {jobs: 30, parking: {onSite: 6}}; service: {patientCapacityPerHour: 30};
+      cost: {build: 9000, maintain: 220}/月; styleKey: health.clinic.community;
+    }
+    综合医院·区域级 {
+      id: block.health.hospital.general; 类别: 公共建筑块; footprint: 14×16; 朝向: 任意;
+      connectors: 行人入口×2 edge{kind: ped, width: 4.0}, 急救车出入口×2 edge{kind: driveway, width: 6.0, dir: in/out};
+      capacity: {jobs: 320, parking: {onSite: 120}}; service: {bedCount: 200, ambulanceSlots: 2, responseRadiusm: 1200};
+      cost: {build: 120000, maintain: 2800}/月; styleKey: health.hospital.general;
+      联动: 作为“事件系统/资源池”的救护车驻点，unitKind=Ambulance。
+    }
+  }
+
+  工业与仓储类 {
+    仓库·小型配送中心 {
+      id: block.ind.warehouse.small; 类别: 仓储建筑块; footprint: 10×12; 朝向: 任意;
+      connectors: 货运月台×2 edge{kind: service, width: 8.0}, 车行出入口×1 edge{kind: driveway, width: 7.0};
+      capacity: {jobs: 25, parking: {onSite: 10}}; service: {dockSlots: 2}; cost: {build: 16000, maintain: 280}/月; styleKey: ind.warehouse.small;
+    }
+    轻工业厂房·小型 {
+      id: block.ind.light.small; 类别: 工业建筑块; footprint: 12×12; 朝向: 任意;
+      connectors: 车行出入口×2 edge{kind: driveway, width: 7.0};
+      capacity: {jobs: 60, parking: {onSite: 20}}; cost: {build: 22000, maintain: 420}/月; styleKey: ind.light.small;
+    }
+    最后一公里配送站 {
+      id: block.logistics.depot.lastmile; 类别: 仓储建筑块; footprint: 8×10; 朝向: 任意;
+      connectors: 车行出入口×2 edge{kind: driveway, width: 6.0};
+      capacity: {jobs: 40, parking: {onSite: 12}}; service: {vanSlots: 8, dispatchRateVehPerMin: 0.4}; cost: {build: 14000, maintain: 320}/月; styleKey: logistics.depot.lastmile;
+    }
+  }
+
+  商业与娱乐类 {
+    超市·中型 {
+      id: block.retail.supermarket.mid; 类别: 商业建筑块; footprint: 10×10; 朝向: 任意;
+      connectors: 行人入口×2 edge{kind: ped, width: 3.0}, 车行出入口×1 edge{kind: driveway, width: 7.0};
+      capacity: {jobs: 40, retailAttraction: 3.0, parking: {onSite: 50}}; cost: {build: 26000, maintain: 520}/月; styleKey: retail.supermarket.mid;
+    }
+    餐馆·街角店 {
+      id: block.retail.restaurant.corner; 类别: 商业建筑块; footprint: 4×4; 朝向: 任意;
+      connectors: 行人入口×1 edge{kind: ped, width: 2.0};
+      capacity: {jobs: 10, retailAttraction: 1.2, parking: {onSite: 0}}; cost: {build: 6000, maintain: 160}/月; styleKey: retail.restaurant.corner;
+    }
+    影院·小型 {
+      id: block.entertain.cinema.small; 类别: 商业建筑块; footprint: 10×8; 朝向: 任意;
+      connectors: 行人入口×2 edge{kind: ped, width: 3.0}, 车行出入口×1 edge{kind: driveway, width: 6.0};
+      capacity: {jobs: 25, retailAttraction: 2.0, parking: {onSite: 30}}; cost: {build: 38000, maintain: 700}/月; styleKey: entertain.cinema.small;
+    }
+  }
+
+  公共交通与慢行设施 {
+    公交站·港湾式 {
+      id: block.transit.bus.bay; 类别: 基础设施块; footprint: 2×6; 可拉伸轴: H;
+      connectors: 道路侧缘 edge{kind: road, width: 3.5, dir: both}, 行人入口×1 edge{kind: ped, width: 3.0};
+      service: {routeSlots: 2, dwellBaseSec: 15}; cost: {build: 1800, maintain: 30}/月; styleKey: transit.bus.bay;
+    }
+    地铁站出入口 {
+      id: block.transit.metro.entrance; 类别: 基础设施块; footprint: 2×3; 朝向: 任意;
+      connectors: 行人入口×1 edge{kind: ped, width: 3.0};
+      service: {catchmentRadiusm: 800}; cost: {build: 12000, maintain: 90}/月; styleKey: transit.metro.entrance;
+    }
+    BRT中置站台·岛式 {
+      id: block.transit.brt.median.island; 类别: 基础设施块; footprint: 4×10; 可拉伸轴: H;
+      connectors: 行人连桥/地道 edge{kind: ped, width: 3.0};
+      service: {routeSlots: 2, dwellBaseSec: 20}; cost: {build: 28000, maintain: 180}/月; styleKey: transit.brt.median;
+      放置约束: 仅与“主干/快速路”中分隔配置兼容。
+    }
+    人行天桥 {
+      id: block.ped.overpass; 类别: 基础设施块; footprint: 2×8; 可拉伸轴: H;
+      connectors: 两端行人入口 edge{kind: ped, width: 3.0}; service: {clearanceM: 4.5};
+      cost: {build: 16000, maintain: 60}/月; styleKey: ped.overpass;
+      放置约束: 跨越道路/水体时需满足净空≥4.5 m。
+    }
+    人行地道 {
+      id: block.ped.underpass; 类别: 基础设施块; footprint: 2×8; 可拉伸轴: H;
+      connectors: 两端行人入口 edge{kind: ped, width: 3.0}; cost: {build: 14000, maintain: 70}/月; styleKey: ped.underpass;
+      风险: 雨季积水概率↑，可与“环境与天气”联动触发维护事件。
+    }
+  }
+
+  停车与能源增强 {
+    停车楼·5层 {
+      id: block.parking.garage.5f; 类别: 基础设施块; footprint: 12×12; 朝向: 任意;
+      connectors: 入口×1 edge{kind: driveway, width: 7.0, dir: in}, 出口×1 edge{kind: driveway, width: 7.0, dir: out}, 行人入口×2 edge{kind: ped, width: 3.0};
+      capacity: {parking: {onSite: 300}}; cost: {build: 52000, maintain: 900}/月; styleKey: facility.parking.garage5f;
+    }
+    充电站·快充（小型） {
+      id: block.energy.ev.fast.small; 类别: 基础设施块; footprint: 8×6; 朝向: 任意;
+      connectors: 车行出入口×2 edge{kind: driveway, width: 6.0};
+      service: {chargerCount: 6, powerKW: 120, serviceRateVehPerMin: 0.8}; capacity: {parking: {onSite: 8}};
+      cost: {build: 18000, maintain: 260}/月; styleKey: energy.ev.fast.small;
+    }
+    加气站·CNG（小型） {
+      id: block.fuel.cng.small; 类别: 基础设施块; footprint: 10×8; 朝向: 0/90;
+      connectors: 车行出入口×2 edge{kind: driveway, width: 7.0, dir: in/out};
+      service: {pumpCount: 3, serviceRateVehPerMin: 1.0}; cost: {build: 42000, maintain: 140}/月; styleKey: facility.fuel.cng.small;
+    }
+  }
+
+  公共空间扩展 {
+    社区广场 {
+      id: block.plaza.community; 类别: 公共空间; footprint: 10×10; 朝向: 任意;
+      connectors: 行人入口×2 edge{kind: ped, width: 4.0};
+      capacity: {retailAttraction: 1.0}; cost: {build: 3200, maintain: 28}/月; styleKey: plaza.community;
+    }
+    绿道·线性段 {
+      id: block.greenway.linear; 类别: 公共空间; footprint: 1×8; 可拉伸轴: H;
+      connectors: 纵向两端 edge{kind: ped, width: 3.0}; cost: {build: 1200, maintain: 10}/月; styleKey: greenway.linear;
+      作用: 提升步行/骑行可达性与环境评分；与“行人网络”耦合。
+    }
+  }
+
+  市政与社区服务 {
+    图书馆·社区级 {
+      id: block.civic.library.community; 类别: 公共建筑块; footprint: 6×6; 朝向: 任意;
+      connectors: 行人入口×1 edge{kind: ped, width: 3.0};
+      capacity: {jobs: 20, retailAttraction: 0.8}; cost: {build: 10000, maintain: 180}/月; styleKey: civic.library.community;
+    }
+    邮局·小型 {
+      id: block.civic.post.office.small; 类别: 公共建筑块; footprint: 4×6; 朝向: 任意;
+      connectors: 行人入口×1 edge{kind: ped, width: 2.5}, 车行出入口×1 edge{kind: driveway, width: 5.0};
+      capacity: {jobs: 12, parking: {onSite: 4}}; service: {parcelSlots: 4}; cost: {build: 8000, maintain: 150}/月; styleKey: civic.post.office.small;
+    }
+    社区服务中心·小型 {
+      id: block.civic.service.center.small; 类别: 公共建筑块; footprint: 8×8; 朝向: 任意;
+      connectors: 行人入口×2 edge{kind: ped, width: 3.0};
+      capacity: {jobs: 60, parking: {onSite: 10}}; cost: {build: 16000, maintain: 280}/月; styleKey: civic.service.center.small;
+    }
+  }
+
+  接口与注册 {
+    API:
+      blocks.registerPrototype(proto) → protoId | Error(E_SCHEMA_RANGE/E_ID_DUP)；
+      blocks.listByCategory(cat) → proto[]；
+      blocks.get(id) → proto；
+      placeBlock(protoId, pos{grid:[i,j], elev?}, rot) → {entityId, warnings[]} | Error；
+      replaceBlock(entityId, newProtoId) → {entityId}；
+      autoConnect(entityId) → {linksCreated}；
+    事件: blockPlaced/blockReplaced/blockRemoved/capacityChanged；
+    资源: 预制图标/样式 key 与本地化名称；成本与容量可被策略面板系数调整；
+    版本: schemaVersion 与回放/快照一致，导入时可迁移。
+  }
+}
