@@ -1,12 +1,23 @@
-import { createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js";
+import { For, createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js";
 import { RendererProvider } from "../providers/RendererProvider";
 import FeatureLoader from "../providers/FeatureLoader";
 import { createAppStore } from "../../core/state/createAppStore";
 import { createClock } from "../../core/time/clock";
 import PerformancePanel from "../ui/components/panels/PerformancePanel";
+import MiniBarChart from "../ui/components/charts/MiniBarChart";
 import LayerToggles from "../ui/components/panels/LayerToggles";
 import { attachPointer } from "../../platform/input/pointer";
 import { attachKeyboard } from "../../platform/input/keyboard";
+import { BLOCK_PRESETS, DEFAULT_BLOCK_PRESET_ID } from "../../features/editor/presets";
+import { featuresManifest } from "../../core/config/features.manifest";
+import BlockLibrary from "../../features/blocks/ui/panels/BlockLibrary";
+import RoadEditor from "../../features/roads/ui/panels/RoadEditor";
+import IntersectionPanel from "../../features/intersections/ui/panels/IntersectionPanel";
+import GraphInspector from "../../features/traffic/ui/panels/GraphInspector";
+import VehicleInspector from "../../features/traffic/ui/panels/VehicleInspector";
+import TrafficControls from "../../features/traffic/ui/panels/TrafficControls";
+import { selectVehicleAtWorld } from "../../features/traffic";
+import { MetricsAggregator } from "../../features/analytics/systems/metrics";
 
 export default function AppShell() {
   const app = createAppStore();
@@ -14,7 +25,16 @@ export default function AppShell() {
   const [simHz, setSimHz] = createSignal(0);
   const [rendererMs, setRendererMs] = createSignal<number | undefined>(undefined);
   const [simMs, setSimMs] = createSignal<number | undefined>(undefined);
+  const [rendererP50, setRendererP50] = createSignal<number | undefined>(undefined);
+  const [rendererP95, setRendererP95] = createSignal<number | undefined>(undefined);
+  const [simP50, setSimP50] = createSignal<number | undefined>(undefined);
+  const [simP95, setSimP95] = createSignal<number | undefined>(undefined);
+  const [rendererSampleCount, setRendererSampleCount] = createSignal<number>(0);
+  const [simSampleCount, setSimSampleCount] = createSignal<number>(0);
+  const [layerCount, setLayerCount] = createSignal<number | undefined>(undefined);
   const [hz, setHz] = createSignal(10);
+  type PerfSample = { ts: number; fps: number; simHz: number; rendererP50?: number; rendererP95?: number; simP50?: number; simP95?: number };
+  const [perfHistory, setPerfHistory] = createSignal<PerfSample[]>([]);
 
   let rafId = 0;
   let lastTs = performance.now();
@@ -43,6 +63,8 @@ export default function AppShell() {
   });
 
   const scaleLabel = createMemo(() => (app.time.paused ? "暂停" : `${app.time.scale}x`));
+  const activeTool = createMemo(() => app.editor.activeTool);
+  const activeBlockPresetId = createMemo(() => app.editor.blockPresetId);
 
   const [renderer, setRenderer] = createSignal<import("../../platform/render/RendererRegistry").IRenderer | null>(null);
   let containerEl: HTMLDivElement | null = null;
@@ -56,15 +78,16 @@ export default function AppShell() {
   });
 
   // 时钟驱动最小重绘
-  let simAcc = 0;
-  let simCount = 0;
-  clock.onTick(() => {
+  const metrics = new MetricsAggregator();
+  clock.onTick((dtSec) => {
     const t0 = performance.now();
     simTicks += 1;
     renderer()?.requestFrame();
     const t1 = performance.now();
-    simAcc += t1 - t0;
-    simCount += 1;
+    metrics.addSim(t1 - t0);
+    try {
+      window.dispatchEvent(new CustomEvent("urbanflow:simTick", { detail: { dtSec } }));
+    } catch {}
   });
 
   // 注册十字准星图层
@@ -127,15 +150,34 @@ export default function AppShell() {
     r.requestFrame();
   });
 
-  // 每秒统计一次 sim 平均耗时
+  // 每秒统计一次模拟/渲染耗时
   createEffect(() => {
     // 依赖 fps 刷新周期（每秒）
     fps();
-    if (simCount > 0) {
-      setSimMs(simAcc / simCount);
-      simAcc = 0;
-      simCount = 0;
-    }
+    const snap = metrics.flush();
+    setSimMs(snap.simAvgMs);
+    setSimP50(snap.simP50);
+    setSimP95(snap.simP95);
+    setSimSampleCount(snap.simCount);
+    setRendererP50(snap.rendererP50);
+    setRendererP95(snap.rendererP95);
+    setRendererSampleCount(snap.rendererCount);
+    // 聚合历史样本（每秒一条）
+    setPerfHistory((prev) => {
+      const next = prev.slice();
+      next.push({
+        ts: Date.now(),
+        fps: fps(),
+        simHz: simHz(),
+        rendererP50: rendererP50(),
+        rendererP95: rendererP95(),
+        simP50: simP50(),
+        simP95: simP95(),
+      });
+      const MAX = 300; // 最多保留 5 分钟（若 1Hz 聚合）
+      while (next.length > MAX) next.shift();
+      return next;
+    });
   });
 
   return (
@@ -156,14 +198,46 @@ export default function AppShell() {
       </div>
       <div class="flex flex-1 min-h-0">
         <div class="w-12 shrink-0 border-r border-gray-200 dark:border-gray-700 flex flex-col items-center py-2 gap-2">
-          <button class="px-2 py-1 text-xs border rounded" onClick={() => app.layers.toggle("world.grid")}>\n            网格\n          </button>
+          <div class="flex flex-col items-stretch gap-2 w-full px-1">
+            <button
+              class="px-2 py-1 text-xs border rounded"
+              classList={{ "bg-slate-900 text-white": activeTool() === "select" }}
+              onClick={() => {
+                app.editor.setActiveTool("select");
+                renderer()?.requestFrame();
+              }}
+            >
+              选择
+            </button>
+            <button
+              class="px-2 py-1 text-xs border rounded"
+              classList={{ "bg-slate-900 text-white": activeTool() === "block" }}
+              onClick={() => {
+                if (!app.editor.blockPresetId) {
+                  app.editor.setBlockPreset(DEFAULT_BLOCK_PRESET_ID);
+                }
+                app.editor.setActiveTool("block");
+                renderer()?.requestFrame();
+              }}
+            >
+              区块
+            </button>
+          </div>
+          <div class="h-px w-8 bg-gray-200 dark:bg-gray-700" />
+          <button class="px-2 py-1 text-xs border rounded" onClick={() => app.layers.toggle("world.grid")}>
+            网格
+          </button>
         </div>
         <div class="flex-1 min-h-0">
           <RendererProvider
             graphics={{ backend: "canvas2d" }}
             onReady={(r) => {
               setRenderer(r);
-              r.onStats((s) => setRendererMs(s.rendererMs));
+              r.onStats((s) => {
+                setRendererMs(s.rendererMs);
+                setLayerCount(s.layerCount);
+                metrics.addRenderer(s.rendererMs);
+              });
             }}
             onContainerReady={(el) => {
               containerEl = el;
@@ -188,6 +262,11 @@ export default function AppShell() {
                     isPanning = true;
                     try { el.setPointerCapture(ev.pointerId); } catch {}
                     lastPanPos = { x: screenX, y: screenY };
+                  } else if (button === 0) {
+                    // 左键：尝试拾取车辆
+                    const w = toWorld(screenX, screenY);
+                    selectVehicleAtWorld(w.worldX, w.worldY);
+                    renderer()?.requestFrame();
                   }
                 },
                 onUp: ({ ev }) => {
@@ -223,6 +302,21 @@ export default function AppShell() {
                     const i = seq.indexOf(app.time.scale as any);
                     const next = seq[Math.max(0, i - 1)];
                     app.time.setScale(next);
+                  } else if (ev.key === "b" || ev.key === "B") {
+                    if (!app.editor.blockPresetId) {
+                      app.editor.setBlockPreset(DEFAULT_BLOCK_PRESET_ID);
+                    }
+                    app.editor.setActiveTool("block");
+                    renderer()?.requestFrame();
+                  } else if (ev.key === "v" || ev.key === "V") {
+                    app.editor.setActiveTool("select");
+                    renderer()?.requestFrame();
+                  } else if (ev.key === "g" || ev.key === "G") {
+                    app.layers.toggle("world.grid");
+                    renderer()?.requestFrame();
+                  } else if (ev.key === "t" || ev.key === "T") {
+                    app.layers.toggle("traffic.debugGraph");
+                    renderer()?.requestFrame();
                   }
                 },
               });
@@ -240,23 +334,120 @@ export default function AppShell() {
         <div class="w-64 shrink-0 border-l border-gray-200 dark:border-gray-700 p-3 text-sm space-y-4">
           <LayerToggles app={app} onChangeOrder={() => renderer()?.requestFrame()} />
           <PerformancePanel
-            perf={{ fps: fps(), simHz: simHz(), rendererMs: rendererMs(), simMs: simMs(), hz: hz() }}
+            perf={{
+              fps: fps(),
+              simHz: simHz(),
+              rendererMs: rendererMs(),
+              simMs: simMs(),
+              layerCount: layerCount(),
+              hz: hz(),
+              rendererP50: rendererP50(),
+              rendererP95: rendererP95(),
+              simP50: simP50(),
+              simP95: simP95(),
+              rendererSamples: rendererSampleCount(),
+              simSamples: simSampleCount(),
+            }}
+            history={perfHistory()}
             onSetHz={(v) => {
               setHz(v);
               clock.setHz(v);
             }}
+            onExportCsv={() => {
+              const rows = [
+                ["ts","fps","simHz","rendererP50","rendererP95","simP50","simP95"].join(","),
+                ...perfHistory().map((s) => [
+                  new Date(s.ts).toISOString(),
+                  s.fps,
+                  s.simHz,
+                  s.rendererP50 ?? "",
+                  s.rendererP95 ?? "",
+                  s.simP50 ?? "",
+                  s.simP95 ?? "",
+                ].join(","))
+              ];
+              const blob = new Blob([rows.join("\n")], { type: "text/csv;charset=utf-8;" });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement("a");
+              a.href = url;
+              a.download = `urbanflow-perf-${new Date().toISOString().replace(/[:.]/g, "-")}.csv`;
+              document.body.appendChild(a);
+              a.click();
+              a.remove();
+              URL.revokeObjectURL(url);
+            }}
           />
+          {featuresManifest.blocks && (
+            <BlockLibrary onPick={(b) => {
+              // 将库项映射为编辑器原型放置（使用 footprint 与 orientation）
+              const [w, h] = b.footprint;
+              app.editor.setPrototype({ id: b.id, category: b.category, wCells: w, hCells: h, orientation: b.orientation ?? 0 });
+              app.editor.setActiveTool("block");
+              renderer()?.requestFrame();
+            }} />
+          )}
+          {featuresManifest.roads && (
+            <RoadEditor />
+          )}
+          {featuresManifest.intersections && (
+            <IntersectionPanel />
+          )}
+          {featuresManifest.traffic && (
+            <>
+              <GraphInspector />
+              <TrafficControls app={app} />
+              <VehicleInspector />
+            </>
+          )}
+          <div>
+            <div class="font-semibold mb-1">BlockTool 预设</div>
+            <div class="space-y-1">
+              <For each={BLOCK_PRESETS}>
+                {(preset) => (
+                  <button
+                    class="w-full px-2 py-1 border rounded text-left"
+                    classList={{ "border-slate-900 bg-slate-900 text-white": activeBlockPresetId() === preset.id }}
+                    onClick={() => {
+                      if (activeBlockPresetId() !== preset.id) {
+                        app.editor.setBlockPreset(preset.id);
+                      }
+                      if (app.editor.activeTool !== "block") {
+                        app.editor.setActiveTool("block");
+                      }
+                      renderer()?.requestFrame();
+                    }}
+                    title={`${preset.label} · ${preset.span * 32}px`}
+                  >
+                    <div class="flex items-center justify-between">
+                      <span>{preset.label}</span>
+                      <span class="text-xs opacity-70">{preset.span}×{preset.span}</span>
+                    </div>
+                  </button>
+                )}
+              </For>
+            </div>
+            <div class="mt-1 text-xs opacity-70">B 启用预览 · V 返回选择 · Esc 清除预览 · 1/2/3 切换吸附 细/中/粗</div>
+          </div>
           <div class="pt-2">
             <div class="font-semibold mb-1">统计</div>
             <div class="flex items-center justify-between">
               <span class="opacity-70">实体计数</span>
               <span>{app.stats.entities}</span>
             </div>
+            <div class="mt-2">
+              <div class="opacity-70 mb-1 text-xs">FPS（最近 30s）</div>
+              {(() => {
+                const vals = perfHistory().slice(-30).map((s) => s.fps);
+                return (
+                  <MiniBarChart width={220} height={40} cap={120} values={vals} color="#93c5fd" />
+                );
+              })()}
+            </div>
           </div>
         </div>
       </div>
       <div class="px-3 py-2 border-t border-gray-200 dark:border-gray-700 text-xs opacity-75">
-        渲染预算: renderer ≤4 ms（占位） · 模拟 ≤30 ms（占位）
+        渲染: {rendererMs() !== undefined ? `${rendererMs()!.toFixed(2)} ms` : "-"} · 模拟: {simMs() !== undefined ? `${simMs()!.toFixed(2)} ms` : "-"} · 图层: {layerCount() ?? "-"} · 时钟 {hz()} Hz
       </div>
     </div>
   );

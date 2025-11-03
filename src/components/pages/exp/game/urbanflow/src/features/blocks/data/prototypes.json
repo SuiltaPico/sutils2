@@ -1,0 +1,183 @@
+{
+  "categories": [
+    { "id": "road", "label": "道路块" },
+    { "id": "public", "label": "公共建筑块" },
+    { "id": "commercial", "label": "商业建筑块" }
+  ],
+  "blocks": [
+    {
+      "id": "block.road.twoWay.1x4",
+      "label": "双向 1×4 车行道",
+      "category": "road",
+      "footprint": [1, 4],
+      "orientation": 0,
+      "tags": ["road", "twoWay", "narrow"]
+    },
+    {
+      "id": "block.road.oneWay.1x3",
+      "label": "单向 1×3 车行道",
+      "category": "road",
+      "footprint": [1, 3],
+      "orientation": 0,
+      "tags": ["road", "oneWay", "narrow"]
+    },
+    {
+      "id": "block.road.oneWay.1x5",
+      "label": "单向 1×5 车行道",
+      "category": "road",
+      "footprint": [1, 5],
+      "orientation": 90,
+      "tags": ["road", "oneWay"]
+    },
+    {
+      "id": "block.road.twoWay.3x4",
+      "label": "双向 3×4 车行道",
+      "category": "road",
+      "footprint": [3, 4],
+      "orientation": 0,
+      "tags": ["road", "twoWay", "wide"]
+    },
+    {
+      "id": "block.road.twoWay.2x6",
+      "label": "双向 2×6 车行道",
+      "category": "road",
+      "footprint": [2, 6],
+      "orientation": 0,
+      "tags": ["road", "twoWay", "long"]
+    },
+    {
+      "id": "block.road.medium.4x4",
+      "label": "城市道路 4×4",
+      "category": "road",
+      "footprint": [4, 4],
+      "orientation": 0,
+      "tags": ["road", "arterial"]
+    },
+    {
+      "id": "block.road.large.4x8",
+      "label": "城市道路 4×8",
+      "category": "road",
+      "footprint": [4, 8],
+      "orientation": 0,
+      "tags": ["road", "arterial", "long"]
+    },
+    {
+      "id": "block.road.square.6x6",
+      "label": "方形路口 6×6",
+      "category": "road",
+      "footprint": [6, 6],
+      "orientation": 0,
+      "tags": ["road", "junction"]
+    },
+    {
+      "id": "block.road.large.10x10",
+      "label": "大型广场路口 10×10",
+      "category": "road",
+      "footprint": [10, 10],
+      "orientation": 0,
+      "tags": ["road", "plaza", "junction"]
+    },
+    {
+      "id": "block.road.twoWay.2x4",
+      "label": "双向 2×4 车行道",
+      "category": "road",
+      "footprint": [2, 4],
+      "orientation": 0,
+      "tags": ["road", "twoWay", "standard"]
+    },
+    {
+      "id": "block.public.park.4x4",
+      "label": "城市公园 4×4",
+      "category": "public",
+      "footprint": [4, 4],
+      "tags": ["public", "park", "green"]
+    },
+    {
+      "id": "block.public.school.3x3",
+      "label": "学校 3×3",
+      "category": "public",
+      "footprint": [3, 3],
+      "tags": ["public", "school", "education"]
+    },
+    {
+      "id": "block.public.hospital.4x5",
+      "label": "医院 4×5",
+      "category": "public",
+      "footprint": [4, 5],
+      "tags": ["public", "hospital", "health"]
+    },
+    {
+      "id": "block.public.library.3x4",
+      "label": "图书馆 3×4",
+      "category": "public",
+      "footprint": [3, 4],
+      "tags": ["public", "library", "education"]
+    },
+    {
+      "id": "block.public.plaza.6x6",
+      "label": "市民广场 6×6",
+      "category": "public",
+      "footprint": [6, 6],
+      "tags": ["public", "plaza"]
+    },
+    {
+      "id": "block.public.stadium.12x10",
+      "label": "体育场 12×10（超大）",
+      "category": "public",
+      "footprint": [12, 10],
+      "tags": ["public", "stadium", "sports"]
+    },
+    {
+      "id": "block.commercial.shop.2x2",
+      "label": "商铺 2×2",
+      "category": "commercial",
+      "footprint": [2, 2],
+      "tags": ["commercial", "shop", "retail"]
+    },
+    {
+      "id": "block.commercial.mall.6x6",
+      "label": "购物中心 6×6",
+      "category": "commercial",
+      "footprint": [6, 6],
+      "tags": ["commercial", "mall", "retail"]
+    },
+    {
+      "id": "block.commercial.office.4x4",
+      "label": "办公楼 4×4",
+      "category": "commercial",
+      "footprint": [4, 4],
+      "tags": ["commercial", "office"]
+    },
+    {
+      "id": "block.commercial.tower.5x8",
+      "label": "商业塔楼 5×8",
+      "category": "commercial",
+      "footprint": [5, 8],
+      "tags": ["commercial", "office", "tower"]
+    },
+    {
+      "id": "block.commercial.market.3x5",
+      "label": "集市 3×5",
+      "category": "commercial",
+      "footprint": [3, 5],
+      "tags": ["commercial", "market"]
+    },
+    {
+      "id": "block.road.debug.20x2",
+      "label": "调试道路 20×2（尺寸过大示例）",
+      "category": "road",
+      "footprint": [20, 2],
+      "orientation": 0,
+      "tags": ["road", "debug"]
+    },
+    {
+      "id": "block.unknown.category.sample",
+      "label": "未知类别示例",
+      "category": "residential",
+      "footprint": [3, 3],
+      "tags": ["sample"]
+    }
+  ]
+}
+
+

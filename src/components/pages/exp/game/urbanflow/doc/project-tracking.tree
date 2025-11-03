@@ -3,7 +3,7 @@
     项目: UrbanFlow 网格编辑器（原型）
     路由: /exp/game/urbanflow
     版本: 0.1.0-proto
-    更新: 2025-11-02
+    更新: 2025-11-03
   }
 
   里程碑 Roadmap {
@@ -76,74 +76,18 @@
   }
 
   当前进展 Progress {
-    已完成 [done] {
-      - 渲染后端抽象与适配 {
-          files: [
-            @link: "../src/platform/render/IRenderer.ts" { },
-            @link: "../src/platform/render/RendererRegistry.ts" { },
-            @link: "../src/platform/render/adapters/canvas2d/renderer.ts" { }
-          ]
-        }
-      - 特性装配（FeatureLoader + manifest）{
-          files: [
-            @link: "../src/app/providers/FeatureLoader.tsx" { },
-            @link: "../src/core/config/features.manifest.ts" { }
-          ]
-        }
-      - World 最小图层（网格）{
-          files: [
-            @link: "../src/features/world/index.ts" { },
-            @link: "../src/features/world/renderer/layers.ts" { }
-          ]
-        }
-      - App 外壳集成（HUD/FPS/图层开关）{
-          file: @link: "../src/app/layout/AppShell.tsx" { }
-        }
-      - 时间与调度（10Hz Clock + 倍速/暂停）{
-          file: @link: "../src/core/time/clock.ts" { }
-        }
-      - 主题变量（画布背景）{
-          file: @link: "../../../index.css" { }
-        }
-      - 输入与拾取（最小版：十字准星与坐标提示）{
-          files: [
-            @link: "../src/app/layout/AppShell.tsx" { },
-            @link: "../src/app/providers/RendererProvider.tsx" { }
-          ]
-        }
-      - 输入与拾取（统一封装与接入）{
-          files: [
-            @link: "../src/platform/input/pointer.ts" { },
-            @link: "../src/platform/input/keyboard.ts" { },
-            @link: "../src/app/layout/AppShell.tsx" { }
-          ]
-          说明: 通过 attachPointer/attachKeyboard 统一输入源；支持中/右键平移、滚轮缩放、Space 暂停/播放、+/- 倍速调整。
-        }
-      - 性能与图层面板（雏形）{
-          files: [
-            @link: "../src/app/ui/components/panels/PerformancePanel.tsx" { },
-            @link: "../src/app/layout/AppShell.tsx" { }
-          ]
-        }
-      - World 图层增强（坐标刻度/缩放与平移基础）[已完成]{
-          files: [
-            @link: "../src/features/world/renderer/layers.ts" { },
-            @link: "../src/core/state/createAppStore.ts" { }
-          ]
-          说明: 已实现缩放/平移与坐标刻度；右侧“实体计数”已在面板显示（最小实现）。
-        }
-      - 编辑器 SelectTool 雏形 {
-          files: [
-            @link: "../src/app/providers/FeatureLoader.tsx" { },
-            @link: "../src/core/config/features.manifest.ts" { },
-            @link: "../src/app/layout/AppShell.tsx" { },
-            @link: "../src/features/editor/index.ts" { }
-          ]
-          说明: 左键拖拽框选，Delete/Esc 清除；注册 `ui.selection` 图层并与 LayerToggles 联动。
-        }
+    最新动态 [today] {
+      - 完成 INCIDENT-3：基于碰撞边的短时封闭与容量下调（封闭 4s，容量因子 0.3 持续 8s）。
+      - 路径搜索跳过封闭边；生成阶段对首段采纳封闭 gating 与容量因子，避免拥堵段继续注入。
+      - 完成 SIG-VAL-2：新增“周期上下限”与“主要运动占空比”校验项；相邻机动车↔行人切换缺少全红提示已覆盖。IntersectionPanel 可展示问题列表与统计。
+      - 完成 BLOCKS-3：BlockLibrary 支持“类别/标签/footprint”分面筛选；详情面板补充标签显示。
+      - 完成 BLOCKS-2：扩充 Blocks 样例库（新增 ≥20 条）；增加原型校验（未知类别/尺寸过大/缺少标签）并在库面板中按“错误/告警”分组展示与计数徽标。
+      - 完成 SECT-2：SectionTemplates 增强校验（laneUse/width/shoulder 交叉校验），列表与详情显示问题计数徽标与多条消息；schema 支持 shoulders 与 laneUse。
+      - 完成 ROAD-BLOCKS-1（最小版）：BlockTool 左键可落定方块；框选+Delete 删除；Ctrl+Z/Y 撤销重做；基于方块自动生成折线→路网，GraphInspector 计数即时更新；Traffic 在新图上运行。
     }
-
     进行中/下一步 [in_progress] {
+      - ROAD-BLOCKS-1：短路块放置→自动生成路网 [next]
+      - ROAD-2：折线道路绘制/删除/撤销 [planned-after]
     }
   }
 
@@ -155,25 +99,52 @@
     Task UI-1     { title: AppShell 集成 Renderer/Clock 与 HUD; status: done; refs: [AppShell.tsx] }
 
     Task PERF-1   { title: PerformancePanel 雏形; status: done; acceptance: {显示 renderer/sim ms, 可调 Hz}; refs: [ui/components/panels/PerformancePanel.tsx] }
+    Task PERF-1A  { title: PerformancePanel 增强：显示图层数(Layers); status: done; refs: [ui/components/panels/PerformancePanel.tsx, app/layout/AppShell.tsx] }
+    Task PERF-1B  { title: PerformancePanel 快捷 Hz 预设 + HUD 动态显示; status: done; refs: [ui/components/panels/PerformancePanel.tsx, app/layout/AppShell.tsx] }
+    Task PERF-2   { title: KPI 聚合(p50/p95)+HUD 展示; status: done; acceptance: {p50/p95与采样数每秒聚合显示}; refs: [app/ui/components/panels/PerformancePanel.tsx, app/layout/AppShell.tsx] }
     Task INPUT-1  { title: 指针/键盘统一封装与基础拾取; status: done; acceptance: {十字准星/坐标提示}; refs: [platform/input/pointer.ts, platform/input/keyboard.ts, render/IRenderer.pick?] }
     Task WORLD-2  { title: World 图层增强（缩放/刻度）; status: done; acceptance: {缩放/平移，刻度随缩放变化}; refs: [core/state/createAppStore.ts, features/world/renderer/layers.ts, app/layout/AppShell.tsx] }
     Task LAYER-1  { title: LayerToggles 面板（雏形）; status: done; acceptance: {可见/透明度/顺序基础控制}; refs: [ui/components/panels/LayerToggles.tsx] }
     Task EDITOR-1 { title: SelectTool 雏形; status: done; acceptance: {单/框选/删除/高亮}; refs: [app/providers/FeatureLoader.tsx, core/config/features.manifest.ts, app/layout/AppShell.tsx, features/editor/index.ts] }
-    Task EDITOR-2 { title: BlockTool 雏形（只预览不落定）; status: planned; acceptance: {库项拖入→画布预览/吸附/撤销}; refs: [features/editor/ui/tools/BlockTool.tsx] }
-    Task BLOCKS-1 { title: Blocks 原型库（只读浏览）; status: planned; acceptance: {按类别列表/搜索/详情}; refs: [features/blocks/data/prototypes.json, .../schema.json, .../ui/panels/BlockLibrary.tsx] }
-    Task SECT-1   { title: SectionTemplates 载入与校验雏形; status: planned; acceptance: {模板载入/宽度与laneCount校验提示}; refs: [features/roads/model/section-templates.json, .../ui/panels/RoadEditor.tsx] }
-    Task SIG-1    { title: Intersections/Signals 骨架; status: planned; acceptance: {载入/保存计划，事件连通}; refs: [features/intersections/index.ts, .../ui/panels/IntersectionPanel.tsx] }
+    Task EDITOR-2 { title: BlockTool 雏形（只预览不落定）; status: done; acceptance: {库项选择→画布预览/吸附/Esc 清除}; refs: [features/editor/index.ts, features/editor/presets.ts, app/layout/AppShell.tsx] }
+    Task BLOCKS-1 { title: Blocks 原型库（只读浏览）; status: done; acceptance: {按类别列表/搜索/详情}; refs: [features/blocks/data/prototypes.json, .../schema.json, .../ui/panels/BlockLibrary.tsx] }
+    Task SECT-1   { title: SectionTemplates 载入与校验雏形; status: done; acceptance: {模板载入/宽度与laneCount校验提示}; refs: [features/roads/model/section-templates.json, .../ui/panels/RoadEditor.tsx] }
+    Task SIG-1    { title: Intersections/Signals 骨架; status: done; acceptance: {载入/保存计划，事件连通}; refs: [features/intersections/index.ts, .../ui/panels/IntersectionPanel.tsx] }
   
     Task ROAD-2 { title: 折线道路绘制/删除/撤销；status: planned; refs: [features/roads/index.ts, .../ui/tools/RoadTool.tsx, .../systems/build.ts] }
-    Task GRAPH-1 { title: 路网图构建(节点/边/入口索引)；status: planned; refs: [features/traffic/services/graph.ts] }
-    Task SIG-2   { title: 信号相位模板+面板+应用；status: planned; refs: [features/intersections/ui/IntersectionPanel.tsx, .../systems/signals.ts] }
-    Task SIG-3   { title: 放行门控(Gate)最小实现；status: planned; refs: [features/traffic/systems/pathfind.ts, .../systems/reroute.ts] }
-    Task SIM-1   { title: 车辆SoA与IDM子集(纵向)；status: planned; refs: [features/traffic/systems/loop.ts] }
-    Task SIM-2   { title: 车辆生成/回收与简化再路由；status: planned; refs: [features/traffic/systems/reroute.ts] }
-    Task UI-VEH  { title: 车辆选中与速度偏置UI；status: planned; refs: [ui/panels/Inspector.tsx] }
-    Task INCIDENT-1 { title: 碰撞判据与事件；status: planned; refs: [features/incidents/systems/lifecycle.ts] }
-    Task INCIDENT-2 { title: 封闭/降速作用与可视化；status: planned; refs: [features/incidents/ui/IncidentOverlay.tsx] }
-    Task PERF-2  { title: KPI 聚合与HUD；status: planned; refs: [features/analytics/systems/metrics.ts] }
+    Task ROAD-BLOCKS-1 { title: 短路块放置→自动生成路网；status: done; acceptance: {放置/删除道路块→路网自动更新, 连接器对齐即连通(同span), 撤销/重做有效, GraphInspector 计数更新, Traffic 可在新路网上运行}; refs: [features/blocks/data/prototypes.json, features/roads/systems/buildFromBlocks.ts, features/traffic/services/graph.ts, features/blocks/ui/panels/BlockLibrary.tsx, features/editor/index.ts, core/state/createAppStore.ts] }
+    Task GRAPH-2 { title: Blocks→Polyline→Graph 构建器；status: planned; acceptance: {从 Blocks/connectors 生成中心线折线并复用 buildGraphFromPolylines, 支持入口索引}; refs: [features/roads/systems/buildFromBlocks.ts, features/traffic/services/graph.ts] }
+    Task EDITOR-4 { title: Block 放置/删除/撤销；status: planned; acceptance: {左键落定/Delete 删除/Ctrl+Z 撤销/Ctrl+Y 重做, 与吸附强度共存}; refs: [features/editor/index.ts, core/state/createAppStore.ts] }
+    Task GRAPH-1 { title: 路网图构建(节点/边/入口索引)；status: done; acceptance: {支持从折线构建图, 建立邻接/入口索引}; refs: [features/traffic/services/graph.ts] }
+    Task TRAFFIC-1 { title: Traffic 模块骨架（信号监听/缓存）; status: done; refs: [features/traffic/index.ts, app/providers/FeatureLoader.tsx, core/config/features.manifest.ts] }
+    Task GRAPH-UI-1 { title: GraphInspector 面板（只读计数+Demo 构建）; status: done; refs: [features/traffic/ui/panels/GraphInspector.tsx, app/layout/AppShell.tsx] }
+    Task TRAFFIC-LAYER-1 { title: traffic.debugGraph 调试图层; status: done; refs: [features/traffic/index.ts, core/state/createAppStore.ts] }
+    Task TRAFFIC-LAYER-2 { title: 车辆调试渲染图层; status: done; refs: [features/traffic/index.ts, core/state/createAppStore.ts] }
+    Task SIG-2   { title: 信号相位模板+面板+应用；status: done; acceptance: {下拉选择模板→应用→JSON 更新并可校验+保存派发事件}; refs: [features/intersections/ui/panels/IntersectionPanel.tsx, features/intersections/systems/signals.ts] }
+    Task SIG-UI-1 { title: Gate 预览时间轴（SVG 可视化）; status: done; acceptance: {按周期比例绘制窗口条·无窗口提示}; refs: [features/intersections/ui/panels/IntersectionPanel.tsx] }
+    Task PERF-3   { title: KPI 历史曲线与导出; status: done; acceptance: {60–300s 可切换窗口曲线, CSV 导出, UI 开销≤1ms/帧}; refs: [app/ui/components/panels/PerformancePanel.tsx, app/layout/AppShell.tsx] }
+    Task SIG-UI-2 { title: Gate 可视化增强（缩放/滚动/冲突高亮）; status: done; acceptance: {时间轴缩放/拖拽平滑, 冲突着色与悬停提示}; refs: [features/intersections/ui/panels/IntersectionPanel.tsx] }
+    Task CHART-1 { title: 性能统计历史曲线改用 D3 渲染; status: done; acceptance: {d3-scale/d3-shape 绘制, 阈值标线, 60/180/300s 窗口切换, UI 开销≤1ms/帧}; refs: [app/ui/components/charts/MiniTimeSeries.tsx, app/ui/components/panels/PerformancePanel.tsx] }
+    Task CHART-2 { title: 统计图表基座（d3 通用迷你图）; status: done; acceptance: {提供可复用柱状迷你图组件, 支持 cap/配色/尺寸, UI 开销≤1ms/帧}; refs: [app/ui/components/charts/MiniBarChart.tsx, app/layout/AppShell.tsx] }
+    Task CHART-0 { title: 接入 d3 并抽象图表基座; status: done; acceptance: {安装并接入 d3, 建立通用迷你图表基座, UI 开销≤1ms/帧}; refs: [app/ui/components/charts/MiniTimeSeries.tsx, app/ui/components/charts/MiniBarChart.tsx, app/ui/components/panels/PerformancePanel.tsx, package.json] }
+    Task SIG-3   { title: 放行门控(Gate)最小实现；status: done; acceptance: {提供开放窗口查询与开闭判定}; refs: [features/traffic/systems/pathfind.ts, features/intersections/ui/panels/IntersectionPanel.tsx] }
+    Task SIM-1   { title: 车辆SoA与IDM子集(纵向)；status: done; refs: [features/traffic/systems/loop.ts, app/layout/AppShell.tsx, features/traffic/index.ts] }
+    Task SIM-2   { title: 车辆生成/回收与简化再路由；status: done; refs: [features/traffic/systems/loop.ts, features/traffic/index.ts] }
+    Task SIM-3   { title: 车辆生成参数化与限速/容量采纳；status: done; refs: [features/traffic/systems/loop.ts, core/state/createAppStore.ts, features/traffic/ui/panels/TrafficControls.tsx, app/layout/AppShell.tsx] }
+    Task UI-VEH  { title: 车辆选中与速度偏置UI；status: done; refs: [features/traffic/ui/panels/VehicleInspector.tsx, app/layout/AppShell.tsx, features/traffic/index.ts] }
+    Task TRAFFIC-UX-2 { title: TrafficControls 面板（生成/上限/限速因子）；status: done; refs: [features/traffic/ui/panels/TrafficControls.tsx, app/layout/AppShell.tsx, core/state/createAppStore.ts] }
+    Task INCIDENT-1 { title: 碰撞判据与事件；status: done; acceptance: {基于距离阈值触发事件并可被订阅}; refs: [features/traffic/systems/loop.ts, features/incidents/index.ts, features/incidents/systems/lifecycle.ts, app/providers/FeatureLoader.tsx, core/config/features.manifest.ts] }
+    Task INCIDENT-2 { title: 封闭/降速作用与可视化；status: done; acceptance: {事故触发→生成8s减速区, 循环采纳降速系数, 叠加层显示并淡出}; refs: [features/incidents/index.ts, features/incidents/systems/lifecycle.ts, app/providers/FeatureLoader.tsx, core/state/createAppStore.ts, features/traffic/systems/loop.ts] }
+    Task INCIDENT-3 { title: 容量/封闭作用雏形；status: done; acceptance: {首段封闭→路径避让, 首段容量按因子下调并在生成时生效}; refs: [features/incidents/systems/lifecycle.ts, features/traffic/services/graph.ts, features/traffic/systems/loop.ts] }
+    Task EDITOR-3  { title: BlockTool 合法性提示与吸附参数化; status: done; acceptance: {非法落点高亮, 吸附三档切换, Esc 清除稳定}; refs: [features/editor/index.ts, features/editor/presets.ts, app/layout/AppShell.tsx] }
+    Task BLOCKS-2  { title: 原型库扩充 + Schema 校验增强; status: done; acceptance: {新增20–30条样例, 错误/告警分组展示}; refs: [features/blocks/data/prototypes.json, features/blocks/data/prototypes.schema.json, features/blocks/ui/panels/BlockLibrary.tsx] }
+    Task BLOCKS-3  { title: BlockLibrary 分面筛选与详情对齐; status: done; acceptance: {类别/标签/footprint 筛选, 详情字段完整}; refs: [features/blocks/ui/panels/BlockLibrary.tsx] }
+    Task SECT-2    { title: SectionTemplates 校验增强与 UI 展示; status: done; acceptance: {laneUse/width/shoulder 交叉校验, 问题计数徽标}; refs: [features/roads/model/section-templates.json, features/roads/model/section-templates.schema.json, features/roads/ui/panels/RoadEditor.tsx] }
+    Task SIG-VAL-2 { title: 信号模板校验项补全; status: done; acceptance: {相邻相位等价/占空比阈值/周期上下限/机动车↔行人切换校验可定位}; refs: [features/intersections/systems/signals.ts, features/intersections/ui/panels/IntersectionPanel.tsx] }
+    Task APP-2     { title: Feature Flags 精细化与懒加载; status: done; acceptance: {独立开关 signals/blocks/sections 生效, 关闭不报错}; refs: [core/config/features.manifest.ts, app/providers/FeatureLoader.tsx, app/layout/AppShell.tsx] }
+    Task ANALYTICS-1 { title: 指标聚合服务层; status: done; refs: [features/analytics/systems/metrics.ts, app/layout/AppShell.tsx] }
+    Task LAYER-UX-1 { title: 图层状态持久化（LS）；status: done; acceptance: {显隐/透明度/顺序刷新后保持}; refs: [core/state/createAppStore.ts] }
+    Task APP-UX-2 { title: 快捷键 G/T 切换网格与Traffic调试图层；status: done; refs: [app/layout/AppShell.tsx] }
   }
 
   验收清单（当前迭代） Acceptance {
@@ -277,8 +248,8 @@
     }
 
     features: 功能模块 {
-      状态: [雏形] 仅有 `world` 模块的渲染入口，无任何业务逻辑。其他所有 `features` 模块均未创建。
-      下一步: 增强 `world` 模块，实现 M3 里程碑要求的缩放、平移与坐标刻度显示。
+      状态: [雏形] 已有 `world` 渲染入口与 `blocks` 原型库（只读面板）；其余模块尚未创建。
+      下一步: 增强 `world`（细化刻度/交互）与 `blocks`（与 BlockTool/放置的解耦联动）。
 
       world/ {
         状态: [渲染就绪，逻辑缺失] 作为一个功能模块，目前仅实现了“被渲染”的部分。
@@ -292,11 +263,15 @@
           下一步: 需根据 M3 增强，绘制坐标轴刻度，并响应世界的缩放与平移状态。
         }
       }
+      blocks/ {
+        状态: [数据与面板就绪，逻辑未接入] 已建立 `data/prototypes.json` 与 `prototypes.schema.json`；右侧 `BlockLibrary` 面板提供按类分组/搜索/详情的只读浏览。
+        下一步: 与编辑器 `BlockTool` 形成只读→预览的松耦合联动；扩充原型库并补充校验。
+      }
     }
 
     ui: 通用 UI 组件 {
-      状态: [未开始] `FileTree.tree` 中规划的通用 UI 组件目录尚不存在。当前 `PerformancePanel.tsx` 位于 `app/ui` 下，未来可能重构至此。
-      下一步: 随开发进展，逐步沉淀可复用的通用面板、表单控件等。
+      状态: [已开始] 新增 `app/ui/components/charts/MiniTimeSeries.tsx` 与 `MiniBarChart.tsx`（均基于 d3 渲染）；现有面板位于 `app/ui` 下。
+      下一步: 沉淀更多可复用图表组件与表单控件，并在合适时机抽离到统一目录。
     }
 
     shared: 共享工具库 {

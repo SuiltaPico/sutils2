@@ -1,5 +1,5 @@
 import { For, JSX } from "solid-js";
-import type { AppStore } from "../../../core/state/createAppStore";
+import type { AppStore } from "../../../../core/state/createAppStore";
 
 type Props = {
   app: AppStore;

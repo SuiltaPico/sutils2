@@ -1,0 +1,49 @@
+{
+  "templates": [
+    {
+      "id": "sect.road.2lane.6m",
+      "label": "双车道 6m",
+      "laneCount": 2,
+      "widthMeters": 6.0,
+      "laneWidthMeters": 3.0,
+      "notes": "常规城市道路最小典型"
+    },
+    {
+      "id": "sect.road.4lane.14m",
+      "label": "四车道 14m",
+      "laneCount": 4,
+      "widthMeters": 14.0,
+      "laneWidthMeters": 3.5,
+      "shoulderLeftMeters": 0.5,
+      "shoulderRightMeters": 0.5,
+      "laneUse": ["MV", "MV", "MV", "MV"],
+      "notes": "主干道常见配置"
+    },
+    {
+      "id": "sect.road.3lane.9m",
+      "label": "三车道 9m",
+      "laneCount": 3,
+      "widthMeters": 9.0,
+      "notes": "未标注车道宽，按平均宽度推断"
+    },
+    {
+      "id": "sect.road.3lane.8m",
+      "label": "三车道 8m（非常规）",
+      "laneCount": 3,
+      "widthMeters": 8.0,
+      "laneUse": ["MV", "BUS", "MV"],
+      "notes": "平均≈2.67 m，将给出 warn"
+    },
+    {
+      "id": "sect.road.2lane.5m",
+      "label": "双车道 5m（过窄）",
+      "laneCount": 2,
+      "widthMeters": 5.0,
+      "shoulderLeftMeters": 0.3,
+      "shoulderRightMeters": 0.3,
+      "notes": "平均≈2.5 m，临界 warn"
+    }
+  ]
+}
+
+

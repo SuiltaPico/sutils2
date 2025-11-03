@@ -6,9 +6,13 @@ export type FeaturesManifest = {
 export const featuresManifest: FeaturesManifest = {
   world: true,
   editor: true,
+  blocks: true,
+  roads: true,
+  intersections: true,
+  traffic: true,
+  incidents: true,
   // roads: false,
   // intersections: false,
-  // blocks: false,
 };
 
 

@@ -29,9 +29,21 @@ importers:
       '@tensorflow/tfjs-backend-webgpu':
         specifier: ^4.22.0
         version: 4.22.0(@tensorflow/tfjs-core@4.22.0)
+      '@types/d3-scale':
+        specifier: ^4.0.9
+        version: 4.0.9
+      '@types/d3-shape':
+        specifier: ^3.1.7
+        version: 3.1.7
       d3:
         specifier: ^7.9.0
         version: 7.9.0
+      d3-scale:
+        specifier: ^4.0.2
+        version: 4.0.2
+      d3-shape:
+        specifier: ^3.2.0
+        version: 3.2.0
       fft.js:
         specifier: ^4.0.4
         version: 4.0.4

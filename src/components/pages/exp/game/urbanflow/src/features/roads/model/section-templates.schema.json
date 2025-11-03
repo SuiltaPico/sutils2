@@ -1,0 +1,34 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "SectionTemplates",
+  "type": "object",
+  "properties": {
+    "templates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "label": { "type": "string" },
+          "laneCount": { "type": "integer", "minimum": 1 },
+          "widthMeters": { "type": "number", "exclusiveMinimum": 0 },
+          "laneWidthMeters": { "type": "number", "exclusiveMinimum": 0 },
+          "shoulderLeftMeters": { "type": "number", "minimum": 0 },
+          "shoulderRightMeters": { "type": "number", "minimum": 0 },
+          "laneUse": {
+            "type": "array",
+            "items": { "type": "string" },
+            "minItems": 1
+          },
+          "notes": { "type": "string" }
+        },
+        "required": ["id", "label", "laneCount", "widthMeters"],
+        "additionalProperties": true
+      }
+    }
+  },
+  "required": ["templates"],
+  "additionalProperties": false
+}
+
+
