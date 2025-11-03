@@ -86,8 +86,8 @@
       - 完成 ROAD-BLOCKS-1（最小版）：BlockTool 左键可落定方块；框选+Delete 删除；Ctrl+Z/Y 撤销重做；基于方块自动生成折线→路网，GraphInspector 计数即时更新；Traffic 在新图上运行。
     }
     进行中/下一步 [in_progress] {
-      - ROAD-BLOCKS-1：短路块放置→自动生成路网 [next]
-      - ROAD-2：折线道路绘制/删除/撤销 [planned-after]
+      - ROAD-2：节点-线段+样条道路建造（吸附到节点/线段投影，落笔拆分） [in_progress]
+      - GRAPH-2：Blocks→Polyline→Graph 构建器（保留用于兼容/导入路径） [planned-after]
     }
   }
 
@@ -111,7 +111,7 @@
     Task SECT-1   { title: SectionTemplates 载入与校验雏形; status: done; acceptance: {模板载入/宽度与laneCount校验提示}; refs: [features/roads/model/section-templates.json, .../ui/panels/RoadEditor.tsx] }
     Task SIG-1    { title: Intersections/Signals 骨架; status: done; acceptance: {载入/保存计划，事件连通}; refs: [features/intersections/index.ts, .../ui/panels/IntersectionPanel.tsx] }
   
-    Task ROAD-2 { title: 折线道路绘制/删除/撤销；status: planned; refs: [features/roads/index.ts, .../ui/tools/RoadTool.tsx, .../systems/build.ts] }
+    Task ROAD-2 { title: 节点-线段+样条道路建造（吸附/拆分/撤销）；status: in_progress; acceptance: {自由起笔/落笔，吸附到节点/线段投影，落笔到线段自动拆分插入节点；撤销/重做稳定；入口=度1节点；车辆从入口节点生成；最短路在 Node-Edge 图上运行}; refs: [features/roads/index.ts, features/editor/ui/tools/RoadTool.tsx, features/roads/systems/build.ts] }
     Task ROAD-BLOCKS-1 { title: 短路块放置→自动生成路网；status: done; acceptance: {放置/删除道路块→路网自动更新, 连接器对齐即连通(同span), 撤销/重做有效, GraphInspector 计数更新, Traffic 可在新路网上运行}; refs: [features/blocks/data/prototypes.json, features/roads/systems/buildFromBlocks.ts, features/traffic/services/graph.ts, features/blocks/ui/panels/BlockLibrary.tsx, features/editor/index.ts, core/state/createAppStore.ts] }
     Task GRAPH-2 { title: Blocks→Polyline→Graph 构建器；status: planned; acceptance: {从 Blocks/connectors 生成中心线折线并复用 buildGraphFromPolylines, 支持入口索引}; refs: [features/roads/systems/buildFromBlocks.ts, features/traffic/services/graph.ts] }
     Task EDITOR-4 { title: Block 放置/删除/撤销；status: planned; acceptance: {左键落定/Delete 删除/Ctrl+Z 撤销/Ctrl+Y 重做, 与吸附强度共存}; refs: [features/editor/index.ts, core/state/createAppStore.ts] }

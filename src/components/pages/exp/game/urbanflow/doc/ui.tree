@@ -172,6 +172,30 @@ UI 与交互（详规） {
       吸附: 网格/角度/道路/控制点吸附；实时显示捕捉目标与阈值；Shift 临时取消吸附。
       约束: 轴向/等距/平行/垂直/共线；临时约束优先；数值输入支持单位转换（m/格/°/km/h）。
     }
+    RoadTool（节点-线段+样条） {
+      目标: 自由起笔→吸附到“节点/线段最近投影”→落笔生成边；落笔到线段时自动拆分该线段并插入新节点；撤销/重做稳定。
+      状态机: idle → pickingStart → previewDragging → pickingEnd | extendChain → commit | cancel；Enter/点击确认，Esc 取消；按住 Alt 启用角度步进（0/15/30/45/90）。
+      吸附规则: 
+        - 节点吸附: 距离<r_node→snap=existingNode；
+        - 线段吸附: 计算最近点投影 t∈[0,1] 与距离 d，如果 d<r_edge→snap=edgeProjection{edgeId,t,point}；
+        - 角度/长度步进: angleStep∈{off,15,30,45,90}；lengthStep（米/格）可切换；
+      拆分逻辑: 落笔到线段→autoSplit=true 时生成 command: splitEdge{edgeId,t}，返回新插入节点 newNodeId；随后 placeRoad 连接到 newNodeId；
+      预览: getPreview() 基于拟合样条/折线采样，输出中心线、半径/限速/截面带的示意；非法半径/坡度/净空高亮。
+      提交: commit() → dispatch('placeRoad', {points, options{smooth,snap,autoSplit}, sectionTemplateId, laneCount, vMaxKmh})；返回 snapshot.delta{nodes,edges}；
+      编辑：选中边后支持“升级/降级截面模板”、“调整限速”、“插入/删除控制点”、“拆分/合并边”。
+      错误码: E_VALIDATION(越界/半径不足/坡度过大)、E_CONNECT(无法拆分/连接)、E_BUSY、E_TIMEOUT；HUD 给修复建议。
+    }
+
+    道路工具能力阶梯（最佳实践对齐） {
+      Level 1（MVP）: 直线/样条建造；节点/线段吸附；落笔拆分；撤销/重做；入口=度1节点；基础选择/删除/合并；
+      Level 2: 并行/偏移（固定 d）；角度/长度步进；相交检测自动插点；升级/降级截面模板；就地编辑半径/限速；
+      Level 3: 圆角/回旋道/环形快速生成；桥/隧切换与坡度编辑；分段属性（限速/车道用途时间窗）；
+      Level 4: 多网络统一（人行/自行车/公交/轨道）；高级对齐（相对道路坐标阵列/等距分段器/参考线）；批量重构（选择子图升级/合并/替换模板）。
+      对齐检查（UI验收）: 
+        - 吸附命中率≥95%，输入到预览延迟≤50ms；
+        - 落笔到线段时“拆分+路口重建”撤销一次即可回到初始状态；
+        - 升级/降级在≥100条边的场景内≤200ms/条（批处理）。
+    }
     ToolController 接口与生命周期 {
       methods {
         onAttach(ctx) / onDetach()
@@ -366,7 +390,9 @@ UI 与交互（详规） {
       registerCommand({id, label, keywords[], run(ctx, params), preview?(params)})；来源=core/commands
     }
     命令 Schema {
-      placeRoad: {protoId, points[], options{snap?:true}}
+      placeRoad: {points: [Vec2,...], sectionTemplateId: string, laneCount?: [up,down], vMaxKmh?: number, options?: {smooth?: boolean, snap?: boolean, autoSplit?: boolean}}
+      splitEdge: {edgeId: string, t: number[0..1]}
+      upgradeSection: {edgeId: string, sectionTemplateId: string}
       setSignalPlan: {nodeId, plan}
       zoneArea: {polygon, kind, strength}
     }

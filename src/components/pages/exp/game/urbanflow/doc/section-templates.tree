@@ -3,6 +3,7 @@
     定义道路横断面模板（SectionTemplate）与车道用途（LaneUse）的权威规范；
     为道路生成/升级/替换提供一致的数据源，并与 blocks.tree 的 sectionTemplateRef 对齐；
     提供校验/默认值/时间窗策略与 UI 挂接点。
+    RoadEdge.sectionTemplateRef 的唯一权威来源；RoadTool 的“升级/降级”直接引用本模板库。
   }
 
   SectionTemplate Schema {
@@ -114,6 +115,7 @@
     面板: “道路/截面模板”页签，展示模板卡片与参数；
     预览: 车道/人行/中分隔/路肩示意；
     校验提示: 半径/口袋长度建议与冲突校验器联动；
+    与 RoadTool 联动: 在选中边时提供“升级/降级”快捷操作，调用 upgradeSection{edgeId,sectionTemplateId}。
   }
 }
 

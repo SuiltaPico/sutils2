@@ -41,6 +41,13 @@
     service.*: 非负；responseRadiusm/clearanceM/功率等需>0；
   }
 
+  重要说明：道路不通过 Block 放置 {
+    正式道路的建造采用“RoadTool（节点-线段+样条）”，生成 RoadNode/RoadEdge 图结构与截面模板；
+    本文档保留少量“道路类 Block”仅用于原型/兼容/演示（例如早期 Demo 或自动合成泥路），不作为标准道路编辑途径；
+    建筑/设施类 Block 通过 driveway/ped 连接器与道路网络衔接：连接器将投射到最近道路边/端点，必要时插入端点或短接入道；
+    UI 上，Block 放置与 RoadTool 解耦；二者通过“连接器对齐与自动连通”实现协作。
+  }
+
   放置约束 DSL {
     语法: 以“谓词(参数)”链式且/或组合；支持 not/and/or/()/比较；
     原子谓词示例: 
@@ -61,6 +68,7 @@
   }
 
   道路类 {
+    注: 道路类为“原型/兼容”用途，不用于正式道路建造；正式道路由 RoadTool 基于节点-线段生成。
     土路·乡村1+1 {
       id: block.road.dirt.1p1; 类别: 道路块; footprint: 3×8; 可拉伸轴: H;
       surfaceKind: dirt; sectionTemplateRef: 支路; oneWay: false; laneCount: [1,1]; v_max_kmh: 30;
@@ -325,6 +333,8 @@
       placeBlock(protoId, pos{grid:[i,j], elev?}, rot) → {entityId, warnings[]} | Error；
       replaceBlock(entityId, newProtoId) → {entityId}；
       autoConnect(entityId) → {linksCreated}；
+      // 与道路网络衔接（driveway/ped）：
+      autoConnectToRoads(entityId|connectorId) → {edgeId, nodeId?, created?: {nodeId?, shortLinkEdgeId?}}；
     事件: blockPlaced/blockReplaced/blockRemoved/capacityChanged；
     资源: 预制图标/样式 key 与本地化名称；成本与容量可被策略面板系数调整；
     版本: schemaVersion 与回放/快照一致，导入时可迁移。
