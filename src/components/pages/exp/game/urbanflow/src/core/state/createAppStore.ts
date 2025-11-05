@@ -10,12 +10,15 @@ export function createAppStore() {
   // 默认图层
   const defaultLayers: LayersState = {
     "world.grid": { visible: true, order: 0, opacity: 1 },
+    "world.roads": { visible: true, order: 1, opacity: 1 },
     "traffic.vehicles": { visible: true, order: 3, opacity: 1 },
     "traffic.debugGraph": { visible: true, order: 2, opacity: 1 },
     "incidents.overlay": { visible: true, order: 6, opacity: 1 },
     "ui.blockPreview": { visible: true, order: 8, opacity: 0.65 },
+    "ui.roadPreview": { visible: true, order: 8, opacity: 1 },
     "ui.selection": { visible: true, order: 9, opacity: 1 },
     "ui.crosshair": { visible: true, order: 10, opacity: 1 },
+    "ui.hud": { visible: true, order: 11, opacity: 1 },
   };
   // 从本地读取并合并
   const initialLayers = (() => {
@@ -32,8 +35,9 @@ export function createAppStore() {
   const [viewScale, setViewScale] = createSignal(1);
   const [viewOffset, setViewOffset] = createSignal({ x: 0, y: 0 });
   const [entityCount, setEntityCount] = createSignal(0);
-  const [activeTool, setActiveTool] = createSignal<"select" | "block">("select");
+  const [activeTool, setActiveTool] = createSignal<"select" | "block" | "road">("select");
   const [blockPresetId, setBlockPresetId] = createSignal<string | null>(null);
+  const [roadTemplateId, setRoadTemplateId] = createSignal<string | null>(null);
   type PlacedBlock = { id: number; x: number; y: number; w: number; h: number; orientation?: 0 | 90 | 180 | 270; category?: string; protoId?: string };
   const [placedBlocks, setPlacedBlocks] = createSignal<PlacedBlock[]>([]);
   const [blockSeq, setBlockSeq] = createSignal(0);
@@ -49,6 +53,22 @@ export function createAppStore() {
     setPlacedBlocks(next);
     pushHistory(next);
     redoStack.length = 0;
+  };
+
+  // Roads（CS 两点建路模式最小状态）
+  type RoadSegment = { id: number; ax: number; ay: number; bx: number; by: number; sectionTemplateId?: string; laneCount?: number; vMaxKmh?: number };
+  const [roadSeq, setRoadSeq] = createSignal(0);
+  const [roadSegments, setRoadSegments] = createSignal<RoadSegment[]>([]);
+  const roadsHistory: RoadSegment[][] = [];
+  const roadsRedo: RoadSegment[][] = [];
+  const pushRoadsHistory = (next: RoadSegment[]) => {
+    roadsHistory.push(next.map(r => ({ ...r })));
+    if (roadsHistory.length > 100) roadsHistory.shift();
+  };
+  const commitRoads = (next: RoadSegment[]) => {
+    setRoadSegments(next);
+    pushRoadsHistory(next);
+    roadsRedo.length = 0;
   };
 
   // Traffic 配置（生成速率/上限/限速因子），带本地持久化
@@ -136,6 +156,9 @@ export function createAppStore() {
       all() {
         return layers();
       },
+      resetToDefaults() {
+        setLayers({ ...defaultLayers });
+      },
     },
     view: {
       get scale() {
@@ -186,7 +209,7 @@ export function createAppStore() {
       get activeTool() {
         return activeTool();
       },
-      setActiveTool(tool: "select" | "block") {
+      setActiveTool(tool: "select" | "block" | "road") {
         setActiveTool(tool);
       },
       get blockPresetId() {
@@ -194,6 +217,12 @@ export function createAppStore() {
       },
       setBlockPreset(id: string | null) {
         setBlockPresetId(id);
+      },
+      get roadTemplateId() {
+        return roadTemplateId();
+      },
+      setRoadTemplate(id: string | null) {
+        setRoadTemplateId(id);
       },
       setPrototype(p: { id: string; category: string; wCells: number; hCells: number; orientation: 0 | 90 | 180 | 270 } | null) {
         // 保存在 window 作用域，避免引入循环依赖；也可迁移到 signal
@@ -245,6 +274,34 @@ export function createAppStore() {
         const next = redoStack.pop()!;
         pushHistory(next);
         setPlacedBlocks(next.map(b => ({ ...b })));
+      },
+    },
+    roads: {
+      get segments() {
+        return roadSegments();
+      },
+      addSegment(ax: number, ay: number, bx: number, by: number, sectionTemplateId?: string, laneCount?: number, vMaxKmh?: number) {
+        const id = roadSeq() + 1;
+        setRoadSeq(id);
+        const next = roadSegments().concat([{ id, ax: Math.round(ax), ay: Math.round(ay), bx: Math.round(bx), by: Math.round(by), sectionTemplateId, laneCount, vMaxKmh }]);
+        commitRoads(next);
+        return id;
+      },
+      clear() {
+        commitRoads([]);
+      },
+      undo() {
+        if (roadsHistory.length <= 1) return;
+        const cur = roadsHistory.pop()!;
+        roadsRedo.push(cur);
+        const prev = roadsHistory[roadsHistory.length - 1] ?? [];
+        setRoadSegments(prev.map(r => ({ ...r })));
+      },
+      redo() {
+        if (roadsRedo.length === 0) return;
+        const next = roadsRedo.pop()!;
+        pushRoadsHistory(next);
+        setRoadSegments(next.map(r => ({ ...r })));
       },
     },
     traffic: {

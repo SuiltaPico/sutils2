@@ -1,4 +1,5 @@
 import { For, Show, createMemo, createResource, createSignal } from "solid-js";
+import type { AppStore } from "../../../../core/state/createAppStore";
 
 type SectionTemplate = {
   id: string;
@@ -69,7 +70,8 @@ function validate(t: SectionTemplate): { level: "ok" | "warn" | "error"; issues:
   return { level, issues };
 }
 
-export default function RoadEditor() {
+export default function RoadEditor(props: { app: AppStore }) {
+  const app = props.app;
   const [query, setQuery] = createSignal("");
   const [selectedId, setSelectedId] = createSignal<string | null>(null);
   const [data] = createResource(fetchTemplates);
@@ -118,7 +120,7 @@ export default function RoadEditor() {
                 <button
                   class="w-full px-2 py-1 border rounded text-left"
                   classList={{ "border-slate-900 bg-slate-900 text-white": selectedId() === t.id }}
-                  onClick={() => setSelectedId(t.id)}
+                  onClick={() => { setSelectedId(t.id); app.editor.setRoadTemplate(t.id); app.editor.setActiveTool("road"); }}
                   title={`${t.id}`}
                 >
                   <div class="flex items-center justify-between gap-2">
@@ -176,6 +178,14 @@ export default function RoadEditor() {
                       </Show>
                     </div>
                   </div>
+                </div>
+                <div>
+                  <button
+                    class="mt-2 px-2 py-1 border rounded text-sm"
+                    onClick={() => { if (selectedId()) { app.editor.setRoadTemplate(selectedId()); app.editor.setActiveTool("road"); } }}
+                  >
+                    启用道路工具（两点建路）
+                  </button>
                 </div>
                 <Show when={t().notes}>
                   <div class="text-xs opacity-75">{t().notes}</div>
