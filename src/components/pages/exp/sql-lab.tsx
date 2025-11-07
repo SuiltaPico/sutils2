@@ -1,6 +1,5 @@
 import { Show, createMemo, createSignal, onCleanup, onMount } from "solid-js";
 
-import type * as duckdb from "@duckdb/duckdb-wasm";
 import { AsyncDuckDB, AsyncDuckDBConnection } from "@duckdb/duckdb-wasm";
 import DuckDBEhWorkerUrl from "@duckdb/duckdb-wasm/dist/duckdb-browser-eh.worker.js?url";
 import DuckDBEhWASMModuleUrl from "@duckdb/duckdb-wasm/dist/duckdb-eh.wasm?url";
