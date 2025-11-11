@@ -194,6 +194,31 @@
         数据（最小版）: RoadNode {id,pos,z?}；RoadEdge {id,a,b,centerline[],sectionTemplateId,laneCount:[up,down],vMaxMps}；
       }
 
+      两点建路模式（CS风格） {
+        目标: 先选“道路类型/截面模板”，再点击两个锚点(A/B)一键生成一段道路；若锚在既有道路上则自动连接/拆分，行为与 Cities: Skylines 一致。
+        UI 流程: RoadPalette 选择 sectionTemplateId → 左键设置锚点A → 光标移动预览（显示宽度/半径/合法性提示）→ 左键设置锚点B → 提交；Esc 取消；Shift 直线锁定；Alt 曲线手柄（可选后续）。
+        锚点 AnchorRef: NodeRef | EdgeProjectionRef；
+          - NodeRef = { nodeId }
+          - EdgeProjectionRef = { edgeId, s }，s∈[0,1] 表示该边中心线归一化弧长位置（实现上亦可用绝对弧长或最近点t）。
+        命令: placeRoadBetweenAnchors {
+          a: AnchorRef,
+          b: AnchorRef,
+          sectionTemplateId,
+          laneCount?,
+          vMaxKmh?,
+          options{ autoSplit: true, snap?: true, smooth?: false }
+        }。
+        行为与连接规则:
+          - 若 a/b 命中 EdgeProjectionRef：在对应 s 处插入节点并拆分该边（保持ID稳定的最小扰动更新），再以新节点为端点连线；
+          - 若 a/b 命中 NodeRef：复用该节点；
+          - 若为自由点：创建新节点；
+          - 生成新 RoadEdge 并触发路网图/入口索引的增量更新；路口几何与信号后续由相应系统重建。
+        预览与合法性:
+          - 预览宽度=sectionTemplateId 映射；越界/穿越水体/坡度超限/半径不足显示红色提示与错误码(E_WATER/E_SLOPE/E_RADIUS_UNDERFLOW)。
+        撤销/重做: 将“拆分旧边/插入节点/创建新边”打包为一个事务，Ctrl+Z/Y 原子回退/重做。
+        兼容: 为 placeRoad 的薄封装；内部将 AnchorRef 解析为端点坐标/节点，并走相同的图构建与校验路径。
+      }
+
       行业共识与最佳实践（对标） {
         连续样条道路（节点-线段图）: 以 Node-Edge 表达路网；每段中心线支持样条/折线；拓扑与几何解耦，升级截面不动中心线。
         智能吸附与拆分: 起落笔自由；吸附到节点或线段最近投影；落笔在线段上自动插入节点并拆分；可选相交检测自动插点。
@@ -809,7 +834,7 @@
       标识与索引：ID策略（32位分段编码）；空间索引：tile→entityId[]。
       主线程⇄Worker 消息总线：通道、模式（命令/事件/快照/RPC）、频率与背压。
       命令与事件模式：
-        命令：placeRoad, setSignalPlan, startSim, pause, setPolicy, zoneArea, synthesizeBuildings, setBuildingPolicy, allocateHouseholds, allocateJobs, allocateParking, hire, onboard, resign, takeLeave, emergencyLeave, buyCar, sellCar, rentCar, returnCar, buyHouse, rentHouse, endLease, transferOwnership, bookCharging, bookRefuel, updateInventoryPolicy, generateShoppingList, purchaseItems, restockStore, trackVehicle, rerouteVehicle, forceUturn, setVehicleStyle, injectMission, setConvoy。
+        命令：placeRoad, placeRoadBetweenAnchors, setSignalPlan, startSim, pause, setPolicy, zoneArea, synthesizeBuildings, setBuildingPolicy, allocateHouseholds, allocateJobs, allocateParking, hire, onboard, resign, takeLeave, emergencyLeave, buyCar, sellCar, rentCar, returnCar, buyHouse, rentHouse, endLease, transferOwnership, bookCharging, bookRefuel, updateInventoryPolicy, generateShoppingList, purchaseItems, restockStore, trackVehicle, rerouteVehicle, forceUturn, setVehicleStyle, injectMission, setConvoy。
         事件：vehicleSpawned, queueUpdated, signalChanged, incidentCreated, energyLow, refuelQueued, refuelStarted, refuelFinished, chargeQueued, chargeStarted, chargeFinished, purchaseCompleted, leaseSigned, leaseTerminated, inventoryLow, shoppingPlanned, shoppingStarted, shoppingFinished, storeRestocked, stockOut, nearMiss, honk, intersectionUnreachable, rerouteRequested, rerouteApplied, uTurnExecuted。
         事件（构建与容量）：blockPlaced, blockReplaced, blockRemoved, capacityChanged。
         事件（附件）：attachAdded, attachRemoved, attachUpdated。

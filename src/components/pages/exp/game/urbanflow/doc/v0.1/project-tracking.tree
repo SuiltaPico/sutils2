@@ -84,6 +84,10 @@
       - 完成 BLOCKS-2：扩充 Blocks 样例库（新增 ≥20 条）；增加原型校验（未知类别/尺寸过大/缺少标签）并在库面板中按“错误/告警”分组展示与计数徽标。
       - 完成 SECT-2：SectionTemplates 增强校验（laneUse/width/shoulder 交叉校验），列表与详情显示问题计数徽标与多条消息；schema 支持 shoulders 与 laneUse。
       - 完成 ROAD-BLOCKS-1（最小版）：BlockTool 左键可落定方块；框选+Delete 删除；Ctrl+Z/Y 撤销重做；基于方块自动生成折线→路网，GraphInspector 计数即时更新；Traffic 在新图上运行。
+      - 新增 HUD-1：编辑器 HUD 叠加（工具/吸附/计数），画布左下动态显示 TOOL/SNAP/Blocks。
+      - 新增 EDITOR-UX-4：Tab 循环吸附档位（细/中/粗），R 键旋转原型 0/90/180/270°，预览与落定一致。
+      - 新增 LAYER-UX-2：图层面板支持按 id 搜索过滤，并提供“一键重置默认”功能（显隐/顺序/透明度持久化恢复）。
+      - 新增 APP-UX-3：左侧工具栏增加“准星”按钮，切换 `ui.crosshair` 与快捷键联动。
     }
     进行中/下一步 [in_progress] {
       - ROAD-2：节点-线段+样条道路建造（吸附到节点/线段投影，落笔拆分） [in_progress]
@@ -111,7 +115,7 @@
     Task SECT-1   { title: SectionTemplates 载入与校验雏形; status: done; acceptance: {模板载入/宽度与laneCount校验提示}; refs: [features/roads/model/section-templates.json, .../ui/panels/RoadEditor.tsx] }
     Task SIG-1    { title: Intersections/Signals 骨架; status: done; acceptance: {载入/保存计划，事件连通}; refs: [features/intersections/index.ts, .../ui/panels/IntersectionPanel.tsx] }
   
-    Task ROAD-2 { title: 节点-线段+样条道路建造（吸附/拆分/撤销）；status: in_progress; acceptance: {自由起笔/落笔，吸附到节点/线段投影，落笔到线段自动拆分插入节点；撤销/重做稳定；入口=度1节点；车辆从入口节点生成；最短路在 Node-Edge 图上运行}; refs: [features/roads/index.ts, features/editor/ui/tools/RoadTool.tsx, features/roads/systems/build.ts] }
+    Task ROAD-2 { title: 节点-线段+样条道路建造（吸附/拆分/撤销）+ CS 两点建路模式；status: in_progress; acceptance: {RoadPalette 先选模板→两点建路(placeRoadBetweenAnchors)；锚点命中节点/线段投影则自动连接/在投影处拆分插入节点；预览显示宽度与非法红色提示；撤销/重做为单事务；入口=度1节点；车辆从入口节点生成；最短路在 Node-Edge 图上运行}; refs: [features/roads/index.ts, features/editor/ui/tools/RoadTool.tsx, features/roads/systems/build.ts] }
     Task ROAD-BLOCKS-1 { title: 短路块放置→自动生成路网；status: done; acceptance: {放置/删除道路块→路网自动更新, 连接器对齐即连通(同span), 撤销/重做有效, GraphInspector 计数更新, Traffic 可在新路网上运行}; refs: [features/blocks/data/prototypes.json, features/roads/systems/buildFromBlocks.ts, features/traffic/services/graph.ts, features/blocks/ui/panels/BlockLibrary.tsx, features/editor/index.ts, core/state/createAppStore.ts] }
     Task GRAPH-2 { title: Blocks→Polyline→Graph 构建器；status: planned; acceptance: {从 Blocks/connectors 生成中心线折线并复用 buildGraphFromPolylines, 支持入口索引}; refs: [features/roads/systems/buildFromBlocks.ts, features/traffic/services/graph.ts] }
     Task EDITOR-4 { title: Block 放置/删除/撤销；status: planned; acceptance: {左键落定/Delete 删除/Ctrl+Z 撤销/Ctrl+Y 重做, 与吸附强度共存}; refs: [features/editor/index.ts, core/state/createAppStore.ts] }

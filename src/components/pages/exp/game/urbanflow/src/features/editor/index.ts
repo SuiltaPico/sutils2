@@ -22,11 +22,26 @@ export function registerEditorFeature(renderer: IRenderer, app: AppStore, contai
   let selection: { x0: number; y0: number; x1: number; y1: number } | null = null;
   let dragging = false;
   let blockPreview: { worldX: number; worldY: number; w: number; h: number } | null = null;
+  let roadAnchorA: { worldX: number; worldY: number } | null = null;
+  let roadPreviewB: { worldX: number; worldY: number } | null = null;
   let snapMode: "fine" | "normal" | "coarse" = "normal";
 
   const snapFactor = () => (snapMode === "fine" ? 0.5 : snapMode === "coarse" ? 2 : 1);
   const snapTo = (v: number, step: number) => Math.floor(v / step) * step;
   const isLegal = (x: number, y: number) => x >= 0 && y >= 0;
+  const snapToExistingNode = (x: number, y: number, eps = 6) => {
+    let best = { x, y };
+    let bestD2 = eps * eps + 1;
+    const segs = app.roads.segments;
+    for (const r of segs) {
+      const cands = [ { x: r.ax, y: r.ay }, { x: r.bx, y: r.by } ];
+      for (const p of cands) {
+        const dx = p.x - x; const dy = p.y - y; const d2 = dx*dx + dy*dy;
+        if (d2 < bestD2) { bestD2 = d2; best = { x: p.x, y: p.y }; }
+      }
+    }
+    return best;
+  };
 
   function drawSelection(dc: { ctx: CanvasRenderingContext2D; width: number; height: number }) {
     if (!app.layers.isVisible("ui.selection")) return;
@@ -82,6 +97,63 @@ export function registerEditorFeature(renderer: IRenderer, app: AppStore, contai
     ctx.restore();
   });
 
+  // Road 预览图层（两点建路）
+  renderer.registerLayer("ui.roadPreview", ({ ctx }) => {
+    if (!app.layers.isVisible("ui.roadPreview")) return;
+    if (app.editor.activeTool !== "road") return;
+    if (!roadAnchorA || !roadPreviewB) return;
+    const s = app.view.scale;
+    const off = app.view.offset;
+    const ax = roadAnchorA.worldX * s + off.x;
+    const ay = roadAnchorA.worldY * s + off.y;
+    const bx = roadPreviewB.worldX * s + off.x;
+    const by = roadPreviewB.worldY * s + off.y;
+    const alpha = app.layers.getOpacity("ui.roadPreview");
+    ctx.save();
+    const prevAlpha = ctx.globalAlpha;
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = "#10b981"; // 预览为绿色
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(Math.floor(ax) + 0.5, Math.floor(ay) + 0.5);
+    ctx.lineTo(Math.floor(bx) + 0.5, Math.floor(by) + 0.5);
+    ctx.stroke();
+    ctx.fillStyle = "#10b981";
+    ctx.beginPath();
+    ctx.arc(Math.floor(ax) + 0.5, Math.floor(ay) + 0.5, 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(Math.floor(bx) + 0.5, Math.floor(by) + 0.5, 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = prevAlpha;
+    ctx.restore();
+  });
+
+  // HUD 叠加：显示当前工具与吸附档位
+  renderer.registerLayer("ui.hud", ({ ctx, width, height }) => {
+    const alpha = 1;
+    ctx.save();
+    const prevAlpha = ctx.globalAlpha;
+    ctx.globalAlpha = alpha;
+    ctx.font = "12px ui-monospace, SFMono-Regular, Menlo, Consolas";
+    ctx.fillStyle = "#cfe9ff";
+    const tool = app.editor.activeTool;
+    const snapLabel = snapMode === "fine" ? "细" : snapMode === "coarse" ? "粗" : "中";
+    const blocksCount = app.editor.getBlocks().length;
+    const text = `TOOL: ${tool}  •  SNAP: ${snapLabel}  •  Blocks: ${blocksCount}`;
+    const pad = 6;
+    const tw = ctx.measureText(text).width;
+    const th = 14;
+    const bx = 8;
+    const by = height - (th + pad * 2) - 8;
+    ctx.fillStyle = "#0b1020aa";
+    ctx.fillRect(bx, by, tw + pad * 2, th + pad * 2);
+    ctx.fillStyle = "#cfe9ff";
+    ctx.fillText(text, bx + pad, by + pad + th - 4);
+    ctx.globalAlpha = prevAlpha;
+    ctx.restore();
+  });
+
   // 已放置 Blocks 图层
   renderer.registerLayer("world.blocks", ({ ctx }) => {
     if (!app.layers.isVisible("world.blocks")) return;
@@ -102,6 +174,33 @@ export function registerEditorFeature(renderer: IRenderer, app: AppStore, contai
       const h = b.h * s;
       ctx.fillRect(Math.floor(sx) + 0.5, Math.floor(sy) + 0.5, Math.floor(w), Math.floor(h));
       ctx.strokeRect(Math.floor(sx) + 0.5, Math.floor(sy) + 0.5, Math.floor(w), Math.floor(h));
+    }
+    ctx.globalAlpha = prevAlpha;
+    ctx.restore();
+  });
+
+  // 已放置 Roads 图层（线段）
+  renderer.registerLayer("world.roads", ({ ctx }) => {
+    if (!app.layers.isVisible("world.roads")) return;
+    const segs = app.roads.segments;
+    if (!segs || segs.length === 0) return;
+    const s = app.view.scale;
+    const off = app.view.offset;
+    ctx.save();
+    const alpha = app.layers.getOpacity("world.roads");
+    const prevAlpha = ctx.globalAlpha;
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = "#60a5fa";
+    ctx.lineWidth = 2;
+    for (const r of segs) {
+      const ax = r.ax * s + off.x;
+      const ay = r.ay * s + off.y;
+      const bx = r.bx * s + off.x;
+      const by = r.by * s + off.y;
+      ctx.beginPath();
+      ctx.moveTo(Math.floor(ax) + 0.5, Math.floor(ay) + 0.5);
+      ctx.lineTo(Math.floor(bx) + 0.5, Math.floor(by) + 0.5);
+      ctx.stroke();
     }
     ctx.globalAlpha = prevAlpha;
     ctx.restore();
@@ -149,6 +248,26 @@ export function registerEditorFeature(renderer: IRenderer, app: AppStore, contai
         const graph = buildGraphFromPolylines(polylines);
         setGraph(graph);
         renderer.requestFrame();
+      } else if (app.editor.activeTool === "road") {
+        const step = GRID_UNIT * snapFactor();
+        const snapped = snapToExistingNode(worldX, worldY, 6);
+        const gx = snapTo(snapped.x, step);
+        const gy = snapTo(snapped.y, step);
+        if (!roadAnchorA) {
+          roadAnchorA = { worldX: gx, worldY: gy };
+          roadPreviewB = { worldX: gx, worldY: gy };
+        } else {
+          const a = roadAnchorA;
+          const b = { worldX: gx, worldY: gy };
+          app.roads.addSegment(a.worldX, a.worldY, b.worldX, b.worldY, app.editor.roadTemplateId ?? undefined);
+          // 重建图：将道路线段映射为折线
+          const polylines = app.roads.segments.map((r, i) => ({ id: `r${i + 1}`, points: [{ x: r.ax, y: r.ay }, { x: r.bx, y: r.by }] }));
+          const graph = buildGraphFromPolylines(polylines);
+          setGraph(graph);
+          roadAnchorA = null;
+          roadPreviewB = null;
+        }
+        renderer.requestFrame();
       }
     },
     onMove: ({ screenX, screenY, worldX, worldY }) => {
@@ -175,6 +294,15 @@ export function registerEditorFeature(renderer: IRenderer, app: AppStore, contai
           blockPreview = { worldX: gx, worldY: gy, w: GRID_UNIT * preset.span, h: GRID_UNIT * preset.span };
           renderer.requestFrame();
         }
+      } else if (app.editor.activeTool === "road") {
+        const step = GRID_UNIT * snapFactor();
+        const snapped = snapToExistingNode(worldX, worldY, 6);
+        const gx = snapTo(snapped.x, step);
+        const gy = snapTo(snapped.y, step);
+        if (roadAnchorA) {
+          roadPreviewB = { worldX: gx, worldY: gy };
+          renderer.requestFrame();
+        }
       }
     },
     onUp: ({ button, screenX, screenY }) => {
@@ -192,6 +320,8 @@ export function registerEditorFeature(renderer: IRenderer, app: AppStore, contai
         if (!dragging) return;
         dragging = false;
         renderer.requestFrame();
+      } else if (app.editor.activeTool === "road") {
+        // 保持预览不变
       }
     },
   });
@@ -207,6 +337,10 @@ export function registerEditorFeature(renderer: IRenderer, app: AppStore, contai
         } else if (app.editor.activeTool === "block") {
           blockPreview = null;
           renderer.requestFrame();
+        } else if (app.editor.activeTool === "road") {
+          roadAnchorA = null;
+          roadPreviewB = null;
+          renderer.requestFrame();
         }
       } else if (ev.key === "1") {
         snapMode = "fine";
@@ -217,6 +351,19 @@ export function registerEditorFeature(renderer: IRenderer, app: AppStore, contai
       } else if (ev.key === "3") {
         snapMode = "coarse";
         renderer.requestFrame();
+      } else if (ev.key === "Tab") {
+        // 循环切换吸附档位
+        ev.preventDefault();
+        snapMode = snapMode === "fine" ? "normal" : snapMode === "normal" ? "coarse" : "fine";
+        renderer.requestFrame();
+      } else if (ev.key === "r" || ev.key === "R") {
+        // 旋转当前 Block 原型（若存在）
+        const proto = app.editor.getPrototype();
+        if (proto) {
+          const nextOri = ((proto.orientation + 90) % 360) as 0 | 90 | 180 | 270;
+          app.editor.setPrototype({ ...proto, orientation: nextOri });
+          renderer.requestFrame();
+        }
       } else if (ev.key === "Delete") {
         if (selection) {
           // 将屏幕矩形转换为世界矩形

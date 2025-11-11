@@ -202,6 +202,7 @@ export default function AppShell() {
             <button
               class="px-2 py-1 text-xs border rounded"
               classList={{ "bg-slate-900 text-white": activeTool() === "select" }}
+              title="V 选择"
               onClick={() => {
                 app.editor.setActiveTool("select");
                 renderer()?.requestFrame();
@@ -211,7 +212,19 @@ export default function AppShell() {
             </button>
             <button
               class="px-2 py-1 text-xs border rounded"
+              classList={{ "bg-slate-900 text-white": activeTool() === "road" }}
+              title="R 道路工具（两点建路）"
+              onClick={() => {
+                app.editor.setActiveTool("road");
+                renderer()?.requestFrame();
+              }}
+            >
+              道路
+            </button>
+            <button
+              class="px-2 py-1 text-xs border rounded"
               classList={{ "bg-slate-900 text-white": activeTool() === "block" }}
+              title="B 区块工具（Esc 清除预览）"
               onClick={() => {
                 if (!app.editor.blockPresetId) {
                   app.editor.setBlockPreset(DEFAULT_BLOCK_PRESET_ID);
@@ -224,8 +237,11 @@ export default function AppShell() {
             </button>
           </div>
           <div class="h-px w-8 bg-gray-200 dark:bg-gray-700" />
-          <button class="px-2 py-1 text-xs border rounded" onClick={() => app.layers.toggle("world.grid")}>
+          <button class="px-2 py-1 text-xs border rounded" title="G 切换网格" onClick={() => app.layers.toggle("world.grid")}>
             网格
+          </button>
+          <button class="px-2 py-1 text-xs border rounded" title="切换十字准星" onClick={() => app.layers.toggle("ui.crosshair")}>
+            准星
           </button>
         </div>
         <div class="flex-1 min-h-0">
@@ -387,7 +403,7 @@ export default function AppShell() {
             }} />
           )}
           {featuresManifest.roads && (
-            <RoadEditor />
+            <RoadEditor app={app} />
           )}
           {featuresManifest.intersections && (
             <IntersectionPanel />

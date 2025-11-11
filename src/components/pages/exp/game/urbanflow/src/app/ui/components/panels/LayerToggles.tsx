@@ -1,4 +1,4 @@
-import { For, JSX } from "solid-js";
+import { For, JSX, createMemo, createSignal } from "solid-js";
 import type { AppStore } from "../../../../core/state/createAppStore";
 
 type Props = {
@@ -7,10 +7,32 @@ type Props = {
 };
 
 export default function LayerToggles(props: Props): JSX.Element {
-  const entries = () => Object.entries(props.app.layers.all()).sort((a, b) => a[1].order - b[1].order);
+  const [query, setQuery] = createSignal("");
+  const entries = createMemo(() => {
+    const q = query().trim().toLowerCase();
+    return Object.entries(props.app.layers.all())
+      .filter(([id]) => (q ? id.toLowerCase().includes(q) : true))
+      .sort((a, b) => a[1].order - b[1].order);
+  });
   return (
     <div class="space-y-3">
-      <div class="font-semibold">图层</div>
+      <div class="flex items-center justify-between">
+        <div class="font-semibold">图层</div>
+        <div class="flex items-center gap-2">
+          <input
+            type="text"
+            class="px-2 py-0.5 text-xs border rounded bg-transparent w-28"
+            placeholder="搜索 id"
+            value={query()}
+            onInput={(e) => setQuery((e.target as HTMLInputElement).value)}
+          />
+          <button
+            class="px-2 py-0.5 border rounded text-xs"
+            title="恢复默认图层可见性/顺序/透明度"
+            onClick={() => props.app.layers.resetToDefaults?.()}
+          >重置</button>
+        </div>
+      </div>
       <For each={entries()}>
         {([id, meta]) => (
           <div class="mb-2">
