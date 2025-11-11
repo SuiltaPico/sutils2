@@ -214,6 +214,12 @@ export const routes = [
     component: lazy(() => import("./components/pages/exp/game/urbanflow/index")),
   },
   {
+    path: "/exp/game/tower",
+    name: "塔防游戏",
+    description: "塔防游戏，玩家扮演指挥员，指挥机械军队和角色，对抗敌人，保卫基地。",
+    component: lazy(() => import("./components/pages/exp/game/tower/demo")),
+  },
+  {
     path: "/game/chaotic-pendulum",
     name: "混沌摆（双摆）",
     description: "双摆混沌演示：可调长度/质量/阻尼，支持拖影显示",
