@@ -69,6 +69,13 @@ export const routes = [
     done: true,
   },
   {
+    path: "/exp/group",
+    name: "群论造境",
+    description: "基于群论的粒子世界模拟：碰撞即运算。",
+    component: lazy(() => import("./components/pages/exp/group")),
+    done: false,
+  },
+  {
     path: "/exp/l-system",
     name: "L-system 演练场",
     description: "L-system 演练场（WASM AOT）",
