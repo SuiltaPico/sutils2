@@ -60,6 +60,20 @@ export const routes = [
     component: lazy(() => import("./components/pages/img/black-border")),
     done: true,
   },
+  {
+    path: "/img/morphology-playground",
+    name: "图像形态学演练场",
+    description: "二值图像的膨胀 / 腐蚀操作，可自定义卷积核和参考点，并提供多种结构元素预设。",
+    component: lazy(() => import("./components/pages/img/morphology-playground")),
+    done: false,
+  },
+  {
+    path: "/img/edge-detect",
+    name: "图像变换",
+    description: "图像灰度化、直方图均衡化，以及拉普拉斯 / Canny 边缘检测（基于灰度图），支持调节参数并实时预览。",
+    component: lazy(() => import("./components/pages/img/edge-detect")),
+    done: false,
+  },
   // --- EXP ---
   {
     path: "/exp/wasm-aot-calc",
@@ -73,6 +87,15 @@ export const routes = [
     name: "群论造境",
     description: "基于群论的粒子世界模拟：碰撞即运算。",
     component: lazy(() => import("./components/pages/exp/group")),
+    done: false,
+  },
+  {
+    path: "/exp/mass-spring-lattice",
+    name: "质点弹簧晶格物理模拟研究",
+    description: "使用 p5.js 的质点弹簧晶格物理模拟（当前仅画布占位版本）。",
+    component: lazy(
+      () => import("./components/pages/exp/mass-spring-lattice")
+    ),
     done: false,
   },
   {
@@ -227,6 +250,12 @@ export const routes = [
     component: lazy(() => import("./components/pages/exp/game/tower/demo")),
   },
   {
+    path: "/exp/game/spaceflight",
+    name: "星际航行",
+    description: "Phaser + Matter.js 太空飞行 Demo：操控飞船、击碎陨石并吸附矿物。",
+    component: lazy(() => import("./components/pages/exp/game/spaceflight/demo")),
+  },
+  {
     path: "/game/chaotic-pendulum",
     name: "混沌摆（双摆）",
     description: "双摆混沌演示：可调长度/质量/阻尼，支持拖影显示",
@@ -234,6 +263,18 @@ export const routes = [
       () => import("./components/pages/game/chaotic-pendulum")
     ),
     done: false,
+  },
+  {
+    path: "/game/arknights-td",
+    name: "明日方舟塔防（原型）",
+    description: "类似明日方舟的塔防游戏原型：部署干员、选择方向、阻挡敌人。",
+    component: lazy(() => import("./components/pages/game/arknights-td/index")),
+    done: false,
+  },
+  {
+    path: "/game/arknights-td/designer",
+    name: "明日方舟塔防 - 设计器",
+    component: lazy(() => import("./components/pages/game/arknights-td/designer")),
   },
   {
     path: "/exp/mind-map",
@@ -262,6 +303,12 @@ export const routes = [
   //   path: "/exp/local-file-browser",
   //   component: lazy(() => import("./components/pages/exp/local-file-browser")),
   // },
+  {
+    path: "/exp/morf/playground",
+    name: "Morf 语言演练场",
+    description: "Morf 0.1 结构化类型系统与运行时实验环境。",
+    component: lazy(() => import("./components/pages/exp/morf/MorfPlayground")),
+  },
   {
     path: "*",
     name: "未找到",

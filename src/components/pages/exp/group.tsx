@@ -82,8 +82,8 @@ type QuaternionCoreEntry = {
 
 const GROUP_SIM_CONSTANTS = {
   canvas: {
-    width: 960,
-    height: 640,
+    width: 2048,
+    height: 1800,
     backgroundColor: "#04080f",
     gridColor: "rgba(255,255,255,0.07)",
     gridSpacing: 64,
@@ -176,7 +176,7 @@ const GROUP_SIM_CONSTANTS = {
     >,
   },
   ranges: {
-    unitsPerElement: { min: 1, max: 12, step: 1 },
+    unitsPerElement: { min: 1, max: 100, step: 1 },
     strength: { min: 0, max: 1500, step: 10 },
     exponent: { min: 0.5, max: 3.5, step: 0.05 },
     timeScale: { min: 0.25, max: 2.5, step: 0.05 },
@@ -422,6 +422,218 @@ function createQuaternionPreset(): GroupPreset {
   };
 }
 
+function createDihedralPreset(n: number): GroupPreset {
+  const order = Math.max(3, Math.floor(n));
+  const elements: string[] = ["e"];
+  for (let k = 1; k < order; k += 1) {
+    elements.push(k === 1 ? "r" : `r${k}`);
+  }
+  elements.push("s");
+  for (let k = 1; k < order; k += 1) {
+    elements.push(k === 1 ? "sr" : `sr${k}`);
+  }
+  const mod = (x: number, m: number) => {
+    const v = x % m;
+    return v < 0 ? v + m : v;
+  };
+  const parseRotation = (label: string): number => {
+    if (label === "e") return 0;
+    if (label === "r") return 1;
+    if (label.startsWith("r")) return Number(label.slice(1)) || 0;
+    if (label === "s") return 0;
+    if (label === "sr") return 1;
+    if (label.startsWith("sr")) return Number(label.slice(2)) || 0;
+    return 0;
+  };
+  const isReflection = (label: string): boolean => label.startsWith("s");
+  const toLabel = (ref: boolean, k: number): string => {
+    const kk = mod(k, order);
+    if (!ref) {
+      if (kk === 0) return "e";
+      return kk === 1 ? "r" : `r${kk}`;
+    }
+    if (kk === 0) return "s";
+    return kk === 1 ? "sr" : `sr${kk}`;
+  };
+  const multiply = (a: string, b: string): string => {
+    const aRef = isReflection(a);
+    const bRef = isReflection(b);
+    const ak = parseRotation(a);
+    const bk = parseRotation(b);
+    if (!aRef && !bRef) {
+      // r^a * r^b = r^(a+b)
+      return toLabel(false, ak + bk);
+    }
+    if (!aRef && bRef) {
+      // r^a * (s r^b) = s r^(b-a)
+      return toLabel(true, bk - ak);
+    }
+    if (aRef && !bRef) {
+      // (s r^a) * r^b = s r^(a+b)
+      return toLabel(true, ak + bk);
+    }
+    // (s r^a) * (s r^b) = r^(b-a)
+    return toLabel(false, bk - ak);
+  };
+  const operationTable: Record<string, Record<string, string>> = {};
+  elements.forEach((left) => {
+    operationTable[left] = {} as Record<string, string>;
+    elements.forEach((right) => {
+      operationTable[left][right] = multiply(left, right);
+    });
+  });
+  const supDigits: Record<string, string> = {
+    "0": "⁰",
+    "1": "¹",
+    "2": "²",
+    "3": "³",
+    "4": "⁴",
+    "5": "⁵",
+    "6": "⁶",
+    "7": "⁷",
+    "8": "⁸",
+    "9": "⁹",
+  };
+  const toSup = (numStr: string): string =>
+    numStr
+      .split("")
+      .map((ch) => supDigits[ch] ?? ch)
+      .join("");
+  const displayNames: Record<string, string> = {};
+  elements.forEach((el) => {
+    if (el === "e" || el === "r" || el === "s" || el === "sr") {
+      displayNames[el] = el;
+      return;
+    }
+    if (el.startsWith("r")) {
+      const exp = el.slice(1);
+      displayNames[el] = `r${toSup(exp)}`;
+      return;
+    }
+    if (el.startsWith("sr")) {
+      const exp = el.slice(2);
+      displayNames[el] = `sr${toSup(exp)}`;
+      return;
+    }
+    displayNames[el] = el;
+  });
+  return {
+    id: `d${order}`,
+    name: `二面体群 D${"₀₁₂₃₄₅₆₇₈₉"[order] ?? order}`,
+    description:
+      "正多边形的对称群：r 为基本旋转，s 为镜面对称；满足 rⁿ = e，s² = e，s r s = r⁻¹。",
+    elements,
+    identity: "e",
+    generators: ["r", "s"],
+    operationTable,
+    displayNames,
+  };
+}
+
+function createA4Preset(): GroupPreset {
+  type Perm = [number, number, number, number];
+  const compose = (a: Perm, b: Perm): Perm => {
+    // (a ∘ b)(i) = a(b(i))
+    return [a[b[0]], a[b[1]], a[b[2]], a[b[3]]] as Perm;
+  };
+  const isEven = (p: Perm): boolean => {
+    let inv = 0;
+    const arr = [p[0], p[1], p[2], p[3]];
+    for (let i = 0; i < 4; i += 1) {
+      for (let j = i + 1; j < 4; j += 1) {
+        if (arr[i] > arr[j]) inv += 1;
+      }
+    }
+    return inv % 2 === 0;
+  };
+  const permToCycleString = (p: Perm): string => {
+    const visited = [false, false, false, false];
+    const cycles: string[] = [];
+    for (let i = 0; i < 4; i += 1) {
+      if (visited[i] || p[i] === i) continue;
+      const cycle: number[] = [];
+      let cur = i;
+      while (!visited[cur]) {
+        visited[cur] = true;
+        cycle.push(cur + 1);
+        cur = p[cur];
+      }
+      if (cycle.length > 1) {
+        cycles.push(`(${cycle.join(" ")})`);
+      }
+    }
+    if (cycles.length === 0) return "e";
+    return cycles.join(" ");
+  };
+  const identity: Perm = [0, 1, 2, 3];
+  const perms: Perm[] = [];
+  // generate all permutations
+  const gen = (arr: number[], l: number) => {
+    if (l === arr.length) {
+      const p = [arr[0], arr[1], arr[2], arr[3]] as Perm;
+      if (isEven(p)) perms.push(p);
+      return;
+    }
+    for (let i = l; i < arr.length; i += 1) {
+      [arr[l], arr[i]] = [arr[i], arr[l]];
+      gen(arr, l + 1);
+      [arr[l], arr[i]] = [arr[i], arr[l]];
+    }
+  };
+  gen([0, 1, 2, 3], 0);
+  // map strings
+  const elements = perms
+    .map((p) => permToCycleString(p))
+    .sort((a, b) => (a === "e" ? -1 : b === "e" ? 1 : a.localeCompare(b)));
+  const strToPerm: Record<string, Perm> = {};
+  perms.forEach((p) => {
+    const key = permToCycleString(p);
+    strToPerm[key] = p;
+  });
+  const operationTable: Record<string, Record<string, string>> = {};
+  elements.forEach((left) => {
+    operationTable[left] = {} as Record<string, string>;
+    elements.forEach((right) => {
+      const lv = strToPerm[left];
+      const rv = strToPerm[right];
+      const prod = compose(lv, rv);
+      operationTable[left][right] = permToCycleString(prod);
+    });
+  });
+  const displayNames: Record<string, string> = {};
+  elements.forEach((el) => {
+    displayNames[el] = el;
+  });
+  // choose generators: (1 2 3) and (1 2 4)
+  const cycleToPerm = (cycles: number[][]): Perm => {
+    const res = [0, 1, 2, 3] as Perm;
+    cycles.forEach((cyc) => {
+      const len = cyc.length;
+      for (let i = 0; i < len; i += 1) {
+        const from = cyc[i] - 1;
+        const to = cyc[(i + 1) % len] - 1;
+        res[from] = to;
+      }
+    });
+    return res;
+  };
+  const g1 = cycleToPerm([[1, 2, 3]]);
+  const g2 = cycleToPerm([[1, 2, 4]]);
+  const g1s = permToCycleString(g1);
+  const g2s = permToCycleString(g2);
+  return {
+    id: "a4",
+    name: "交替群 A₄",
+    description:
+      "四个元素的偶置换所成的 12 阶群。由两个 3-循环生成，展现非交换而又“纯 3-循环”的结构。",
+    elements,
+    identity: "e",
+    generators: [g1s, g2s],
+    operationTable,
+    displayNames,
+  };
+}
+
 const GROUP_PRESETS: GroupPreset[] = [
   createCyclicGroupPreset(
     2,
@@ -447,6 +659,8 @@ const GROUP_PRESETS: GroupPreset[] = [
   createKleinFourPreset(),
   createS3Preset(),
   createQuaternionPreset(),
+  createDihedralPreset(4),
+  createA4Preset(),
 ];
 
 function multiplyElement(preset: GroupPreset, a: string, b: string): string {
@@ -619,6 +833,19 @@ function evaluateRepulsion(
   return magnitude;
 }
 
+function wrapDelta(delta: number, size: number): number {
+  const half = size / 2;
+  if (delta > half) return delta - size;
+  if (delta < -half) return delta + size;
+  return delta;
+}
+
+function wrapCoordinate(pos: number, size: number): number {
+  if (pos < 0) return pos + size;
+  if (pos >= size) return pos - size;
+  return pos;
+}
+
 function gatherPairCategories(
   runtime: GroupRuntimeData,
   a: string,
@@ -656,7 +883,7 @@ export default function GroupWorld() {
     timeScale: GROUP_SIM_CONSTANTS.defaults.timeScale,
     globalForceMultiplier: GROUP_SIM_CONSTANTS.defaults.globalForceMultiplier,
     collisionDistance: GROUP_SIM_CONSTANTS.defaults.collisionDistanceOverride,
-    collisionMode: "product",
+    collisionMode: "conjugation",
     collisionTemperature: 0.5,
     interactions: createInitialInteractions(),
   });
@@ -692,7 +919,10 @@ export default function GroupWorld() {
   let animationFrameId: number | null = null;
   let previousTimestamp = 0;
   let accumulator = 0;
+  let statsElapsed = 0;
+  const statsInterval = 0.1; // ~10 FPS for sidebar stats
   let unitsState: Unit[] = [];
+  let gridCacheCanvas: HTMLCanvasElement | null = null;
 
   function restartSimulation() {
     const preset = selectedPreset();
@@ -729,7 +959,37 @@ export default function GroupWorld() {
       });
     }
     unitsState = newUnits;
-    setUnits(newUnits.slice());
+    setUnits(newUnits.slice()); // initial snapshot for stats panel
+  }
+
+  function buildGridCache() {
+    const width = GROUP_SIM_CONSTANTS.canvas.width;
+    const height = GROUP_SIM_CONSTANTS.canvas.height;
+    const spacing = GROUP_SIM_CONSTANTS.canvas.gridSpacing;
+    const bg = GROUP_SIM_CONSTANTS.canvas.backgroundColor;
+    const grid = GROUP_SIM_CONSTANTS.canvas.gridColor;
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, width, height);
+    ctx.strokeStyle = grid;
+    ctx.lineWidth = 1;
+    for (let x = 0; x <= width; x += spacing) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, height);
+      ctx.stroke();
+    }
+    for (let y = 0; y <= height; y += spacing) {
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(width, y);
+      ctx.stroke();
+    }
+    gridCacheCanvas = canvas;
   }
 
   function renderScene() {
@@ -741,23 +1001,10 @@ export default function GroupWorld() {
     const width = GROUP_SIM_CONSTANTS.canvas.width;
     const height = GROUP_SIM_CONSTANTS.canvas.height;
     context.save();
-    context.clearRect(0, 0, width, height);
-    context.fillStyle = GROUP_SIM_CONSTANTS.canvas.backgroundColor;
-    context.fillRect(0, 0, width, height);
-    context.strokeStyle = GROUP_SIM_CONSTANTS.canvas.gridColor;
-    context.lineWidth = 1;
-    const spacing = GROUP_SIM_CONSTANTS.canvas.gridSpacing;
-    for (let x = 0; x <= width; x += spacing) {
-      context.beginPath();
-      context.moveTo(x, 0);
-      context.lineTo(x, height);
-      context.stroke();
-    }
-    for (let y = 0; y <= height; y += spacing) {
-      context.beginPath();
-      context.moveTo(0, y);
-      context.lineTo(width, y);
-      context.stroke();
+    if (gridCacheCanvas) {
+      context.drawImage(gridCacheCanvas, 0, 0);
+    } else {
+      context.clearRect(0, 0, width, height);
     }
     context.textAlign = "center";
     context.textBaseline = "middle";
@@ -796,18 +1043,18 @@ export default function GroupWorld() {
     const forcesY = new Array<number>(count).fill(0);
     const collisionDistance = config.collisionDistance;
     const collisionDistanceSquared = collisionDistance * collisionDistance;
-    const radius = GROUP_SIM_CONSTANTS.physics.unitRadius;
     const width = GROUP_SIM_CONSTANTS.canvas.width;
     const height = GROUP_SIM_CONSTANTS.canvas.height;
     const damping = GROUP_SIM_CONSTANTS.physics.dampingFactor;
-    const restitution = GROUP_SIM_CONSTANTS.physics.wallRestitution;
     const mass = GROUP_SIM_CONSTANTS.physics.mass;
     for (let i = 0; i < count; i += 1) {
       for (let j = i + 1; j < count; j += 1) {
-        const dx =
+        let dx =
           unitsState[j].position.x - unitsState[i].position.x;
-        const dy =
+        let dy =
           unitsState[j].position.y - unitsState[i].position.y;
+        dx = wrapDelta(dx, width);
+        dy = wrapDelta(dy, height);
         const distanceSquared = dx * dx + dy * dy;
         const distance = Math.sqrt(
           Math.max(
@@ -867,22 +1114,10 @@ export default function GroupWorld() {
       unit.velocity.y = (unit.velocity.y + ay * deltaTime) * damping;
       unit.position.x += unit.velocity.x * deltaTime;
       unit.position.y += unit.velocity.y * deltaTime;
-      if (unit.position.x < radius) {
-        unit.position.x = radius;
-        unit.velocity.x = -unit.velocity.x * restitution;
-      } else if (unit.position.x > width - radius) {
-        unit.position.x = width - radius;
-        unit.velocity.x = -unit.velocity.x * restitution;
-      }
-      if (unit.position.y < radius) {
-        unit.position.y = radius;
-        unit.velocity.y = -unit.velocity.y * restitution;
-      } else if (unit.position.y > height - radius) {
-        unit.position.y = height - radius;
-        unit.velocity.y = -unit.velocity.y * restitution;
-      }
+      unit.position.x = wrapCoordinate(unit.position.x, width);
+      unit.position.y = wrapCoordinate(unit.position.y, height);
     }
-    setUnits(unitsState.slice());
+    // Sidebar stats throttled in animationLoop
   }
 
   function animationLoop(timestamp: number) {
@@ -904,6 +1139,12 @@ export default function GroupWorld() {
         simulateStep(step);
         accumulator -= step;
       }
+      // throttle Solid state for stats panel
+      statsElapsed += deltaSeconds;
+      if (statsElapsed >= statsInterval) {
+        setUnits(unitsState.slice());
+        statsElapsed = 0;
+      }
     } else {
       accumulator = 0;
     }
@@ -914,6 +1155,8 @@ export default function GroupWorld() {
   onMount(() => {
     previousTimestamp = 0;
     accumulator = 0;
+    statsElapsed = 0;
+    buildGridCache();
     restartSimulation();
     animationFrameId = requestAnimationFrame(animationLoop);
   });

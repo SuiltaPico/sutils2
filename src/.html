@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>石头碎裂物理模拟</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #1a1a2a;
+            color: #f0f0f0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+        }
+        canvas {
+            display: block;
+        }
+        #info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            padding: 10px;
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 5px;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="simulationCanvas"></canvas>
+    <div id="info">
+        <p><strong>石头碎裂模拟</strong></p>
+        在画布上半部分点击鼠标，生成一颗子弹来砸碎岩石。
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const canvas = document.getElementById('simulationCanvas');
+            const ctx = canvas.getContext('2d');
+
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+
+            // --- 物理参数 ---
+            const STIFFNESS = 0.8; // 弹簧劲度系数，越高越硬
+            const DAMPING = 0.1; // 阻尼，防止无限振荡
+            const BREAK_THRESHOLD = 1.3; // 弹簧断裂阈值 (1.3 = 伸长超过原始长度的30%)
+            const GROUND_FRICTION = 0.8; // 地面摩擦力
+            const AIR_FRICTION = 0.998; // 空气阻力
+            const BULLET_RADIUS = 8;
+            const BULLET_MASS = 50;
+            const BULLET_IMPULSE = 60; // 子弹撞击时的冲量
+
+            let particles = [];
+            let springs = [];
+            let bullets = [];
+            let rocks = [];
+
+            // --- 辅助类：二维向量 ---
+            class Vector {
+                constructor(x = 0, y = 0) {
+                    this.x = x;
+                    this.y = y;
+                }
+                add(v) { return new Vector(this.x + v.x, this.y + v.y); }
+                sub(v) { return new Vector(this.x - v.x, this.y - v.y); }
+                mul(s) { return new Vector(this.x * s, this.y * s); }
+                div(s) { return new Vector(this.x / s, this.y / s); }
+                mag() { return Math.sqrt(this.x * this.x + this.y * this.y); }
+                normalize() {
+                    const m = this.mag();
+                    return m === 0 ? new Vector() : this.div(m);
+                }
+                static dist(v1, v2) {
+                    const dx = v1.x - v2.x;
+                    const dy = v1.y - v2.y;
+                    return Math.sqrt(dx * dx + dy * dy);
+                }
+            }
+            const GRAVITY = new Vector(0, 0.15);
+
+            // --- 物理对象类 ---
+            class Particle {
+                constructor(x, y, mass = 1) {
+                    this.pos = new Vector(x, y);
+                    this.old_pos = new Vector(x - (Math.random() - 0.5), y - (Math.random() - 0.5)); // 初始扰动
+                    this.acc = new Vector();
+                    this.mass = mass;
+                    this.radius = 2; // 用于渲染
+                    this.color = `hsl(${200 + Math.random() * 40}, 50%, 70%)`;
+                }
+
+                update(dt) {
+                    // 韦尔莱积分
+                    const vel = this.pos.sub(this.old_pos).mul(AIR_FRICTION);
+                    this.old_pos = this.pos;
+                    this.pos = this.pos.add(vel).add(this.acc.mul(dt * dt));
+                    this.acc = new Vector(); // 清空加速度
+                }
+
+                applyForce(force) {
+                    this.acc = this.acc.add(force.div(this.mass));
+                }
+
+                draw(ctx) {
+                    ctx.beginPath();
+                    ctx.arc(this.pos.x, this.pos.y, this.radius, 0, Math.PI * 2);
+                    ctx.fillStyle = this.color;
+                    ctx.fill();
+                }
+            }
+
+            class Spring {
+                constructor(p1, p2, stiffness = STIFFNESS) {
+                    this.p1 = p1;
+                    this.p2 = p2;
+                    this.rest_length = Vector.dist(p1.pos, p2.pos);
+                    this.stiffness = stiffness;
+                    this.is_broken = false;
+                }
+
+                update() {
+                    if (this.is_broken) return;
+
+                    const p1 = this.p1;
+                    const p2 = this.p2;
+
+                    const delta = p2.pos.sub(p1.pos);
+                    const dist = delta.mag();
+                    
+                    // 检查断裂条件
+                    if (dist > this.rest_length * BREAK_THRESHOLD) {
+                        this.is_broken = true;
+                        return;
+                    }
+
+                    const diff = (dist - this.rest_length) / dist;
+                    const force = delta.mul(this.stiffness * diff * 0.5);
+
+                    // 施加弹簧力和阻尼
+                    const vel_diff = p2.pos.sub(p2.old_pos).sub(p1.pos.sub(p1.old_pos));
+                    const damping_force = vel_diff.mul(DAMPING * 0.05);
+
+                    p1.acc = p1.acc.add(force.add(damping_force));
+                    p2.acc = p2.acc.sub(force.add(damping_force));
+                }
+
+                draw(ctx) {
+                    if (this.is_broken) return;
+                    ctx.beginPath();
+                    ctx.moveTo(this.p1.pos.x, this.p1.pos.y);
+                    ctx.lineTo(this.p2.pos.x, this.p2.pos.y);
+                    // 根据张力改变颜色
+                    const strain = Math.abs(Vector.dist(this.p1.pos, this.p2.pos) / this.rest_length - 1);
+                    const colorVal = Math.min(255, strain * 255 * 10);
+                    ctx.strokeStyle = `rgb(${colorVal}, ${255 - colorVal}, ${255 - colorVal})`;
+                    ctx.lineWidth = 0.5;
+                    ctx.stroke();
+                }
+            }
+
+            class Bullet extends Particle {
+                constructor(x, y) {
+                    super(x, y, BULLET_MASS);
+                    this.radius = BULLET_RADIUS;
+                    this.color = '#ffcc00';
+                    this.old_pos.y = y - 5; // 初始向下速度
+                }
+
+                checkCollision() {
+                    for (const rock of rocks) {
+                        for (const p of rock.particles) {
+                            const dist = Vector.dist(this.pos, p.pos);
+                            if (dist < this.radius + p.radius) {
+                                this.explode(p.pos);
+                                return true; // 返回true表示已碰撞
+                            }
+                        }
+                    }
+                    return false;
+                }
+                
+                explode(impactPos) {
+                    // 对撞击点周围的所有粒子施加一个径向冲量
+                    for (const rock of rocks) {
+                        for (const p of rock.particles) {
+                            const dist = Vector.dist(impactPos, p.pos);
+                            if (dist < BULLET_IMPULSE) {
+                                const impulseDir = p.pos.sub(impactPos).normalize();
+                                const impulseMag = (BULLET_IMPULSE - dist) * 0.2;
+                                p.pos = p.pos.add(impulseDir.mul(impulseMag));
+                            }
+                        }
+                    }
+                }
+            }
+
+            class Rock {
+                constructor(x, y, width, height, particle_density) {
+                    this.particles = [];
+                    this.springs = [];
+                    
+                    const cols = Math.floor(width / particle_density);
+                    const rows = Math.floor(height / particle_density);
+                    const connect_radius = particle_density * 1.7; // 连接邻近粒子的半径
+
+                    // 1. 生成带有一点随机抖动的粒子网格
+                    for (let i = 0; i <= rows; i++) {
+                        for (let j = 0; j <= cols; j++) {
+                            const px = x + j * particle_density + (Math.random() - 0.5) * particle_density * 0.5;
+                            const py = y + i * particle_density + (Math.random() - 0.5) * particle_density * 0.5;
+                            this.particles.push(new Particle(px, py));
+                        }
+                    }
+
+                    // 2. 连接靠得近的粒子，形成稳定的三角结构
+                    for (let i = 0; i < this.particles.length; i++) {
+                        for (let j = i + 1; j < this.particles.length; j++) {
+                            const p1 = this.particles[i];
+                            const p2 = this.particles[j];
+                            const dist = Vector.dist(p1.pos, p2.pos);
+                            if (dist < connect_radius) {
+                                this.springs.push(new Spring(p1, p2));
+                            }
+                        }
+                    }
+
+                    // 将新生成的对象添加到全局数组中
+                    particles.push(...this.particles);
+                    springs.push(...this.springs);
+                }
+
+                cleanup() {
+                    // 清理断裂的弹簧
+                    this.springs = this.springs.filter(s => !s.is_broken);
+                    springs = springs.filter(s => !s.is_broken);
+                }
+            }
+
+
+            // --- 初始化场景 ---
+            function setup() {
+                const groundY = canvas.height - 100;
+                // 创建几块岩石
+                rocks.push(new Rock(canvas.width * 0.2, groundY - 100, 150, 100, 10));
+                rocks.push(new Rock(canvas.width * 0.5, groundY - 80, 120, 80, 10));
+                rocks.push(new Rock(canvas.width * 0.8, groundY - 120, 180, 120, 10));
+
+                console.log(`场景初始化完成: ${particles.length} 个粒子, ${springs.length} 个弹簧`);
+            }
+
+            // --- 主循环 ---
+            function update(dt) {
+                // 更新弹簧（计算力、检查断裂）
+                for (const spring of springs) {
+                    spring.update();
+                }
+
+                // 清理断裂的弹簧 (在所有弹簧更新后)
+                const originalSpringCount = springs.length;
+                springs = springs.filter(s => !s.is_broken);
+                if (springs.length < originalSpringCount) {
+                    // 如果有弹簧断裂，最好也清理一下每个rock对象内部的弹簧列表
+                    rocks.forEach(rock => rock.cleanup());
+                }
+
+                // 更新粒子
+                for (const p of particles) {
+                    p.applyForce(GRAVITY);
+                    p.update(dt);
+                    handleConstraints(p);
+                }
+                
+                // 更新子弹
+                for (let i = bullets.length - 1; i >= 0; i--) {
+                    const b = bullets[i];
+                    b.applyForce(GRAVITY);
+                    b.update(dt);
+
+                    // 检查碰撞或出界
+                    if (b.checkCollision() || b.pos.y > canvas.height || b.pos.x < 0 || b.pos.x > canvas.width) {
+                        bullets.splice(i, 1);
+                    }
+                }
+            }
+
+            function handleConstraints(p) {
+                const groundY = canvas.height - 20;
+
+                // 边界碰撞
+                if (p.pos.x < p.radius) p.pos.x = p.radius;
+                if (p.pos.x > canvas.width - p.radius) p.pos.x = canvas.width - p.radius;
+
+                // 地面碰撞
+                if (p.pos.y > groundY - p.radius) {
+                    p.pos.y = groundY - p.radius;
+                    // 应用地面摩擦力
+                    const vel = p.pos.sub(p.old_pos);
+                    p.old_pos.x = p.pos.x - vel.x * GROUND_FRICTION;
+                }
+            }
+
+            // --- 渲染 ---
+            function draw() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                
+                // 绘制地面
+                ctx.fillStyle = '#4a4a5a';
+                ctx.fillRect(0, canvas.height - 20, canvas.width, 20);
+
+                for (const spring of springs) {
+                    spring.draw(ctx);
+                }
+
+                // 绘制粒子放在弹簧之上，效果更好
+                for (const p of particles) {
+                    p.draw(ctx);
+                }
+
+                for (const b of bullets) {
+                    b.draw(ctx);
+                }
+            }
+
+            // --- 动画循环 ---
+            let lastTime = 0;
+            function animate(timestamp) {
+                const dt = (timestamp - lastTime) / 16.67; // 标准化时间步长
+                lastTime = timestamp;
+
+                // 运行多次物理更新以提高稳定性 (Sub-stepping)
+                const substeps = 3;
+                for (let i = 0; i < substeps; i++) {
+                    update(dt / substeps);
+                }
+
+                draw();
+                requestAnimationFrame(animate);
+            }
+
+            // --- 事件监听 ---
+            canvas.addEventListener('click', (e) => {
+                const rect = canvas.getBoundingClientRect();
+                const mouseX = e.clientX - rect.left;
+                const mouseY = e.clientY - rect.top;
+
+                // 只在画布上半部分生成子弹
+                if (mouseY < canvas.height / 2) {
+                    bullets.push(new Bullet(mouseX, mouseY));
+                }
+            });
+
+            window.addEventListener('resize', () => {
+                canvas.width = window.innerWidth;
+                canvas.height = window.innerHeight;
+            });
+
+            // --- 启动 ---
+            setup();
+            animate(0);
+        });
+    </script>
+</body>
+</html>
