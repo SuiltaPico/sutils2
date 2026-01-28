@@ -1,96 +1,118 @@
-# Morf 0.1 Language Specification
+# Morf 0.2 Language Specification
 
-## 1. 概述 (Introduction)
+## 1. 概述
 
-Morf 0.1 是一个实验性的、基于结构化类型（Structural Typing）的类型系统，旨在探索极限的类型表达能力。其核心设计理念包括：
+Morf 0.2 是一个实验性的、基于结构化类型（Structural Typing）的类型系统，旨在探索极限的类型表达能力。其核心设计理念包括：
 
-1.  **万物皆命名空间 (Everything is a Namespace)**: 系统中的基本构成单元是键值对集合。
-2.  **名义即属性 (Nominality as Property)**: 名义类型不是一种特殊的元数据，而是一个特殊的、不可伪造的属性。
-3.  **约束即数值 (Constraints as Numbers)**: 摒弃 IEEE 754 浮点数限制，使用基于“上界约束”的拓扑结构来表达实数域，实现 $a < b \iff a <: b$。
+1.  **万物皆命名空间**: 系统中的基本构成单元是键值对集合。
+2.  **名义即属性**: 名义类型不是一种特殊的元数据，而是一个特殊的、不可伪造的属性。
+3.  **约束即数值**: 摒弃 IEEE 754 浮点数限制，使用基于“上界约束”的拓扑结构来表达实数域，实现 $a < b \iff a <: b$。
 
-本规范定义了 Morf 0.1 的类型结构、子类型规则、运算逻辑及工程实现标准。
+本规范定义了 Morf 0.2 的类型结构、子类型规则、运算逻辑及工程实现标准。
 
 ---
 
-## 2. 类型系统核心 (Core Type System)
+## 2. 类型系统核心
 
-Morf 的类型全集 $\mathbb{T}$ 由以下基元和复合结构组成。
+Morf 的类型全集由以下基元和复合结构组成。
 
-### 2.1 核心基元 (Primitives)
+### 2.1 核心基元
 
-#### 2.1.1 命名空间 (Namespace)
+#### 2.1.1 命名空间
 命名空间是键值对的不可变集合。
 $$ \tau = \{ k_1: v_1, k_2: v_2, \dots \} $$
-其中 $k \in \mathbb{K}$ (Key Universe), $v \in \mathbb{T}$。
+其中 $k \in \text{Uni}$, $v \in \text{Uni}$。
 
-* **默认值规则 (Void Default)**:
-    对于任意命名空间 $\tau$，若 $k \notin \text{dom}(\tau)$，则 $\tau[k] = \text{Void}$。
-    *推论*: 空命名空间 `{}` (Void) 是最“宽”的类型，它是所有拥有具体属性的命名空间的父类型。
+* **默认值规则**:
+    对于任意命名空间 $\tau$，若 $k \notin \text{dom}(\tau)$，则 $\tau[k] = \text{Uni}$。
 
-* **约束即“存在性”(Presence Constraint) 的工程约定**:
-    在 Void Default 之下，若想表达“必须拥有某个键 $k$”，则不能用 `k: Void`，否则**缺失键也会读到 Void**，约束失效。
-    因此工程实现中，表达“键存在”的约束应使用一个**非 Void 且非 Never**的证明值（Proof），例如 `k: Proof`。
+#### 2.1.2 顶空间
+表示“无具体约束”的命名空间。它是命名空间的**顶类型**。
+* **子类型关系**：顶空间是所有类型的父类型。
+$$ \text{Uni} \equiv \{ \} $$
 
-* **Never 属性**:
-    若 $\tau[k] = \text{Never}$，表示该命名空间在逻辑上严禁包含键 $k$。
+#### 2.1.3 底空间
+表示不存在的类型或逻辑矛盾的命名空间。它是命名空间的**底类型**。
+* **子类型关系**：底空间是所有类型的子类型。
+* **键定义**：其所有键都是底空间。
 
-#### 2.1.2 Void
-空命名空间，表示“无具体约束”。它是命名空间的 Top Type。
-$$ \text{Void} \equiv \{ \} $$
+$$ \text{Never} \equiv \{ k_1: \text{Never}, k_2: \text{Never}, \dots \} $$
 
-#### 2.1.3 Never
-底类型 (Bottom Type)。表示不存在的类型或逻辑矛盾。
-*   Never 是所有类型的子类型。
-*   任何包含 Never 作为值的属性的命名空间（在被访问该属性时）可能导致计算坍缩为 Never（取决于具体的传播规则）。
+#### 2.1.4 名义符号
+全局唯一的命名空间，用于实现名义类型系统。
+其拥有一个用户不可知的值（$\upsilon_k$），作为键。
 
-#### 2.1.4 名义符号 (Nominal Symbol)
-全局唯一的标识符，用于实现名义类型系统。
-在 Morf 中，名义类型实现为包含特殊键 `__nominal__` 的命名空间。
-工程实现中，为了使名义约束在 Void Default 下可被正确区分，名义符号集合内的成员应使用 `NominalID: Proof`（Proof 非 Void/非 Never），而不是 `NominalID: Void`。
+$$ \text{NominalSymbol} = \{ \text{NominalKey}: \text{NominalOfNominal} \} \\
+ \text{NominalSymbolInstant}_k = \text{NominalSymbol} \cup \{set: Set \{ \upsilon_k \}\} $$
+
+##### 名义的核心常量
+以下这些符号作为这几个基础符号是公理化存在的，不需要通过结构展开来证明其身份：
+* **名义符号的名义（$\text{NominalOfNominal}$）**：是一个名义符号，用于区分命名空间是否是一个名义符号。
+* **名义属性（$\text{NominalKey}$）**：是一个名义符号，它的在命名空间中通常作为键存在，其对应的值通常是当前命名空间的名义符号。
+
+#### 2.1.5 负命名空间
+其表达顶空间中所有不属于某值的命名空间。
+
+$$ \sim\tau = \{ \upsilon \in \text{Uni} \mid \upsilon \notin \tau \} $$
 
 ### 2.2 复合结构
 
-#### 2.2.1 类型集合 (Type Set) / Union
-用于表达“或”的关系。类型集合 $S = \{ \tau_1, \tau_2, \dots \}$ 表示值的类型可能是 $\tau_1$ 到 $\tau_n$ 中的任意一种。
-* **分布律**: 访问类型集合的属性时，操作分发到集合内所有成员，结果构成新的类型集合。
-    $$ S.k = \bigcup_{\tau \in S} \tau.k $$
+#### 2.2.1 集合
+一个包含 $\tau_1, \tau_2, \dots$ 的集合 $S$，在理论上是一个以成员类型作为键的具名空间：
+$$ S = \{ \tau_1: \text{Proof}, \tau_2: \text{Proof}, \dots, \text{NominalKey}: \text{SetNominal} \} $$
+* 键：集合中的每一个成员类型都是该命名空间的一个键。
+* 值：对应的值是 Proof，表示该成员属于集合。
+* 访问重载: 集合不允许被直接访问，而是按照分布律，访问类型集合的属性时操作分发到集合内所有成员，结果构成新的集合。
 
-#### 2.2.2 类型函数 (Type Function)
+#### 2.2.2 类型函数
 参数化的类型构造器。
 $$ f: (\text{Args}) \to \mathbb{T} $$
-类型函数本身也是命名空间，包含 `params` 和 `body` 等属性。
+
+* **命名空间签名**: 
+    ```morf
+    {
+      [NominalKey]: FunctionNominal
+      params: { [string]: Uni }
+    }
 
 ---
 
-## 3. 子类型关系 (Subtyping)
+## 3. 子类型系统
 
-Morf 遵循标准的结构化子类型 (Structural Subtyping) 规则。
+Morf 遵循标准的结构化子类型规则。
 
 ### 3.1 定义
-对于类型 $A$ 和 $B$，若 $A$ 是 $B$ 的子类型（记作 $A <: B$），则凡是需要 $B$ 的地方都可以安全地使用 $A$。
+#### 子类型
+对于类型 $A$ 和 $B$，若 $A$ 是 $B$ 的子类型（记作 $A < B$），则凡是需要 $B$ 的地方都可以安全地使用 $A$。
+#### 具名空间
+键 $\text{NominalKey}$ 不是 $Uni$ 的命名空间称为**具名空间**。
 
 ### 3.2 命名空间子类型规则
-$A <: B$ 当且仅当：
-1.  **宽度规则 (Width)**: $\text{dom}(B) \subseteq \text{dom}(A)$ (隐式地，因为默认值为 Void，只要 A 的属性不比 B 宽泛/松散即可。实际上结构化子类型通常表述为：A 必须包含 B 的所有属性)。
-    *   在 Morf 中，由于默认键值为 Void，且 Void 是父类型，规则可统一为：
-    $$ \forall k \in \mathbb{K}, A[k] <: B[k] $$
-2.  **深度规则 (Depth)**: 属性值递归满足子类型关系。
+$A < B$ 当且仅当：
+1.  **宽度规则**: $\text{dom}(B) \subseteq \text{dom}(A)$ (隐式地，因为默认值为顶空间，只要 A 的属性不比 B 宽泛即可。实际上结构化子类型通常表述为：A 必须包含 B 的所有属性)。
+    *   在 Morf 中，由于默认键值为 Uni，且 Uni 是父类型，规则可统一为：
+    $$ \forall k \in \mathbb{K}, A[k] < B[k] $$
+2.  **深度规则**: 属性值递归满足子类型关系。
 
-*直观理解*: 属性越多、约束越强、类型越“窄” (Smaller)。
+**直观理解**: 属性越多、约束越强、类型越“窄” (Smaller)。
 
-### 3.3 名义子类型规则
-名义类型通过 `__nominal__` 属性介入结构化规则。
-$$ \text{NominalNamespace}(N) = \{ \text{\_\_nominal\_\_}: N \} $$
-由于 $N$ 是唯一的，两个不同的名义类型 $A, B$ 除非共享名义符号（通过继承或交集），否则 $A.\text{\_\_nominal\_\_}$ 与 $B.\text{\_\_nominal\_\_}$ 不相容，导致 $A \cap B \to \text{Never}$。
+### 3.3 名义符号子类型规则
+其完全遵循命名空间子类型规则。通常使用 `Nominal.Create` 创建名义符号的子类型。
+
+定义名义符号 $A$、$B$，`C = Nominal.Create{A, B}` 实际上是：
+1. 创建了 $\upsilon_C$
+2. 返回 $A \cup B \cup \{ Set\{ \upsilon_C: \text{Proof} \} \}$
+
+这样使得 $C = \text{NominalSymbol} \cup \{ Set\{ \upsilon_A, \upsilon_B, \upsilon_C \} \}$，$C$ 就是 $A$ 和 $B$ 的子类型。
 
 ---
 
-## 4. 运算体系 (Operations)
+## 4. 运算体系
 
-### 4.1 核心算符与优先级 (Operators & Precedence)
-Morf 0.1 支持内置的表达式算符，优先级从高到低如下：
+### 4.1 核心算符与优先级
+内置的表达式算符，优先级从高到低如下：
 
-1.  **一元算符**: `! (逻辑非)`, `- (负号)`
+1.  **一元算符**: `!`, `- (负号)`, `~`
 2.  **乘除算符**: `*`, `/`, `%`
 3.  **加减算符**: `+`, `-`
 4.  **比较算符**: `<`, `>`, `<=`, `>=`
@@ -99,16 +121,13 @@ Morf 0.1 支持内置的表达式算符，优先级从高到低如下：
 7.  **逻辑与**: `&&`
 8.  **逻辑或**: `||`
 
-### 4.2 类型运算函数 (Type Functions)
-除了表达式算符，系统提供以下核心类型函数：
-
-* **Union { A, B }**: 构造类型集合。自动执行扁平化和子类型归约。
-* **Intersection { A, B }**: 合并约束。若属性冲突则坍缩为 `Never`。
-* **Difference { A, B }**: 从 A 中排除 B 的成分。
+### 4.2 负类型运算体系
+* **双重否定**: $\sim \sim T \equiv T$
+* **顶类型补集**: $\sim \text{Any} \equiv \text{Never}$
 
 ---
 
-## 5. 流程控制与块表达式 (Control Flow & Blocks)
+## 5. 流程控制与块表达式
 
 为了支持优雅的业务逻辑编排，Morf 0.1 引入了非严格求值的块语法。
 
@@ -163,7 +182,7 @@ Morf 0.1 采用双层数字模型：**精确层 (Exact Layer)** 用于身份识�
 * **用途**: 模式匹配、枚举、Map Key、精确相等性判断。
 
 > 工程注记：Exact 值在实现中通常编码为 `{ __nominal__: { NominalID(#N): Proof } }`。
-> 这里 `Proof` 必须是非 Void/非 Never，否则会破坏 “#3 与 #4 互斥” 或导致交集传播错误。
+> 这里 `Proof` 必须是非 Uni/非 Never，否则会破坏 “#3 与 #4 互斥” 或导致交集传播错误。
 
 #### 5.1.2 序数 (Ordinal Number)
 * **符号**: `3`, `3.14`, `Pi` (无前缀)。
@@ -347,7 +366,7 @@ let Num = Num - 1
 Morf 标准库分为内置原语 (`Sys`) 和 预置环境 (`Prelude`)。
 
 ### 10.1 核心常量与公理
-* **Void**: `{}`。所有类型的父类型。
+* **Uni**: `{}`。所有类型的父类型。
 * **Never**: `Never`。所有类型的子类型，表示逻辑矛盾。
 * `Bool`: 内置命名空间，布尔值的父类型。
 * `True`: 继承于 Bool，表达真值。
@@ -405,3 +424,11 @@ Morf 标准库分为内置原语 (`Sys`) 和 预置环境 (`Prelude`)。
   * `Log{...args}`: 打印日志
 * **Assert**: 负责断言。
  * `Eq{actual, expected, label}`: 相等性断言。
+
+## 附录
+### 更新日志
+#### 负类型系统
+在 Morf 0.1 中，类型系统主要基于“正向约束”（必须包含某键、必须小于某数）。为了实现逻辑闭环，Morf 0.2 引入 负类型，记作 $\text{Not}\langle T \rangle$。
+负类型代表了集合论中的补集。
+$$ v \in \text{Not}\langle T \rangle \iff v \notin T $$
+这一扩展使得 Morf 具备了表达“排除逻辑”、“非重叠约束”以及完整布尔代数的能力。

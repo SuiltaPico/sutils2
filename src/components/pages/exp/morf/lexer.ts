@@ -18,8 +18,14 @@ export type TokenType =
   | 'Dot'                 // .
   | 'Let'                 // let
   | 'Fn'                  // fn
+  | 'Wrap'                // wrap
+  | 'Directly'            // directly
   | 'Arrow'               // =>
+  | 'Semicolon'           // ;
   | 'Ellipsis'            // ...
+  | 'Plus' | 'Minus' | 'Star' | 'Slash' | 'Percent' // + - * / %
+  | 'DoubleEq' | 'BangEq' | 'Lt' | 'Gt' | 'LtEq' | 'GtEq' // == != < > <= >=
+  | 'DoubleAnd' | 'DoubleOr' | 'Bang' | 'Ampersand' | 'Pipe'  // && || ! & |
   | 'EOF';
 
 export interface Token {
@@ -103,6 +109,8 @@ export class Lexer {
       
       if (value === 'let') return this.makeToken('Let', value, start, startLine, startCol);
       if (value === 'fn') return this.makeToken('Fn', value, start, startLine, startCol);
+      if (value === 'wrap') return this.makeToken('Wrap', value, start, startLine, startCol);
+      if (value === 'directly') return this.makeToken('Directly', value, start, startLine, startCol);
       return this.makeToken('Identifier', value, start, startLine, startCol);
     }
 
@@ -161,15 +169,65 @@ export class Lexer {
     if (char === '(') { this.advance(); return this.makeToken('LParen', '(', start, startLine, startCol); }
     if (char === ')') { this.advance(); return this.makeToken('RParen', ')', start, startLine, startCol); }
     if (char === ':') { this.advance(); return this.makeToken('Colon', ':', start, startLine, startCol); }
+    if (char === ';') { this.advance(); return this.makeToken('Semicolon', ';', start, startLine, startCol); }
     if (char === ',') { this.advance(); return this.makeToken('Comma', ',', start, startLine, startCol); }
+    if (char === '!') {
+      this.advance();
+      if (this.peek() === '=') {
+        this.advance();
+        return this.makeToken('BangEq', '!=', start, startLine, startCol);
+      }
+      return this.makeToken('Bang', '!', start, startLine, startCol);
+    }
+    if (char === '&') {
+      this.advance();
+      if (this.peek() === '&') {
+        this.advance();
+        return this.makeToken('DoubleAnd', '&&', start, startLine, startCol);
+      }
+      return this.makeToken('Ampersand', '&', start, startLine, startCol);
+    }
+    if (char === '|') {
+      this.advance();
+      if (this.peek() === '|') {
+        this.advance();
+        return this.makeToken('DoubleOr', '||', start, startLine, startCol);
+      }
+      return this.makeToken('Pipe', '|', start, startLine, startCol);
+    }
     if (char === '=') { 
       this.advance(); 
       if (this.peek() === '>') {
         this.advance();
         return this.makeToken('Arrow', '=>', start, startLine, startCol);
       }
+      if (this.peek() === '=') {
+        this.advance();
+        return this.makeToken('DoubleEq', '==', start, startLine, startCol);
+      }
       return this.makeToken('Eq', '=', start, startLine, startCol); 
     }
+    if (char === '<') {
+      this.advance();
+      if (this.peek() === '=') {
+        this.advance();
+        return this.makeToken('LtEq', '<=', start, startLine, startCol);
+      }
+      return this.makeToken('Lt', '<', start, startLine, startCol);
+    }
+    if (char === '>') {
+      this.advance();
+      if (this.peek() === '=') {
+        this.advance();
+        return this.makeToken('GtEq', '>=', start, startLine, startCol);
+      }
+      return this.makeToken('Gt', '>', start, startLine, startCol);
+    }
+    if (char === '+') { this.advance(); return this.makeToken('Plus', '+', start, startLine, startCol); }
+    if (char === '-') { this.advance(); return this.makeToken('Minus', '-', start, startLine, startCol); }
+    if (char === '*') { this.advance(); return this.makeToken('Star', '*', start, startLine, startCol); }
+    if (char === '/') { this.advance(); return this.makeToken('Slash', '/', start, startLine, startCol); }
+    if (char === '%') { this.advance(); return this.makeToken('Percent', '%', start, startLine, startCol); }
     if (char === '.') { 
       // Check for Ellipsis ...
       // Need exactly "..." from current position.

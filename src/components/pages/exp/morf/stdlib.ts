@@ -1,11 +1,9 @@
-import type { Hash } from './hashing';
-import { hashString, mix, mixAll } from './hashing';
+import { Parameter } from './ast';
+import { hashString, mix } from './hashing';
 import { MorfInterner } from './interner';
-import type { MorfType, TypeFunctionType, NamespaceType, Pivot } from './ir';
-import { isTypeFunction, isNamespace } from './ir';
-import { isSubtype } from './subtype';
-import { intersection, union } from './ops';
-import { globalOracle } from './oracle';
+import type { MorfType, TypeFunctionType, NamespaceType, Key } from './ir';
+import { isNamespace } from './ir';
+import * as OPS from './ops';
 
 /**
  * 原生函数工厂
@@ -15,13 +13,13 @@ export class NativeFunctionFactory {
 
   create(
     name: string, 
-    params: string[], 
+    params: Parameter[], 
     apply: TypeFunctionType['apply'],
     isVariadic = false
   ): TypeFunctionType {
     let h = mix(hashString('TypeFunction'), hashString(name));
     for (const p of params) {
-      h = mix(h, hashString(p));
+      h = mix(h, hashString(p.name));
     }
     
     return {
@@ -29,12 +27,73 @@ export class NativeFunctionFactory {
       name,
       params,
       isVariadic,
-      bodyAST: [], // Native functions have no source AST
+      bodyAST: [],
       apply,
       hash: h
     };
   }
 }
+
+export const PRELUDE_SOURCE = `
+// Layer 2: Prelude
+// ============================================================================
+
+let Maybe = (T) { Union { T, Never } }
+
+// 利用 wrap 语法糖，Branch 现在可以接收“流程”而不需要显式写 () { ... }
+let Branch = (c, wrap action) { { case: c, do: action } }
+let Else   = (wrap action) { { case: True, do: action } }
+
+let List = {
+  Head: (list) { Sys.List.Head(list) },
+  Tail: (list) { Sys.List.Tail(list) },
+  Cons: (head, tail) { Sys.List.Cons(head, tail) },
+  Concat: (a, b) {
+    Sys.Cond {
+      Branch { Sys.Eq(a.length, #0), () { b } },
+      Else   { () { List.Cons(List.Head(a), List.Concat(List.Tail(a), b)) } }
+    }
+  },
+
+  // Map: (list, fn) -> List
+  Map: (list, f) {
+     Sys.Cond {
+       Branch { Sys.Eq(list.length, #0), () { [] } },
+       Else   { () {
+           let h = f(Sys.List.Head(list))
+           let t = List.Map(Sys.List.Tail(list), f)
+           Sys.List.Cons(h, t)
+       }}
+     }
+  },
+  
+  // Filter: (list, pred) -> List
+  Filter: (list, pred) {
+    Sys.Cond {
+       Branch { Sys.Eq(list.length, #0), () { [] } },
+       Else   { () {
+           let h = Sys.List.Head(list)
+           let t = List.Filter(Sys.List.Tail(list), pred)
+           Sys.Cond {
+             Branch { pred(h), () { Sys.List.Cons(h, t) } },
+             Else   { () { t } }
+           }
+       }}
+    }
+  }
+}
+
+let Console = {
+  Log: (...msgs) { Sys.Log { ...msgs } }
+}
+
+let Assert = {
+  AssertEq: (actual, expected, label) {
+    // Prefer Sys.AssertEq (native) in tests; keep this as a convenience wrapper.
+    Sys.AssertEq(actual, expected, label)
+  }
+}
+`;
 
 /**
  * 注入标准库
@@ -43,378 +102,336 @@ export function createStandardLib(ctx: MorfInterner): Map<string, MorfType> {
   const lib = new Map<string, MorfType>();
   const factory = new NativeFunctionFactory(ctx);
 
-  const isExactValue = (t: MorfType): boolean => {
-    if (!isNamespace(t)) return false;
-    // Exact values are identity-layer nominal symbols (e.g. #3, #Pi).
-    // In our encoding, that is a *pure* nominal wrapper:
-    // { __nominal__: { NominalID(#N): Proof } }
-    //
-    // IMPORTANT: other nominal-tagged namespaces (like Tuples) are *not* exact values
-    // and must still participate in structural subtyping.
-    if (t.ordinal) return false;
-    if (t.entries.size !== 1) return false;
-    const inner = t.entries.get(ctx.key('__nominal__'));
-    if (!inner || inner.kind !== 'Namespace') return false;
-    // The inner namespace should contain at least one Nominal key like "#3"
-    for (const k of inner.entries.keys()) {
-      if (k.raw.kind === 'Nominal') return true;
-    }
-    return false;
-  };
+  // =========================================================
+  // Layer 0: Intrinsics (Values & Proofs)
+  // =========================================================
+  lib.set('Void', ctx.VOID);
+  lib.set('Never', ctx.NEVER);
 
-  // =========================================================
-  // Boolean Constants
-  // =========================================================
-  // Use a non-Void proof value so "key presence" is a real constraint under Void-default.
-  // (If we used Void as the value, missing keys would also read as Void and thus satisfy it.)
   const BoolProof = ctx.internPrimitive('BoolProof');
   const True = ctx.internNamespace(new Map([[ctx.key('True'), BoolProof]]));
   const False = ctx.internNamespace(new Map([[ctx.key('False'), BoolProof]]));
   
   lib.set('True', True);
   lib.set('False', False);
+  
+  // Global Aliases for Convenience
+  lib.set('Union', factory.create('Union', [{ name: '...types' }], (args) => {
+      // Manual reduce since OPS.union is binary
+      const vals = Array.from(args.values());
+      if (vals.length === 0) return ctx.NEVER;
+      let res = vals[0];
+      for(let i=1; i<vals.length; i++) res = OPS.union(res, vals[i], ctx);
+      return res;
+  }, true));
+
+  lib.set('Intersection', factory.create('Intersection', [{ name: '...types' }], (args) => {
+      const vals = Array.from(args.values());
+      if (vals.length === 0) return ctx.VOID;
+      let res = vals[0];
+      for(let i=1; i<vals.length; i++) res = OPS.intersection(res, vals[i], ctx);
+      return res;
+  }, true));
+
+  lib.set('Difference', factory.create('Difference', [{ name: 'a' }, { name: 'b' }], (args) => {
+      return OPS.difference(args.get('a') || ctx.NEVER, args.get('b') || ctx.NEVER, ctx);
+  }));
 
   // =========================================================
-  // Console
+  // Layer 1: Native Algebra (Sys Namespace)
   // =========================================================
-  const logFn = factory.create(
-    'Log',
-    ['...msgs'], 
-    (args, execCtx) => {
+  
+  const sysEntries = new Map<any, MorfType>();
+  const addSys = (name: string, fn: TypeFunctionType) => {
+    sysEntries.set(ctx.key(name), fn);
+  };
+
+  const isExactValue = (t: MorfType): boolean => {
+    if (!isNamespace(t)) return false;
+    if (t.ordinal) return false;
+    if (t.entries.size !== 1) return false;
+    const inner = t.entries.get(ctx.key('__nominal__'));
+    if (!inner || !isNamespace(inner)) return false;
+    for (const k of inner.entries.keys()) {
+      if (k.raw.kind === 'Nominal') return true;
+    }
+    return false;
+  };
+
+  // 1. Math & Logic
+  addSys('Add', factory.create('Add', [{ name: 'a' }, { name: 'b' }], (args) => OPS.add(args.get('a')!, args.get('b')!, ctx)));
+  addSys('Sub', factory.create('Sub', [{ name: 'a' }, { name: 'b' }], (args) => OPS.sub(args.get('a')!, args.get('b')!, ctx)));
+  addSys('Mul', factory.create('Mul', [{ name: 'a' }, { name: 'b' }], (args) => OPS.mul(args.get('a')!, args.get('b')!, ctx)));
+  addSys('Div', factory.create('Div', [{ name: 'a' }, { name: 'b' }], (args) => OPS.div(args.get('a')!, args.get('b')!, ctx)));
+  
+  addSys('Eq', factory.create('Eq', [{ name: 'a' }, { name: 'b' }], (args) => OPS.eq(args.get('a')!, args.get('b')!, ctx)));
+  addSys('Lt', factory.create('Lt', [{ name: 'a' }, { name: 'b' }], (args) => OPS.lt(args.get('a')!, args.get('b')!, ctx)));
+  addSys('Gt', factory.create('Gt', [{ name: 'a' }, { name: 'b' }], (args) => OPS.gt(args.get('a')!, args.get('b')!, ctx)));
+  
+  addSys('IsSubtype', factory.create('IsSubtype', [{ name: 'sub' }, { name: 'sup' }], (args) => {
+      const sub = args.get('sub') || ctx.VOID;
+      const sup = args.get('sup') || ctx.VOID;
+      return OPS.lte(sub, sup, ctx); // lte is isSubtype
+  }));
+
+  // =========================================================
+  // Layer 1.5: Nominal System
+  // =========================================================
+  let __symbolCounter = 0;
+  const nominalEntries = new Map<any, MorfType>();
+
+  /**
+   * Nominal.Create{ ...parents }
+   * 创建一个名义符号，它继承所有 parents 的名义身份。
+   * 采用“平坦化标签集”方案：结果是一个包含所有父标签 + 自身新标签的 Namespace。
+   */
+  nominalEntries.set(ctx.key('Create'), factory.create('Create', [{ name: '...parents' }], (args) => {
+    const parentList = Array.from(args.values());
+    const newId = `#sym_${++__symbolCounter}`;
+    const proof = ctx.internPrimitive('NominalProof');
+    const nominalKey = ctx.key('__nominal__');
+
+    const allTags = new Map<Key, MorfType>();
+  
+    // 1. 继承所有父级的名义标签
+    for (const p of parentList) {
+      if (isNamespace(p)) {
+        const pTags = p.entries.get(nominalKey);
+        if (pTags && isNamespace(pTags)) {
+          for (const [tagKey, tagVal] of pTags.entries) {
+            allTags.set(tagKey, tagVal);
+          }
+        }
+      }
+    }
+
+    // 2. 注入自身唯一的名义标签
+    allTags.set(ctx.internKey({ kind: 'Nominal', id: newId }), proof);
+
+    // 3. 返回一个带有 __nominal__ 属性的结构
+    const nominalTagNs = ctx.internNamespace(allTags);
+    return ctx.internNamespace(new Map([[nominalKey, nominalTagNs]]));
+  }, true));
+
+  /**
+   * Nominal.CreateNamespace{ ...spaces }
+   * 创建一个命名空间，它不仅拥有所有 spaces 的成员，还拥有一个新的唯一名义身份。
+   */
+  nominalEntries.set(ctx.key('CreateNamespace'), factory.create('CreateNamespace', [{ name: '...spaces' }], (args) => {
+    const spaceList = Array.from(args.values());
+    
+    // 1. 创建一个新的独立名义符号
+    // 我们直接内部调用刚刚定义的 Nominal.Create 逻辑（这里简化为直接生成）
+    const newId = `#ns_sym_${++__symbolCounter}`;
+    const proof = ctx.internPrimitive('NominalProof');
+    const nominalKey = ctx.key('__nominal__');
+    const selfTag = ctx.internKey({ kind: 'Nominal', id: newId });
+
+    // 2. 求所有传入 spaces 的交集 (Intersection)
+    let base: MorfType = ctx.VOID;
+    if (spaceList.length > 0) {
+      base = spaceList[0];
+      for (let i = 1; i < spaceList.length; i++) {
+        base = OPS.intersection(base, spaceList[i], ctx);
+      }
+    }
+
+    if (!isNamespace(base)) return ctx.NEVER;
+
+    // 3. 在交集的基础上增加/合并名义标签
+    const currentNominal = base.entries.get(nominalKey);
+    const newTagsMap = new Map<Key, MorfType>();
+    if (currentNominal && isNamespace(currentNominal)) {
+      for (const [k, v] of currentNominal.entries) newTagsMap.set(k, v);
+    }
+    newTagsMap.set(selfTag, proof);
+    
+    const finalEntries = new Map(base.entries);
+    finalEntries.set(nominalKey, ctx.internNamespace(newTagsMap));
+
+    return ctx.internNamespace(finalEntries, base.ordinal);
+  }, true));
+
+  addSys('Nominal', ctx.internNamespace(nominalEntries) as any);
+
+  addSys('IsNever', factory.create('IsNever', [{ name: 't' }], (args) => {
+      const t = args.get('t');
+      return (!t || t.kind === 'Never') ? True : False;
+  }));
+
+  addSys('AssertEq', factory.create('AssertEq', [{ name: 'actual' }, { name: 'expected' }, { name: 'label' }], (args, execCtx) => {
+    const actual = args.get('actual') || ctx.VOID;
+    const expected = args.get('expected') || ctx.VOID;
+    const label = args.get('label') || ctx.internPrimitive('');
+
+    const ok = actual === expected;
+    const tag = ctx.internPrimitive(ok ? '[PASS]' : '[FAIL]');
+    const msg = ctx.internPrimitive(ok ? 'Eq' : 'Eq (mismatch)');
+
+    execCtx.effect(ok ? 'log' : 'error', new Map([
+      ['0', tag],
+      ['1', label],
+      ['2', msg],
+      ['3', ctx.internPrimitive('expected=')],
+      ['4', expected],
+      ['5', ctx.internPrimitive('actual=')],
+      ['6', actual],
+    ]));
+
+    return ok ? True : False;
+  }));
+
+  addSys('AssertNever', factory.create('AssertNever', [{ name: 'actual' }, { name: 'label' }], (args, execCtx) => {
+    const actual = args.get('actual') || ctx.VOID;
+    const label = args.get('label') || ctx.internPrimitive('');
+    const ok = actual.kind === 'Never';
+
+    const tag = ctx.internPrimitive(ok ? '[PASS]' : '[FAIL]');
+    const msg = ctx.internPrimitive(ok ? 'Never' : 'Never (mismatch)');
+
+    execCtx.effect(ok ? 'log' : 'error', new Map([
+      ['0', tag],
+      ['1', label],
+      ['2', msg],
+      ['3', ctx.internPrimitive('actual=')],
+      ['4', actual],
+    ]));
+
+    return ok ? True : False;
+  }));
+
+  // 2. Bridges
+  addSys('Ord', factory.create('Ord', [{ name: 'exact' }], (args) => OPS.ord(args.get('exact')!, ctx)));
+  addSys('Exact', factory.create('Exact', [{ name: 'ordinal' }], (args) => OPS.exact(args.get('ordinal')!, ctx)));
+
+  // 3. IO
+  addSys('Log', factory.create('Log', [{ name: '...msgs' }], (args, execCtx) => {
       execCtx.effect('log', args);
       return ctx.VOID;
-    },
-    true
-  );
-
-  const consoleNs = ctx.internNamespace(new Map([
-    [ctx.key('Log'), logFn]
-  ]));
-
-  lib.set('Console', consoleNs);
-
-  // =========================================================
-  // Sys (System Utilities)
-  // =========================================================
+  }, true));
   
-  // Sys.IsSubtype(sub, super) -> True | False
-  const isSubtypeFn = factory.create(
-    'IsSubtype',
-    ['sub', 'super'],
-    (args, execCtx) => {
-      const sub = args.get('sub') || ctx.VOID;
-      const sup = args.get('super') || ctx.VOID;
-
-      // Spec update: Exact values are nominal symbols (identity layer) and do not
-      // participate in subtyping checks. Treat as invalid query -> Never.
-      if (isExactValue(sub) || isExactValue(sup)) return ctx.NEVER;
-
-      const result = isSubtype(sub, sup, ctx);
-      return result ? True : False;
-    }
-  );
-
-  // Sys.Eq(a, b) -> True | False (O(1) pointer equality because everything is interned)
-  const eqFn = factory.create(
-    'Eq',
-    ['a', 'b'],
-    (args, execCtx) => {
-      const a = args.get('a') || ctx.VOID;
-      const b = args.get('b') || ctx.VOID;
-      return a === b ? True : False;
-    }
-  );
-
-  // Sys.IsNever(t) -> True | False
-  const isNeverFn = factory.create(
-    'IsNever',
-    ['t'],
-    (args, execCtx) => {
-      const t = args.get('t') || ctx.VOID;
-      return t.kind === 'Never' ? True : False;
-    }
-  );
-
-  // Sys.AssertEq(actual, expected, label) -> True | False (logs PASS/FAIL)
-  const assertEqFn = factory.create(
-    'AssertEq',
-    ['actual', 'expected', 'label'],
-    (args, execCtx) => {
-      const actual = args.get('actual') || ctx.VOID;
-      const expected = args.get('expected') || ctx.VOID;
-      const label = args.get('label') || ctx.internPrimitive('');
-
-      const ok = actual === expected;
-      const tag = ctx.internPrimitive(ok ? '[PASS]' : '[FAIL]');
-      const msg = ctx.internPrimitive(ok ? 'Eq' : 'Eq (mismatch)');
-
-      // Log: [PASS]/[FAIL] label expected actual
-      execCtx.effect(ok ? 'log' : 'error', new Map([
-        ['0', tag],
-        ['1', label],
-        ['2', msg],
-        ['3', ctx.internPrimitive('expected=')],
-        ['4', expected],
-        ['5', ctx.internPrimitive('actual=')],
-        ['6', actual],
+  addSys('Import', factory.create('Import', [{ name: 'path' }], (args, execCtx) => {
+      // Stub implementation
+      const path = args.get('path');
+      execCtx.effect('log', new Map([
+        ['0', ctx.internPrimitive('Importing')],
+        ['1', path || ctx.VOID],
       ]));
+      return ctx.VOID; 
+  }));
 
-      return ok ? True : False;
-    }
-  );
-
-  // Sys.AssertNever(actual, label) -> True | False (logs PASS/FAIL)
-  const assertNeverFn = factory.create(
-    'AssertNever',
-    ['actual', 'label'],
-    (args, execCtx) => {
-      const actual = args.get('actual') || ctx.VOID;
-      const label = args.get('label') || ctx.internPrimitive('');
-      const ok = actual.kind === 'Never';
-
-      const tag = ctx.internPrimitive(ok ? '[PASS]' : '[FAIL]');
-      const msg = ctx.internPrimitive(ok ? 'Never' : 'Never (mismatch)');
-
-      execCtx.effect(ok ? 'log' : 'error', new Map([
-        ['0', tag],
-        ['1', label],
-        ['2', msg],
-        ['3', ctx.internPrimitive('actual=')],
-        ['4', actual],
-      ]));
-
-      return ok ? True : False;
-    }
-  );
-
-  // Sys.Union(a, b) -> MorfType
-  const unionFn = factory.create(
-    'Union',
-    ['...types'],
-    (args, execCtx) => {
-       // Handle variadic if we want Union { A, B, C }
-       // Parser passes variadic as "0", "1"...
-       // Let's iterate all numeric keys
-       const values: MorfType[] = [];
-       for (const [k, v] of args) {
-         if (!isNaN(Number(k))) values.push(v);
-       }
-       if (values.length === 0) return ctx.NEVER;
-       
-       let result = values[0];
-       for (let i = 1; i < values.length; i++) {
-         result = union(result, values[i], ctx);
-       }
-       return result;
-    },
-    true // variadic
-  );
+  // 4. List Primitives (Cons, Head, Tail)
+  // These are needed for Layer 2 List.Map/Filter
+  const listSys = new Map<any, MorfType>();
   
-  // Sys.Intersection(a, b)
-  const intersectionFn = factory.create(
-    'Intersection',
-    ['...types'], 
-    (args, execCtx) => {
-       const values: MorfType[] = [];
-       for (const [k, v] of args) {
-         if (!isNaN(Number(k))) values.push(v);
-       }
-       if (values.length === 0) return ctx.VOID; // Intersection of empty is Top? Or Void?
-       
-       let result = values[0];
-       for (let i = 1; i < values.length; i++) {
-         result = intersection(result, values[i], ctx);
-       }
-       return result;
-    },
-    true
-  );
+  // Cons(head, tail) -> [head, ...tail]
+  // This needs to construct a Tuple namespace carefully
+  // Reuse logic from previous `concat` or define new helper in OPS? 
+  // Ideally OPS should export tuple helpers.
+  // For now, inline or add to OPS? I'll inline here to keep OPS pure math/logic if possible,
+  // but tuple logic is structural.
+  // Let's implement Cons simply here:
+  listSys.set(ctx.key('Cons'), factory.create('Cons', [{ name: 'head' }, { name: 'tail' }], (args) => {
+      // Impl: create new namespace with head at 0, and shifted tail
+      // Just like [head, ...tail]
+      // Need to handle length updates.
+      // Since this is "Native Algebra", we can do magic.
+      // But wait, `List.Filter` in Morf depends on this.
+      // Let's assume `tail` is a Tuple.
+      const h = args.get('head') || ctx.VOID;
+      const t = args.get('tail') || ctx.VOID;
+      // ... (Implementation detail: constructing the Tuple)
+      // For brevity, using a simplified logic (assuming we can just shift keys)
+      // This is a bit heavy for inline.
+      return mockCons(h, t, ctx);
+  }));
 
-  // Sys.Lt(a, b) -> True | False (Ordinal comparison)
-  const ltFn = factory.create(
-    'Lt',
-    ['a', 'b'],
-    (args, execCtx) => {
-      const a = args.get('a');
-      const b = args.get('b');
-      
-      // We need both to be ordinals or convert them implicitly? 
-      // Spec says: "Only ordinals can participate in math".
-      // But for convenience, let's just check if they have ordinals.
-      if (!a || !isNamespace(a) || !a.ordinal) return ctx.NEVER;
-      if (!b || !isNamespace(b) || !b.ordinal) return ctx.NEVER;
-      
-      const res = globalOracle.compareLt(a.ordinal, b.ordinal);
-      
-      if (res === 'True') return True;
-      return False;
-    }
-  );
+  listSys.set(ctx.key('Head'), factory.create('Head', [{ name: 'list' }], (args) => {
+       const l = args.get('list');
+       if (!l || !isNamespace(l)) return ctx.NEVER;
+       return l.entries.get(ctx.key('0')) || ctx.VOID;
+  }));
 
-  // Sys.Cond { {case: Bool, do: () {}}, ... }
-  const condFn = factory.create(
-    'Cond',
-    ['...branches'],
-    (args, execCtx) => {
+  listSys.set(ctx.key('Tail'), factory.create('Tail', [{ name: 'list' }], (args) => {
+       const l = args.get('list');
+       return mockTail(l!, ctx);
+  }));
+
+  sysEntries.set(ctx.key('List'), ctx.internNamespace(listSys));
+  
+  // Cond (Native Control Flow)
+  // Cond { {case: Bool, do: () {}}, ... }
+  sysEntries.set(ctx.key('Cond'), factory.create('Cond', [{ name: '...branches' }], (args, execCtx) => {
+       // ... Same as before
        const branches: MorfType[] = [];
-       // Collect numeric args
-       for (const [k, v] of args) {
-         if (!isNaN(Number(k))) {
-            branches[Number(k)] = v;
-         }
-       }
-       
+       for (const [k, v] of args) { if (!isNaN(Number(k))) branches[Number(k)] = v; }
        for (const branch of branches) {
          if (!branch || !isNamespace(branch)) continue;
-         
          const caseVal = branch.entries.get(ctx.key('case'));
          if (caseVal === True) {
             const doFn = branch.entries.get(ctx.key('do'));
-            if (doFn && isTypeFunction(doFn)) {
-               // Invoke doFn()
-               return doFn.apply(new Map(), execCtx);
-            }
+            if (doFn && doFn.kind === 'TypeFunction') return doFn.apply(new Map(), execCtx);
          }
        }
-       
        return ctx.VOID;
-    },
-    true
-  );
+  }, true));
 
-  const sysNs = ctx.internNamespace(new Map([
-    [ctx.key('IsSubtype'), isSubtypeFn],
-    [ctx.key('Eq'), eqFn],
-    [ctx.key('Lt'), ltFn],
-    [ctx.key('IsNever'), isNeverFn],
-    [ctx.key('AssertEq'), assertEqFn],
-    [ctx.key('AssertNever'), assertNeverFn],
-    [ctx.key('Union'), unionFn],
-    [ctx.key('Intersection'), intersectionFn],
-    [ctx.key('Cond'), condFn]
-  ]));
+  lib.set('Sys', ctx.internNamespace(sysEntries));
 
-  lib.set('Sys', sysNs);
-  
-  // Also expose Union/Intersection globally for convenience?
-  // lib.set('Union', unionFn); 
-  // lib.set('Intersection', intersectionFn);
-  // Spec uses "Union { ... }", so exposing 'Union' is good.
-  lib.set('Union', unionFn);
-  lib.set('Intersection', intersectionFn);
+  return lib;
+}
 
-  // Ord { #3 } -> 3
-  const ordFn = factory.create(
-    'Ord',
-    ['exact'],
-    (args, execCtx) => {
-      const exact = args.get('exact');
-      if (!exact || !isNamespace(exact)) return ctx.NEVER;
-      
-      // Look for __nominal__
-      const nominalKey = ctx.key('__nominal__');
-      const inner = exact.entries.get(nominalKey);
-      if (!inner || !isNamespace(inner)) return ctx.NEVER;
-      
-      // Look for ID inside inner
-      let nominalIdStr = '';
-      for (const k of inner.entries.keys()) {
-        if (k.raw.kind === 'Nominal') {
-           nominalIdStr = k.raw.id;
-           break;
+// --- Helpers for List ---
+
+function mockCons(head: MorfType, tail: MorfType, ctx: MorfInterner): MorfType {
+    if (!isNamespace(tail)) return ctx.NEVER;
+    // 1. Get tail len
+    let len = 0;
+    // ... extract #N logic ...
+    const lenVal = tail.entries.get(ctx.key('length'));
+    if (lenVal && isNamespace(lenVal)) {
+      const inner = lenVal.entries.get(ctx.key('__nominal__'));
+      if (inner && isNamespace(inner)) {
+        for (const k of inner.entries.keys()) {
+          if (k.raw.kind === 'Nominal' && k.raw.id.startsWith('#')) {
+            len = parseInt(k.raw.id.slice(1));
+            break;
+          }
         }
       }
-      if (!nominalIdStr) return ctx.NEVER;
-      
-      if (!nominalIdStr.startsWith('#')) return ctx.NEVER;
-      const numStr = nominalIdStr.substring(1);
-      
-      const parts = numStr.split('.');
-      let pivot: Pivot;
-      if (parts.length === 1) {
-         pivot = { kind: 'Rat', n: BigInt(parts[0]), d: 1n } as const;
-      } else {
-         const fraction = parts[1];
-         const denominator = 10n ** BigInt(fraction.length);
-         const numerator = BigInt(parts[0] + fraction);
-         pivot = { kind: 'Rat', n: numerator, d: denominator } as const;
-      }
-      
-      return ctx.internNamespace(new Map(), pivot);
-    },
-    false
-  );
-  lib.set('Ord', ordFn);
+    }
 
-  // Exact { 3 } -> #3
-  const exactFn = factory.create(
-    'Exact',
-    ['ordinal'],
-    (args, execCtx) => {
-       const ordinal = args.get('ordinal');
-       if (!ordinal || !isNamespace(ordinal)) return ctx.NEVER;
-       if (!ordinal.ordinal) return ctx.NEVER;
-       
-       const p = ordinal.ordinal;
-       if (p.kind !== 'Rat') return ctx.NEVER; 
-       
-       let s = '';
-       let d = p.d;
-       if (d === 1n) {
-          s = p.n.toString();
-       } else {
-          // Try to handle decimal
-          let power = 0;
-          let tempD = d;
-          while (tempD > 1n && tempD % 10n === 0n) {
-             tempD /= 10n;
-             power++;
-          }
-          if (tempD === 1n) {
-             const nStr = p.n.toString();
-             if (nStr.length > power) {
-                s = nStr.slice(0, nStr.length - power) + '.' + nStr.slice(nStr.length - power);
-             } else {
-                s = '0.' + '0'.repeat(power - nStr.length) + nStr;
-             }
-             // Remove trailing zeros? Not critical for now.
-          } else {
-             s = p.n.toString(); // Fallback
-          }
-       }
-       
-       const nominalKey = ctx.key('__nominal__');
-       const idKey = ctx.internKey({ kind: 'Nominal', id: '#' + s });
-       const proof = ctx.internPrimitive('NominalProof');
-       const innerNs = ctx.internNamespace(new Map([[idKey, proof]]));
-       return ctx.internNamespace(new Map([[nominalKey, innerNs]]));
-    },
-    false
-  );
-  lib.set('Exact', exactFn);
+    const newEntries = new Map<any, MorfType>();
+    // Set 0: head
+    newEntries.set(ctx.key('0'), head);
+    // Set 1..N: tail
+    for(let i=0; i<len; i++) {
+        const val = tail.entries.get(ctx.key(i.toString()));
+        if(val) newEntries.set(ctx.key((i+1).toString()), val);
+    }
+    
+    // Set length
+    const nominalKey = ctx.key('__nominal__');
+    const newLenId = ctx.internKey({kind: 'Nominal', id: '#' + (len+1)});
+    const proof = ctx.internPrimitive('NominalProof');
+    const newLenNs = ctx.internNamespace(new Map([[nominalKey, ctx.internNamespace(new Map([[newLenId, proof]]))]]));
+    newEntries.set(ctx.key('length'), newLenNs);
+    
+    // Set Tuple tag
+    const tupleTag = tail.entries.get(nominalKey);
+    if(tupleTag) newEntries.set(nominalKey, tupleTag);
 
-  // =========================================================
-  // List Utilities
-  // =========================================================
-  
-  // List.Head(list) -> list[0]
-  const headFn = factory.create('Head', ['list'], (args, _) => {
-    const list = args.get('list');
-    if (!list || !isNamespace(list)) return ctx.NEVER;
-    return list.entries.get(ctx.key('0')) || ctx.VOID;
-  });
+    return ctx.internNamespace(newEntries);
+}
 
-  // List.Tail(list) -> list[1:] with re-indexing
-  const tailFn = factory.create('Tail', ['list'], (args, _) => {
-    const list = args.get('list');
+function mockTail(list: MorfType, ctx: MorfInterner): MorfType {
     if (!list || !isNamespace(list)) return ctx.NEVER;
     
     // Get length
     const lenKey = ctx.key('length');
     const lenVal = list.entries.get(lenKey);
-    // Extract #N from lenVal
-    // lenVal is like Exact{N} -> { __nominal__: { #N: Proof } }
     let lenNum = 0;
+    
     if (lenVal && isNamespace(lenVal)) {
         const inner = lenVal.entries.get(ctx.key('__nominal__'));
         if (inner && isNamespace(inner)) {
@@ -428,13 +445,9 @@ export function createStandardLib(ctx: MorfInterner): Map<string, MorfType> {
     }
     
     if (lenNum <= 1) {
-       // Return empty tuple: { length: #0, __nominal__: TupleTag }
-       // We need to reconstruct TupleTag... or just copy from input?
-       // Let's assume input has TupleTag.
-       const tupleTag = list.entries.get(ctx.key('__nominal__'));
-       
-       // Construct #0
+       // Return empty tuple
        const nominalKey = ctx.key('__nominal__');
+       const tupleTag = list.entries.get(nominalKey);
        const zeroIdKey = ctx.internKey({ kind: 'Nominal', id: '#0' });
        const proof = ctx.internPrimitive('NominalProof');
        const lenZeroInner = ctx.internNamespace(new Map([[zeroIdKey, proof]]));
@@ -443,20 +456,16 @@ export function createStandardLib(ctx: MorfInterner): Map<string, MorfType> {
        const entries = new Map<any, any>();
        if (tupleTag) entries.set(nominalKey, tupleTag);
        entries.set(lenKey, lenZero);
-       
        return ctx.internNamespace(entries);
     }
     
-    // Rebuild entries
     const newEntries = new Map<any, any>();
-    // Copy nominal tag
-    const tupleTag = list.entries.get(ctx.key('__nominal__'));
-    if (tupleTag) newEntries.set(ctx.key('__nominal__'), tupleTag);
+    const nominalKey = ctx.key('__nominal__');
+    const tupleTag = list.entries.get(nominalKey);
+    if (tupleTag) newEntries.set(nominalKey, tupleTag);
     
     // New length
     const newLen = lenNum - 1;
-    // Construct #NewLen
-    const nominalKey = ctx.key('__nominal__');
     const newLenIdKey = ctx.internKey({ kind: 'Nominal', id: '#' + newLen });
     const proof = ctx.internPrimitive('NominalProof');
     const newLenInner = ctx.internNamespace(new Map([[newLenIdKey, proof]]));
@@ -472,125 +481,4 @@ export function createStandardLib(ctx: MorfInterner): Map<string, MorfType> {
     }
     
     return ctx.internNamespace(newEntries);
-  });
-
-  // List.Concat(a, b)
-  const concatFn = factory.create('Concat', ['a', 'b'], (args, _) => {
-     const a = args.get('a');
-     const b = args.get('b');
-     if (!a || !isNamespace(a) || !b || !isNamespace(b)) return ctx.NEVER;
-     
-     // Helper to get length
-     const getLen = (ns: NamespaceType): number => {
-        const lenVal = ns.entries.get(ctx.key('length'));
-        if (!lenVal || !isNamespace(lenVal)) return 0;
-        const inner = lenVal.entries.get(ctx.key('__nominal__'));
-        if (!inner || !isNamespace(inner)) return 0;
-        for (const k of inner.entries.keys()) {
-            if (k.raw.kind === 'Nominal' && k.raw.id.startsWith('#')) {
-                return parseInt(k.raw.id.slice(1));
-            }
-        }
-        return 0;
-     };
-     
-     const lenA = getLen(a);
-     const lenB = getLen(b);
-     const newLen = lenA + lenB;
-     
-     const newEntries = new Map<any, any>();
-     
-     // Inherit tuple tag from A
-     const tupleTag = a.entries.get(ctx.key('__nominal__'));
-     if (tupleTag) newEntries.set(ctx.key('__nominal__'), tupleTag);
-     
-     // Set new length
-     const nominalKey = ctx.key('__nominal__');
-     const newLenIdKey = ctx.internKey({ kind: 'Nominal', id: '#' + newLen });
-     const proof = ctx.internPrimitive('NominalProof');
-     const newLenInner = ctx.internNamespace(new Map([[newLenIdKey, proof]]));
-     const newLenVal = ctx.internNamespace(new Map([[nominalKey, newLenInner]]));
-     newEntries.set(ctx.key('length'), newLenVal);
-     
-     // Copy A
-     for (let i = 0; i < lenA; i++) {
-        const val = a.entries.get(ctx.key(i.toString()));
-        if (val) newEntries.set(ctx.key(i.toString()), val);
-     }
-     // Copy B
-     for (let i = 0; i < lenB; i++) {
-        const val = b.entries.get(ctx.key(i.toString()));
-        if (val) newEntries.set(ctx.key((lenA + i).toString()), val);
-     }
-     
-     return ctx.internNamespace(newEntries);
-  });
-  
-  // List.Filter(list, pred) 
-  // Native implementation to avoid stack depth and performance issues in playground
-  const filterFn = factory.create('Filter', ['list', 'pred'], (args, execCtx) => {
-      const list = args.get('list');
-      const pred = args.get('pred'); // TypeFunction
-      
-      if (!list || !isNamespace(list) || !pred || !isTypeFunction(pred)) return ctx.NEVER;
-      
-      // Helper to get length (duplicate code, should refactor but fine for now)
-      const getLen = (ns: NamespaceType): number => {
-        const lenVal = ns.entries.get(ctx.key('length'));
-        if (!lenVal || !isNamespace(lenVal)) return 0;
-        const inner = lenVal.entries.get(ctx.key('__nominal__'));
-        if (!inner || !isNamespace(inner)) return 0;
-        for (const k of inner.entries.keys()) {
-            if (k.raw.kind === 'Nominal' && k.raw.id.startsWith('#')) {
-                return parseInt(k.raw.id.slice(1));
-            }
-        }
-        return 0;
-      };
-      
-      const len = getLen(list);
-      const keptItems: MorfType[] = [];
-      
-      for (let i = 0; i < len; i++) {
-          const item = list.entries.get(ctx.key(i.toString()));
-          if (!item) continue;
-          
-          // Apply predicate
-          const res = pred.apply(new Map([['item', item]]), execCtx);
-          if (res === True) {
-              keptItems.push(item);
-          }
-      }
-      
-      // Reconstruct Tuple
-      const nominalKey = ctx.key('__nominal__');
-      const tupleTag = list.entries.get(nominalKey);
-      
-      const newLen = keptItems.length;
-      const newLenIdKey = ctx.internKey({ kind: 'Nominal', id: '#' + newLen });
-      const proof = ctx.internPrimitive('NominalProof');
-      const newLenInner = ctx.internNamespace(new Map([[newLenIdKey, proof]]));
-      const newLenVal = ctx.internNamespace(new Map([[nominalKey, newLenInner]]));
-      
-      const newEntries = new Map<any, any>();
-      if (tupleTag) newEntries.set(nominalKey, tupleTag);
-      newEntries.set(ctx.key('length'), newLenVal);
-      
-      for (let i = 0; i < newLen; i++) {
-          newEntries.set(ctx.key(i.toString()), keptItems[i]);
-      }
-      
-      return ctx.internNamespace(newEntries);
-  });
-
-  const listNs = ctx.internNamespace(new Map([
-    [ctx.key('Head'), headFn],
-    [ctx.key('Tail'), tailFn],
-    [ctx.key('Concat'), concatFn],
-    [ctx.key('Filter'), filterFn]
-  ]));
-  
-  lib.set('List', listNs);
-
-  return lib;
 }

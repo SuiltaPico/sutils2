@@ -1,5 +1,5 @@
 import type { Hash } from './hashing';
-import type { Statement } from './ast';
+import type { Statement, Parameter } from './ast';
 
 // ============================================================================
 // 1. Pivot System (基准点系统)
@@ -100,7 +100,7 @@ export interface NeverType {
 export interface TypeFunctionType {
   readonly kind: 'TypeFunction';
   readonly name: string;
-  readonly params: string[];
+  readonly params: Parameter[];
   readonly isVariadic: boolean;
   
   // AST (用于优化执行)
@@ -151,7 +151,7 @@ export function prettyPrint(t: MorfType, depth = 0): string {
   if (isNever(t)) return 'Never';
   
   if (isTypeFunction(t)) {
-      return `Fn(${t.params.join(', ')})${t.isVariadic ? '...' : ''}`;
+      return `Fn(${t.params.map(p => p.name).join(', ')})${t.isVariadic ? '...' : ''}`;
   }
 
   if (isUnion(t)) {

@@ -5,6 +5,194 @@ import { getProperty, isSubtype } from './subtype';
 import { globalOracle } from './oracle';
 
 // ============================================================================
+// Arithmetic Operations
+// ============================================================================
+
+export function add(a: MorfType, b: MorfType, ctx: MorfInterner): MorfType {
+  return computeMath('Plus', a, b, ctx);
+}
+
+export function sub(a: MorfType, b: MorfType, ctx: MorfInterner): MorfType {
+  return computeMath('Minus', a, b, ctx);
+}
+
+export function mul(a: MorfType, b: MorfType, ctx: MorfInterner): MorfType {
+  return computeMath('Star', a, b, ctx);
+}
+
+export function div(a: MorfType, b: MorfType, ctx: MorfInterner): MorfType {
+  return computeMath('Slash', a, b, ctx);
+}
+
+export function mod(a: MorfType, b: MorfType, ctx: MorfInterner): MorfType {
+  return computeMath('Percent', a, b, ctx);
+}
+
+function computeMath(op: 'Plus' | 'Minus' | 'Star' | 'Slash' | 'Percent', a: MorfType, b: MorfType, ctx: MorfInterner): MorfType {
+  if (!isNamespace(a) || !isNamespace(b)) return ctx.NEVER;
+  if (!a.ordinal || !b.ordinal) return ctx.NEVER;
+  if (a.ordinal.kind !== 'Rat' || b.ordinal.kind !== 'Rat') return ctx.NEVER;
+
+  const l = a.ordinal;
+  const r = b.ordinal;
+  let resN = 0n;
+  let resD = 1n;
+
+  if (op === 'Plus') {
+    resN = l.n * r.d + r.n * l.d;
+    resD = l.d * r.d;
+  } else if (op === 'Minus') {
+    resN = l.n * r.d - r.n * l.d;
+    resD = l.d * r.d;
+  } else if (op === 'Star') {
+    resN = l.n * r.n;
+    resD = l.d * r.d;
+  } else if (op === 'Slash') {
+    resN = l.n * r.d;
+    resD = l.d * r.n;
+  } else if (op === 'Percent') {
+    // Basic modulo for Rat? Just returning Never for now or basic int mod if d=1
+    if (l.d === 1n && r.d === 1n) {
+      resN = l.n % r.n;
+      resD = 1n;
+    } else {
+      return ctx.NEVER;
+    }
+  }
+
+  // Simplify GCD & Normalize is handled by interner
+  
+  return ctx.internNamespace(new Map(), { kind: 'Rat', n: resN, d: resD });
+}
+
+// ============================================================================
+// Logic & Comparison Operations
+// ============================================================================
+
+export function eq(a: MorfType, b: MorfType, ctx: MorfInterner): MorfType {
+  return a === b ? getTrue(ctx) : getFalse(ctx);
+}
+
+export function neq(a: MorfType, b: MorfType, ctx: MorfInterner): MorfType {
+  return a !== b ? getTrue(ctx) : getFalse(ctx);
+}
+
+export function lt(a: MorfType, b: MorfType, ctx: MorfInterner): MorfType {
+  // Use isSubtype for structural lt? No, standard Lt is for ordinals or strict subtype check?
+  // Spec says: Lt operator is for Subtype relation: A < B iff A <: B
+  // But wait, the spec says "4.1 ... 映射子类型关系 A < B iff A subsetneq B"
+  // And evaluator implemented it as `isSubtype(left, right) && left !== right`.
+  return (isSubtype(a, b, ctx) && a !== b) ? getTrue(ctx) : getFalse(ctx);
+}
+
+export function lte(a: MorfType, b: MorfType, ctx: MorfInterner): MorfType {
+  return isSubtype(a, b, ctx) ? getTrue(ctx) : getFalse(ctx);
+}
+
+export function gt(a: MorfType, b: MorfType, ctx: MorfInterner): MorfType {
+  return (isSubtype(b, a, ctx) && a !== b) ? getTrue(ctx) : getFalse(ctx);
+}
+
+export function gte(a: MorfType, b: MorfType, ctx: MorfInterner): MorfType {
+  return isSubtype(b, a, ctx) ? getTrue(ctx) : getFalse(ctx);
+}
+
+export function and(a: MorfType, b: MorfType, ctx: MorfInterner): MorfType {
+  const True = getTrue(ctx);
+  return (a === True && b === True) ? True : getFalse(ctx);
+}
+
+export function or(a: MorfType, b: MorfType, ctx: MorfInterner): MorfType {
+  const True = getTrue(ctx);
+  return (a === True || b === True) ? True : getFalse(ctx);
+}
+
+export function not(a: MorfType, ctx: MorfInterner): MorfType {
+  const True = getTrue(ctx);
+  return a === True ? getFalse(ctx) : True;
+}
+
+// ============================================================================
+// Number System Bridges (Ord / Exact)
+// ============================================================================
+
+export function ord(exact: MorfType, ctx: MorfInterner): MorfType {
+  if (!isNamespace(exact)) return ctx.NEVER;
+  
+  // Look for __nominal__
+  const nominalKey = ctx.key('__nominal__');
+  const inner = exact.entries.get(nominalKey);
+  if (!inner || !isNamespace(inner)) return ctx.NEVER;
+  
+  // Look for ID inside inner
+  let nominalIdStr = '';
+  for (const k of inner.entries.keys()) {
+    if (k.raw.kind === 'Nominal') {
+       nominalIdStr = k.raw.id;
+       break;
+    }
+  }
+  if (!nominalIdStr || !nominalIdStr.startsWith('#')) return ctx.NEVER;
+  
+  const numStr = nominalIdStr.substring(1);
+  const parts = numStr.split('.');
+  let pivot: Pivot;
+  if (parts.length === 1) {
+     pivot = { kind: 'Rat', n: BigInt(parts[0]), d: 1n };
+  } else {
+     const fraction = parts[1];
+     const denominator = 10n ** BigInt(fraction.length);
+     const numerator = BigInt(parts[0] + fraction);
+     pivot = { kind: 'Rat', n: numerator, d: denominator };
+  }
+  
+  return ctx.internNamespace(new Map(), pivot);
+}
+
+export function exact(ordinal: MorfType, ctx: MorfInterner): MorfType {
+  if (!isNamespace(ordinal) || !ordinal.ordinal) return ctx.NEVER;
+   
+  const p = ordinal.ordinal;
+  if (p.kind !== 'Rat') return ctx.NEVER; 
+   
+  let s = '';
+  const d = p.d;
+  if (d === 1n) {
+     s = p.n.toString();
+  } else {
+     // Naive decimal conversion
+     const n = Number(p.n);
+     const den = Number(p.d);
+     s = (n / den).toString(); 
+  }
+   
+  const nominalKey = ctx.key('__nominal__');
+  const idKey = ctx.internKey({ kind: 'Nominal', id: '#' + s });
+  const proof = ctx.internPrimitive('NominalProof');
+  const innerNs = ctx.internNamespace(new Map([[idKey, proof]]));
+  return ctx.internNamespace(new Map([[nominalKey, innerNs]]));
+}
+
+// ============================================================================
+// Helpers
+// ============================================================================
+
+function getTrue(ctx: MorfInterner): MorfType {
+  // We need to fetch True from context or create it?
+  // Since we don't have access to global env here, we reconstruct it.
+  // It should be interned so safe to reconstruct.
+  // Or better, pass it in? 
+  // Let's rely on interner to return same object for same structure.
+  const BoolProof = ctx.internPrimitive('BoolProof');
+  return ctx.internNamespace(new Map([[ctx.key('True'), BoolProof]]));
+}
+
+function getFalse(ctx: MorfInterner): MorfType {
+  const BoolProof = ctx.internPrimitive('BoolProof');
+  return ctx.internNamespace(new Map([[ctx.key('False'), BoolProof]]));
+}
+
+// ============================================================================
 // Intersection (交集)
 // ============================================================================
 

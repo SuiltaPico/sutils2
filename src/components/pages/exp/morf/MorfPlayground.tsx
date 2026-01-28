@@ -115,13 +115,13 @@ const DEMO_QUICK_SORT = `// Morf 0.1: QuickSort Demo
 let quickSort = (list) {
   Sys.Cond {
     // Case 1: Empty List (length #0) -> Return list
-    { case: Sys.Eq(list.length, #0), do: () { list } },
+    Branch { Sys.Eq(list.length, #0), () { list } },
     
     // Case 2: Single Item (length #1) -> Return list
-    { case: Sys.Eq(list.length, #1), do: () { list } },
+    Branch { Sys.Eq(list.length, #1), () { list } },
     
     // Case 3: Recursive Step
-    { case: True, do: () {
+    Else { () {
         let pivot = List.Head(list)
         let rest  = List.Tail(list)
         
@@ -223,22 +223,22 @@ let validateCartItem = (item) {
   
   Sys.Cond {
     // If price invalid
-    { case: Sys.Eq(validPrice, False), do: () { 
+    Branch { Sys.Eq(validPrice, False), () { 
         "Error: Invalid Price (Must be > 0)" 
     }},
     
     // If price valid, check category rules
-    { case: True, do: () {
+    Else { () {
         Sys.Cond {
         
            // CASE: Physical Item
            // Requirement: Must have non-void 'address'
-           { case: Sys.Eq(item.category, Category.Physical), do: () {
+           Branch { Sys.Eq(item.category, Category.Physical), () {
                Sys.Cond {
-                  { case: IsVoid(item.address), do: () {
+                  Branch { IsVoid(item.address), () {
                       "Error: Physical item missing address"
                   }},
-                  { case: True, do: () { 
+                  Else { () { 
                       "Valid Physical Item" 
                   }}
                }
@@ -246,19 +246,19 @@ let validateCartItem = (item) {
            
            // CASE: Virtual Item
            // Requirement: Must have non-void 'email'
-           { case: Sys.Eq(item.category, Category.Virtual), do: () {
+           Branch { Sys.Eq(item.category, Category.Virtual), () {
                Sys.Cond {
-                  { case: IsVoid(item.email), do: () {
+                  Branch { IsVoid(item.email), () {
                       "Error: Virtual item missing email"
                   }},
-                  { case: True, do: () { 
+                  Else { () { 
                       "Valid Virtual Item" 
                   }}
                }
            }},
            
            // CASE: Unknown
-           { case: True, do: () { "Error: Unknown Category" } }
+           Else { () { "Error: Unknown Category" } }
         }
     }}
   }
@@ -316,7 +316,14 @@ export default function MorfPlayground() {
           
        for (const k of keys) {
           const val = args.get(k.toString());
-          if (val) msg += IR.prettyPrint(val) + " ";
+          if (val) {
+            // Unquote strings for cleaner output, but keep other types debug-friendly
+            if (IR.isPrimitive(val) && val.value !== 'BoolProof') {
+               msg += val.value + " ";
+            } else {
+               msg += IR.prettyPrint(val) + " ";
+            }
+          }
        }
        setLogs(prev => [...prev, { type: 'log', msg }]);
     };
@@ -350,6 +357,12 @@ export default function MorfPlayground() {
         },
       };
       
+      // Load Prelude (Layer 2) into the same env.
+      // This defines Console, List, Assert, etc.
+      const preludeParser = new Parser.Parser(StdLib.PRELUDE_SOURCE, interner);
+      const preludeAst = preludeParser.parseProgram();
+      Evaluator.evaluateBlock(preludeAst, env, execCtx);
+
       const parser = new Parser.Parser(code(), interner);
       const ast = parser.parseProgram();
       Evaluator.evaluateBlock(ast, env, execCtx);

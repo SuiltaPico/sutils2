@@ -10,7 +10,8 @@ export const routes = [
     path: "/exp/sql-lab",
     name: "在线 SQL 实验",
     component: lazy(() => import("./components/pages/exp/sql-lab")),
-    description: "切换 sql.js / @sqlite.org/sqlite-wasm / @duckdb/duckdb-wasm 执行 SQL",
+    description:
+      "切换 sql.js / @sqlite.org/sqlite-wasm / @duckdb/duckdb-wasm 执行 SQL",
     done: false,
   },
   // --- Data ---
@@ -30,12 +31,23 @@ export const routes = [
   //   path: "/data/master/json",
   //   component: lazy(() => import("./components/pages/data/master/json")),
   // },
+  {
+    path: "/data/structure/node_pointer",
+    name: "节点指针实验室",
+    component: lazy(
+      () =>
+        import("./components/pages/data/structure/node_pointer/NodePointer")
+    ),
+    description: "节点指针实验室，展示数据结构在实际应用中的表现。",
+    done: false,
+  },
 
   // --- AI ---
   {
     path: "/ai/selai",
     name: "SelAI",
-    description: "使用 TensorFlow.js 和 WebGPU/WebGL 在浏览器运行在线学习的 Transformer 模型。（已废弃）",
+    description:
+      "使用 TensorFlow.js 和 WebGPU/WebGL 在浏览器运行在线学习的 Transformer 模型。（已废弃）",
     component: lazy(() => import("./components/pages/ai/selai")),
     deprecated: true,
   },
@@ -63,14 +75,18 @@ export const routes = [
   {
     path: "/img/morphology-playground",
     name: "图像形态学演练场",
-    description: "二值图像的膨胀 / 腐蚀操作，可自定义卷积核和参考点，并提供多种结构元素预设。",
-    component: lazy(() => import("./components/pages/img/morphology-playground")),
+    description:
+      "二值图像的膨胀 / 腐蚀操作，可自定义卷积核和参考点，并提供多种结构元素预设。",
+    component: lazy(
+      () => import("./components/pages/img/morphology-playground")
+    ),
     done: false,
   },
   {
     path: "/img/edge-detect",
     name: "图像变换",
-    description: "图像灰度化、直方图均衡化，以及拉普拉斯 / Canny 边缘检测（基于灰度图），支持调节参数并实时预览。",
+    description:
+      "图像灰度化、直方图均衡化，以及拉普拉斯 / Canny 边缘检测（基于灰度图），支持调节参数并实时预览。",
     component: lazy(() => import("./components/pages/img/edge-detect")),
     done: false,
   },
@@ -78,7 +94,8 @@ export const routes = [
   {
     path: "/exp/wasm-aot-calc",
     name: "WASM AOT 计算器",
-    description: "WASM AOT 计算器，把数学表达式即时编译 (AOT) 成 WebAssembly 并执行",
+    description:
+      "WASM AOT 计算器，把数学表达式即时编译 (AOT) 成 WebAssembly 并执行",
     component: lazy(() => import("./components/pages/exp/wasm-aot-calc")),
     done: true,
   },
@@ -93,9 +110,7 @@ export const routes = [
     path: "/exp/mass-spring-lattice",
     name: "质点弹簧晶格物理模拟研究",
     description: "使用 p5.js 的质点弹簧晶格物理模拟（当前仅画布占位版本）。",
-    component: lazy(
-      () => import("./components/pages/exp/mass-spring-lattice")
-    ),
+    component: lazy(() => import("./components/pages/exp/mass-spring-lattice")),
     done: false,
   },
   {
@@ -164,7 +179,8 @@ export const routes = [
     path: "/exp/shader-playground",
     name: "Shader 演练场",
     component: lazy(() => import("./components/pages/exp/shader-playground")),
-    description: "Shader 演练场，支持 WebGL(GLSL ES 1.0)、WebGL2(GLSL ES 3.0)、WebGPU(WGSL)",
+    description:
+      "Shader 演练场，支持 WebGL(GLSL ES 1.0)、WebGL2(GLSL ES 3.0)、WebGPU(WGSL)",
     done: false,
   },
   {
@@ -235,33 +251,39 @@ export const routes = [
     path: "/exp/game/wayland",
     name: "Wayland 战斗原型",
     description: "1D 编队 · RTwP 基础循环与指令（转位/替位/施放）",
-    component: lazy(() => import("./components/pages/exp/game/wayland/sandbox")),
+    component: lazy(
+      () => import("./components/pages/exp/game/wayland/sandbox")
+    ),
   },
   {
     path: "/exp/game/urbanflow",
     name: "UrbanFlow 网格编辑器（原型）",
     description: "城市交通模拟器：网格城市编辑与可视化（原型）",
-    component: lazy(() => import("./components/pages/exp/game/urbanflow/index")),
+    component: lazy(
+      () => import("./components/pages/exp/game/urbanflow/index")
+    ),
   },
   {
     path: "/exp/game/tower",
     name: "塔防游戏",
-    description: "塔防游戏，玩家扮演指挥员，指挥机械军队和角色，对抗敌人，保卫基地。",
+    description:
+      "塔防游戏，玩家扮演指挥员，指挥机械军队和角色，对抗敌人，保卫基地。",
     component: lazy(() => import("./components/pages/exp/game/tower/demo")),
   },
   {
     path: "/exp/game/spaceflight",
     name: "星际航行",
-    description: "Phaser + Matter.js 太空飞行 Demo：操控飞船、击碎陨石并吸附矿物。",
-    component: lazy(() => import("./components/pages/exp/game/spaceflight/demo")),
+    description:
+      "Phaser + Matter.js 太空飞行 Demo：操控飞船、击碎陨石并吸附矿物。",
+    component: lazy(
+      () => import("./components/pages/exp/game/spaceflight/demo")
+    ),
   },
   {
     path: "/game/chaotic-pendulum",
     name: "混沌摆（双摆）",
     description: "双摆混沌演示：可调长度/质量/阻尼，支持拖影显示",
-    component: lazy(
-      () => import("./components/pages/game/chaotic-pendulum")
-    ),
+    component: lazy(() => import("./components/pages/game/chaotic-pendulum")),
     done: false,
   },
   {
@@ -274,7 +296,9 @@ export const routes = [
   {
     path: "/game/arknights-td/designer",
     name: "明日方舟塔防 - 设计器",
-    component: lazy(() => import("./components/pages/game/arknights-td/designer")),
+    component: lazy(
+      () => import("./components/pages/game/arknights-td/designer")
+    ),
   },
   {
     path: "/exp/mind-map",
@@ -288,7 +312,8 @@ export const routes = [
   {
     path: "/exp/nlp/text-stats",
     name: "文本统计分析",
-    description: "分析文本的基础计数、信息熵、词汇多样性、复杂度、可读性、词频分布及主题连贯性",
+    description:
+      "分析文本的基础计数、信息熵、词汇多样性、复杂度、可读性、词频分布及主题连贯性",
     component: lazy(() => import("./components/pages/exp/nlp/text-stats")),
   },
   // {

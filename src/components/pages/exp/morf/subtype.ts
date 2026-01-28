@@ -81,7 +81,21 @@ export function getProperty(
     return ctx.VOID; // 默认值 Void
   }
 
-  // Union or others -> Void (Spec pending on Union distribution in getProperty)
+  // 3. Union Logic (Spec 2.2.1 Distribution)
+  if (isUnion(type)) {
+    const results = new Set<MorfType>();
+    for (const member of type.types) {
+      results.add(getProperty(member, key, ctx));
+    }
+    return ctx.internUnion(results);
+  }
+
+  // 4. Never Logic
+  if (isNever(type)) {
+    return ctx.NEVER;
+  }
+
+  // Others -> Void
   return ctx.VOID;
 }
 

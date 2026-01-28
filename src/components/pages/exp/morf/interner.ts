@@ -7,6 +7,45 @@ import { isNamespace, isUnion, isNever, isPrimitive } from './ir';
 // Equality Checks (用于哈希冲突时的深度比较)
 // ============================================================================
 
+function gcd(a: bigint, b: bigint): bigint {
+  a = a < 0n ? -a : a;
+  b = b < 0n ? -b : b;
+  while (b > 0n) {
+    let t = b;
+    b = a % b;
+    a = t;
+  }
+  return a;
+}
+
+function normalizePivot(p: Pivot): Pivot {
+  if (p.kind === 'Rat') {
+    if (p.d === 0n) throw new Error("Division by zero in Rat");
+    if (p.n === 0n) return { kind: 'Rat', n: 0n, d: 1n };
+    
+    let common = gcd(p.n, p.d);
+    let n = p.n / common;
+    let d = p.d / common;
+    
+    // Ensure denominator is positive
+    if (d < 0n) {
+      n = -n;
+      d = -d;
+    }
+    
+    if (n === p.n && d === p.d) return p;
+    return { kind: 'Rat', n, d };
+  }
+  
+  if (p.kind === 'Expr') {
+    const newArgs = p.args.map(normalizePivot);
+    // Simple check if args changed could be added, but mapping is safe
+    return { ...p, args: newArgs };
+  }
+  
+  return p;
+}
+
 function pivotEquals(a: Pivot, b: Pivot): boolean {
   if (a.kind !== b.kind) return false;
   if (a.kind === 'Rat') {
@@ -116,6 +155,15 @@ export class MorfInterner {
   // --------------------------------------------------------------------------
 
   internKey(raw: KeyRaw): Key {
+    // Auto-normalize Pivot in Keys
+    if (raw.kind === 'Lt' || raw.kind === 'Gt' || raw.kind === 'Eq') {
+      const normalizedPivot = normalizePivot(raw.pivot);
+      // Create new raw object to avoid mutation if needed, or just specific update
+      if (normalizedPivot !== raw.pivot) {
+         raw = { ...raw, pivot: normalizedPivot };
+      }
+    }
+
     const hash = hashKeyRaw(raw);
     
     const existing = this.keyPool.get(hash, (k) => keyRawEquals(k.raw, raw));
@@ -144,6 +192,11 @@ export class MorfInterner {
 
   internNamespace(entries: Map<Key, MorfType>, ordinal?: Pivot): NamespaceType {
     if (entries.size === 0 && !ordinal) return this.VOID;
+
+    // Auto-normalize ordinal
+    if (ordinal) {
+      ordinal = normalizePivot(ordinal);
+    }
 
     const hash = hashNamespace(entries, ordinal);
     const existing = this.typePool.get(hash, (t) => {
@@ -179,14 +232,19 @@ export class MorfInterner {
     }
 
     // 自动扁平化: 如果成员中有 Union，将其展开
+    // 同时移除 Never (Never | T = T)
     const flattened = new Set<MorfType>();
     for (const t of types) {
+      if (isNever(t)) continue;
       if (isUnion(t)) {
         for (const sub of t.types) flattened.add(sub);
       } else {
         flattened.add(t);
       }
     }
+    
+    // 如果扁平化后为空 (说明全是 Never)
+    if (flattened.size === 0) return this.NEVER;
     
     // 如果扁平化后只剩一个
     if (flattened.size === 1) return flattened.values().next().value!;

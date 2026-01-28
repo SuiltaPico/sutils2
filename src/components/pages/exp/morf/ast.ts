@@ -41,9 +41,63 @@ export type Expression =
   | CallExpression
   | MemberExpression
   | FunctionExpression
+  | BlockExpression
+  | DirectlyExpression
   | NamespaceLiteral
   | UnionLiteral
-  | TupleLiteral;
+  | TupleLiteral
+  | BinaryExpression
+  | UnaryExpression;
+
+// ----------------------------------------------------------------------------
+// Core Structures
+// ----------------------------------------------------------------------------
+
+/**
+ * 块表达式: ( stmt1; stmt2; expr )
+ * 圆括号包裹的一系列语句，最后一个表达式的值作为结果。
+ */
+export interface BlockExpression {
+  kind: 'Block';
+  statements: Statement[];
+}
+
+/**
+ * 逃逸表达式: directly { expr }
+ */
+export interface DirectlyExpression {
+  kind: 'Directly';
+  expression: Expression;
+}
+
+/**
+ * 函数参数定义，支持修饰符
+ */
+export interface Parameter {
+  name: string;
+  modifier?: 'wrap';
+}
+
+/**
+ * 二元表达式: a + b, a && b
+ */
+export interface BinaryExpression {
+  kind: 'Binary';
+  op: 'Plus' | 'Minus' | 'Star' | 'Slash' | 'Percent' 
+    | 'DoubleEq' | 'BangEq' | 'Lt' | 'Gt' | 'LtEq' | 'GtEq'
+    | 'DoubleAnd' | 'DoubleOr' | 'Intersection' | 'Union';
+  left: Expression;
+  right: Expression;
+}
+
+/**
+ * 一元表达式: !a, -a
+ */
+export interface UnaryExpression {
+  kind: 'Unary';
+  op: 'Bang' | 'Minus';
+  argument: Expression;
+}
 
 /**
  * 静态常量。
@@ -90,11 +144,10 @@ export interface MemberExpression {
 
 /**
  * 函数定义: (args) { body }
- * 这是本次重构的核心：body 不再是 string，而是预编译好的 AST。
  */
 export interface FunctionExpression {
   kind: 'Function';
-  params: string[];
+  params: Parameter[];
   isVariadic: boolean;
   body: Statement[];
   hash: Hash; // 预计算的 Hash，基于源码或结构

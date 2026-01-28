@@ -1,10 +1,12 @@
 import { Lexer, Token, TokenType } from './lexer';
 import { MorfInterner } from './interner';
 import { hashString, mix } from './hashing';
+import { hashFunctionStructural } from './ast-hashing';
 import type { 
   Statement, Expression, 
   LetStatement, ExpressionStatement,
-  NamespaceLiteral, NamespaceEntry 
+  NamespaceLiteral, NamespaceEntry,
+  Parameter
 } from './ast';
 
 // ============================================================================
@@ -78,6 +80,107 @@ export class Parser {
   }
 
   public parseExpression(): Expression {
+    return this.parseLogicalOr();
+  }
+
+  // --------------------------------------------------------------------------
+  // Precedence Levels (Recursive Descent)
+  // --------------------------------------------------------------------------
+
+  private parseLogicalOr(): Expression {
+    let left = this.parseLogicalAnd();
+    while (this.matches('DoubleOr')) {
+      this.eat('DoubleOr');
+      const right = this.parseLogicalAnd();
+      left = { kind: 'Binary', op: 'DoubleOr', left, right };
+    }
+    return left;
+  }
+
+  private parseLogicalAnd(): Expression {
+    let left = this.parseUnion();
+    while (this.matches('DoubleAnd')) {
+      this.eat('DoubleAnd');
+      const right = this.parseUnion();
+      left = { kind: 'Binary', op: 'DoubleAnd', left, right };
+    }
+    return left;
+  }
+
+  private parseUnion(): Expression {
+    let left = this.parseIntersection();
+    while (this.matches('Pipe')) {
+      this.eat('Pipe');
+      const right = this.parseIntersection();
+      left = { kind: 'Binary', op: 'Union', left, right };
+    }
+    return left;
+  }
+
+  private parseIntersection(): Expression {
+    let left = this.parseEquality();
+    while (this.matches('Ampersand')) {
+      this.eat('Ampersand');
+      const right = this.parseEquality();
+      left = { kind: 'Binary', op: 'Intersection', left, right };
+    }
+    return left;
+  }
+
+  private parseEquality(): Expression {
+    let left = this.parseComparison();
+    while (this.matches('DoubleEq') || this.matches('BangEq')) {
+      const op = this.currentToken.type as 'DoubleEq' | 'BangEq';
+      this.eat(op);
+      const right = this.parseComparison();
+      left = { kind: 'Binary', op, left, right };
+    }
+    return left;
+  }
+
+  private parseComparison(): Expression {
+    let left = this.parseAddition();
+    while (
+      this.matches('Lt') || this.matches('Gt') || 
+      this.matches('LtEq') || this.matches('GtEq')
+    ) {
+      const op = this.currentToken.type as 'Lt' | 'Gt' | 'LtEq' | 'GtEq';
+      this.eat(op);
+      const right = this.parseAddition();
+      left = { kind: 'Binary', op, left, right };
+    }
+    return left;
+  }
+
+  private parseAddition(): Expression {
+    let left = this.parseMultiplication();
+    while (this.matches('Plus') || this.matches('Minus')) {
+      const op = this.currentToken.type as 'Plus' | 'Minus';
+      this.eat(op);
+      const right = this.parseMultiplication();
+      left = { kind: 'Binary', op, left, right };
+    }
+    return left;
+  }
+
+  private parseMultiplication(): Expression {
+    let left = this.parseUnary();
+    while (this.matches('Star') || this.matches('Slash') || this.matches('Percent')) {
+      const op = this.currentToken.type as 'Star' | 'Slash' | 'Percent';
+      this.eat(op);
+      const right = this.parseUnary();
+      left = { kind: 'Binary', op, left, right };
+    }
+    return left;
+  }
+
+  private parseUnary(): Expression {
+    if (this.matches('Bang') || this.matches('Minus')) {
+      const op = this.currentToken.type as 'Bang' | 'Minus';
+      this.eat(op);
+      const arg = this.parseUnary();
+      return { kind: 'Unary', op, argument: arg };
+    }
     return this.parseCallAndMemberExpr();
   }
 
@@ -207,19 +310,60 @@ export class Parser {
       return this.parseTupleLiteral();
     }
     
+    if (this.matches('Directly')) {
+      return this.parseDirectlyExpression();
+    }
+
     if (this.matches('LParen')) {
       const sig = this.tryParseFunctionSignature();
       if (sig) {
          return this.parseFunctionDefinition(sig.params, sig.isVariadic);
       }
 
-      this.eat('LParen');
-      const expr = this.parseExpression();
-      this.eat('RParen');
-      return expr;
+      // Check if it's a Block Expression (contains semicolons or multiple statements)
+      // or just a grouped expression.
+      return this.parseParenOrBlockExpression();
     }
 
     throw new Error(`Unexpected token: ${this.currentToken.type}`);
+  }
+
+  private parseDirectlyExpression(): Expression {
+    this.eat('Directly');
+    this.eat('LBrace');
+    const expr = this.parseExpression();
+    this.eat('RBrace');
+    return { kind: 'Directly', expression: expr };
+  }
+
+  private parseParenOrBlockExpression(): Expression {
+    this.eat('LParen');
+    
+    // 如果紧接着是 RParen，就是一个空的 Block
+    if (this.matches('RParen')) {
+      this.eat('RParen');
+      return { kind: 'Block', statements: [] };
+    }
+
+    const stmts: Statement[] = [];
+    while (!this.matches('RParen') && !this.matches('EOF')) {
+      stmts.push(this.parseStatement());
+      if (this.matches('Semicolon')) {
+        this.eat('Semicolon');
+      }
+    }
+    
+    this.eat('RParen');
+
+    // 优化：如果只有一个 ExprStmt 且没有分号，它可能只是一个普通的分组表达式
+    // 但为了保持语义一致性，统一返回 Block 或者在 Evaluator 中处理。
+    // 根据 Spec，( let a = 1; a ) 是 Block。
+    if (stmts.length === 1 && stmts[0].kind === 'ExprStmt') {
+       // 这里可以保留为 Block，或者如果是纯表达式则解包
+       // 但为了支持 (stmt; stmt)，返回 Block 更通用
+    }
+
+    return { kind: 'Block', statements: stmts };
   }
 
   private parseNamespaceLiteral(): NamespaceLiteral {
@@ -326,13 +470,13 @@ export class Parser {
     return { kind: 'TupleLiteral', elements };
   }
 
-  private tryParseFunctionSignature(): { params: string[], isVariadic: boolean } | null {
+  private tryParseFunctionSignature(): { params: Parameter[], isVariadic: boolean } | null {
     const savedState = this.lexer.save();
     const savedToken = this.currentToken;
     
     try {
        this.eat('LParen');
-       const params: string[] = [];
+       const params: Parameter[] = [];
        let isVariadic = false;
        
        if (!this.matches('RParen')) {
@@ -341,7 +485,7 @@ export class Parser {
              this.eat('Ellipsis');
              if (this.matches('Identifier')) {
                  const name = this.eat('Identifier').value;
-                 params.push(name);
+                 params.push({ name });
              } else {
                  throw new Error("Expected identifier after ...");
              }
@@ -351,9 +495,15 @@ export class Parser {
              break;
            }
            
+           let modifier: 'wrap' | undefined;
+           if (this.matches('Wrap')) {
+             this.eat('Wrap');
+             modifier = 'wrap';
+           }
+
            if (this.matches('Identifier')) {
               const name = this.eat('Identifier').value;
-              params.push(name);
+              params.push({ name, modifier });
            } else {
               throw new Error("Expected identifier");
            }
@@ -380,12 +530,9 @@ export class Parser {
     }
   }
 
-  private parseFunctionDefinition(params: string[], isVariadic: boolean): Expression {
+  private parseFunctionDefinition(params: Parameter[], isVariadic: boolean): Expression {
     // 1. Consume LBrace
     const startToken = this.eat('LBrace');
-    
-    // We need to capture the raw source for hashing (to maintain stable Type IDs)
-    const startPos = startToken.end; 
     
     // 2. Parse Body AST
     // 注意：这里我们递归调用 parseProgram 来解析 Block 内的语句
@@ -403,15 +550,10 @@ export class Parser {
     }
     
     const endToken = this.eat('RBrace');
-    const endPos = endToken.start;
-    
-    const bodySource = this.input.slice(startPos, endPos);
     
     // 3. Calculate Hash
-    const name = "anonymous";
-    let h = mix(hashString('TypeFunction'), hashString(name));
-    for (const p of params) h = mix(h, hashString(p));
-    h = mix(h, hashString(bodySource));
+    // TODO: update hashFunctionStructural to accept Parameter[]
+    const h = hashFunctionStructural(params.map(p => p.name), isVariadic, body);
     
     return {
       kind: 'Function',
