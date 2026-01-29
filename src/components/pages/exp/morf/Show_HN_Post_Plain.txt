@@ -1,0 +1,100 @@
+Hi HN,
+
+I spent the last 5 days designing a programming language that challenges some fundamental assumptions we've been carrying for decades. It's called Morf, and it's built on one radical idea: what if types and values were the same thing?
+
+What makes Morf different?
+
+1. No more `if (x === null)` hell
+
+In Morf, `Empty` is mathematically defined to propagate through any property access. Optional chaining isn't syntax sugar—it's a theorem:
+
+  user.profile.name  // If ANY step is Empty, result is Empty
+
+No `?.` needed. It's just how the type system works.
+
+2. State machines become types
+
+Remember writing `if (order.status !== 'PAID') throw Error(...)`? In Morf, different states ARE different types:
+
+  impl PayFlow for Pending {
+    Pay: (self, id) { Paid { ...self, paidAt: Now{} } }
+  }
+
+  // This won't compile—Shipped doesn't have Pay method
+  shippedOrder.Pay{}  // Type error
+
+The compiler physically prevents illegal state transitions. No defensive code needed.
+
+3. ORMs without decorator hell
+
+  let UserSchema = {
+    id: Int{64} & PK & AI,          // Intersection, not magic
+    email: Varchar{100} & Null       // Composable constraints
+  }
+
+Everything is just namespace intersection. No `@Column()`.
+
+4. Query builders that feel like math
+
+  let query = UserTable.Find{}
+    .Select{ "id", "email" }
+    & ActiveUserFilter  // Just merge namespaces!
+    & AdultFilter
+
+Filters are data, not method chains. You can store them, compose them, serialize them.
+
+5. Mutable state without the pain
+
+Variables are "slots" that auto-unbox. No `Ref` wrappers, no `.current`. Pass `mut` parameters to share state across functions.
+
+6. Compile-time effect tracking
+
+Compiler tracks side effects at compile time. Pure code can be safely optimized/reordered. Effects propagate like type constraints.
+
+7. Numbers are ranges are types
+
+  let age: IntervalCC<0, 120> = 25   // [0, 120] closed interval
+  let positive: Gt<0> = 5             // All numbers > 0
+
+  // These compose with intersection
+  type SmallPositive = Gt<0> & Lt<100>  // → IntervalOO<0, 100>
+
+No need for separate validation logic. The type system enforces numeric constraints algebraically.
+
+8. Recursive types that make sense
+
+System distinguishes structural recursion (legal, lazy) from computational recursion (collapses to Never). Infinite shapes are useful, infinite computation is a contradiction.
+
+The core idea: "Nominality as Property"
+
+Most languages force you to choose: structural typing (flexible but unsafe) or nominal typing (safe but rigid).
+
+Morf says: a name is just a special, unforgeable property. You get structural flexibility AND identity uniqueness:
+
+  let Pending = Order & { status: "Pending" }
+  let Paid = Order & { status: "Paid" }
+
+  // These are mutually exclusive because "Pending" ≠ "Paid"
+  Intersection{ Pending, Paid }  // → Never
+
+Bonus: Nominal symbols are globally unique without central registry—no coordination needed for identity.
+
+What I HAVEN'T built yet
+
+This is a design spec, not production-ready. No runtime exists yet. Performance unknowns: type interning, structural sharing overhead, recursive type checking. Error messages need work.
+
+Why I'm sharing this
+
+I used AI (Claude) to help formalize the spec in 5 days. I'd love feedback: Have you seen "nominality as property" elsewhere? What edge cases am I missing?
+
+Read the full spec: https://gist.github.com/SuiltaPico/cf97c20c2ebfb1f2056ddef22cf624c4
+
+---
+
+TL;DR: I designed a language where types are values, state machines are types, optional chaining is a theorem, mutability doesn't break purity, and side effects are compile-time checkable. It's probably overengineered, definitely experimental, but I think it points toward something real.
+
+What do you think?
+
+---
+
+P.S. I'm a solo developer who loves type theory but hates boilerplate. This is my attempt to have both. Roast me gently (or don't—I can take it).
