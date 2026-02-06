@@ -242,6 +242,47 @@ $$
 $$
 
 
+### 2.3.10 具名空间构造器
+
+通过 `Nominal.createNs` 创建的具名空间（NamedNamespace）不仅仅是类型定义，它自动获得**构造器**能力。
+
+#### 构造调用语法
+具名空间 `T` 可以像函数一样被调用：`T { ...args }`。这提供了一种基于原型的对象构造方式。
+
+#### 构造语义
+调用 `T { ... }` 等价于执行以下步骤：
+
+1.  **参数映射**：将传入的实参映射到 `T` 的属性键上。
+    *   **顺序依据**：映射依据 `T` 定义时的**键声明顺序**。实现必须保留 `createNs` 传入对象的键顺序元数据。
+    *   **映射规则**：遵循 **4.3.3** 定义的函数参数绑定算法（命名优先，位置补齐）。
+2.  **实例化覆盖**：生成一个新的命名空间，其结构为 `{ ...T, ...mapped_args }`。
+3.  **类型检查**：对于每一个被覆盖的键 `k`，验证 `mapped_args[k] <: T[k]`。即新值必须符合原属性的类型约束。
+
+#### 示例
+
+```morf
+// 定义 Point 类型，确立了 x, y, z 的顺序
+let Point = Nominal.createNs { 
+  x: Number, 
+  y: Number,
+  z: Number
+}
+
+// 1. 混合参数 (命名优先，位置补齐)
+// b: 2 显式绑定
+// 1 作为第一个位置参数，匹配第一个未绑定的键 -> a (假设定义顺序为 a,b,c)
+// 注意：本例中 Point 定义顺序为 x, y, z
+let p = Point { y: 20, 10 }
+// 解析：
+// - y 显式绑定为 20
+// - 10 匹配第一个未绑定键 -> x
+// - z 未被匹配，保留原值 Number
+// 结果: { ...Point, x: 10, y: 20, z: Number }
+
+// 2. 类型检查
+// Point { x: "error" } // 错误：String 不是 Number 的子类型
+```
+
 ### 2.4 复合结构
 
 #### 2.4.1 函数
@@ -295,6 +336,20 @@ $$
 - **析取（并类型）**：`A | B` 的类型逻辑规范形必须为 `DiSet{A, B}`，并遵循 `DiSet` 的扁平化/去重/单元素消除/空析取规则（见 2.3.7）。
 - **合取（交类型）**：`A & B` 的类型逻辑规范形必须为 `ConSet{A, B}`，并遵循 `ConSet` 的扁平化/去重/单元素消除/空合取规则（见 2.3.7）。若约束不可满足，实现必须将其规范化为 `Never`。
 - **补集**：`~A` 表示 `Uni` 中不属于 `A` 的部分；其语义模型解释为 `Uni - A`（见 2.3.6）。实现可以采用等价的逻辑归约表示，但必须保持与子类型判定一致。
+
+#### 3.2.1 前缀语法糖
+
+为了方便在多行中书写联合或交叉类型，Morf 允许在类型表达式的首项前添加 `|` 或 `&`，其语义与省略该符号相同。
+
+* **前缀并集**: `| A | B` 等价于 `A | B`。
+* **前缀交集**: `& A & B` 等价于 `A & B`。
+
+```morf
+let MultiLineUnion = 
+  | TypeA
+  | TypeB
+  | TypeC
+```
 
 ### 3.3 展开与剩余参数算符
 
@@ -371,7 +426,7 @@ let withExtra = [0, ...arr1, 99]
 使用 `...[]` 收集所有未匹配的位置参数（数字索引键）。
 
 * **语法**: `(...[]params) { expr }`
-* **语义**: `params` 接收所有剩余位置参数，组成序列（Seq）
+* **语义**: `params` 接收所有剩余位置参数，组成序列（`Seq`）
 * **类型**: `params` 的类型为 `Seq`
 
 **示例**:
@@ -524,7 +579,7 @@ obj[key]        // 1
 **命名空间键示例**:
 ```morf
 // 使用符号作为键
-let sym = Symbol.Create{}
+let sym = Symbol.create{}
 let secretData = { [sym]: "Hidden Value" }
 
 secretData[sym]       // "Hidden Value"
@@ -671,21 +726,21 @@ obj[key]{ arg }             // 动态访问后调用
 
 Morf 提供标准的算术运算符，用于数值计算与字符串拼接。
 
-*   **加法**: `a + b`
-*   **减法**: `a - b`
-*   **乘法**: `a * b`
-*   **除法**: `a / b`
-*   **取余**: `a % b`
-*   **负号**: `-a` (一元)
+* **加法**: `a + b`
+* **减法**: `a - b`
+* **乘法**: `a * b`
+* **除法**: `a / b`
+* **取余**: `a % b`
+* **负号**: `-a` (一元)
 
 #### 3.6.1 运算规则
 
-*   **数值运算**: 当操作数均为数值类型时，执行数学运算。
-    *   **类型提升**: 混合类型的数值运算会自动提升到公共类型（见 5.4.4）。
-    *   **溢出检查**: 默认启用溢出检查，溢出时抛出异常（见 5.4.7）。
-    *   **除零**: 整数除零引发异常；浮点数除零遵循 IEEE 754（产生 `Infinity` 或 `NaN`）。
-*   **字符串拼接**: `+` 运算符可用于 `String + String`，表示字符串连接。
-*   **不可重载**: 用户无法重载这些运算符。
+* **数值运算**: 当操作数均为数值类型时，执行数学运算。
+  * **类型提升**: 混合类型的数值运算会自动提升到公共类型（见 5.4.4）。
+  * **溢出检查**: 默认启用溢出检查，溢出时抛出异常（见 5.4.7）。
+  * **除零**: 整数除零引发异常；浮点数除零遵循 IEEE 754（产生 `Infinity` 或 `NaN`）。
+* **字符串拼接**: `+` 运算符可用于 `String + String`，表示字符串连接。
+* **不可重载**: 用户无法重载这些运算符。
 
 ```morf
 let x = 10 + 20        // 30
@@ -697,10 +752,10 @@ let f = 3.14 * 2.0     // 6.28
 
 移位运算符仅适用于**整数类型**（Integer）。
 
-*   **左移**: `a << n`。将 `a` 的二进制位向左移动 `n` 位，右侧补 0。
-*   **右移**: `a >> n`。将 `a` 的二进制位向右移动 `n` 位。
-    *   对于**无符号整数** (Unsigned)，执行逻辑右移（高位补 0）。
-    *   对于**有符号整数** (Signed)，执行算术右移（高位补符号位）。
+* **左移**: `a << n`。将 `a` 的二进制位向左移动 `n` 位，右侧补 0。
+* **右移**: `a >> n`。将 `a` 的二进制位向右移动 `n` 位。
+  *   对于**无符号整数** (Unsigned)，执行逻辑右移（高位补 0）。
+  *   对于**有符号整数** (Signed)，执行算术右移（高位补符号位）。
 
 ```morf
 let a: U8 = 0b0000_0001
@@ -712,36 +767,36 @@ let d = c >> 1         // 0b1111_1100 (-4)
 
 ### 3.8 比较运算符
 
-比较运算符返回布尔值 `Bool` (`True | False`)。
+比较运算符返回布尔值 `Bool` (`true | false`)。
 
 #### 3.8.1 相等性比较
 
-*   **等于**: `a == b`
-*   **不等于**: `a != b`
+* **等于**: `a == b`
+* **不等于**: `a != b`
 
 **语义**:
-*   **结构化相等**: 对于命名空间（包括序列、元组等），`==` 默认执行深度结构化比较。当且仅当所有键值对递归相等时，两个命名空间相等。
-*   **mut 变量**: 由于 `mut` 变量在表达式中会自动解包（Auto-dereference），`==` 比较的是其**当前值**，而非槽位身份。
-    *   若需比较槽位身份，必须使用 `&` 运算符获取引用（见 3.13）。
-*   **名义身份**: 对于 `Symbol`，比较其唯一身份标识。
-*   **类型安全**: `==` 允许比较任意类型的值。若两个值的类型交集为 `Never`（完全不兼容），实现可以发出静态警告，且运行时结果恒为 `False`。
+* **结构化相等**: 对于命名空间（包括序列、元组等），`==` 默认执行深度结构化比较。当且仅当所有键值对递归相等时，两个命名空间相等。
+* **mut 变量**: 由于 `mut` 变量在表达式中会自动解包（Auto-dereference），`==` 比较的是其**当前值**，而非槽位身份。
+  *   若需比较槽位身份，必须使用 `&` 运算符获取引用（见 3.13）。
+* **名义身份**: 对于 `Symbol`，比较其唯一身份标识。
+* **类型安全**: `==` 允许比较任意类型的值。若两个值的类型交集为 `Never`（完全不兼容），实现可以发出静态警告，且运行时结果恒为 `false`。
 
 ```morf
 let p1 = { x: 1, y: 2 }
 let p2 = { x: 1, y: 2 }
-p1 == p2  // True (结构相等)
+p1 == p2  // true (结构相等)
 
-let s1 = Symbol.Create{}
-let s2 = Symbol.Create{}
-s1 == s2  // False (每一个 Symbol 都是唯一的)
+let s1 = Symbol.create{}
+let s2 = Symbol.create{}
+s1 == s2  // false (每一个 Symbol 都是唯一的)
 ```
 
 #### 3.8.2 序关系比较
 
-*   **小于**: `a < b`
-*   **大于**: `a > b`
-*   **小于等于**: `a <= b`
-*   **大于等于**: `a >= b`
+* **小于**: `a < b`
+* **大于**: `a > b`
+* **小于等于**: `a <= b`
+* **大于等于**: `a >= b`
 
 **语义**:
 *   仅定义在支持序关系的类型上（如 Number, String）。
@@ -755,10 +810,10 @@ s1 == s2  // False (每一个 Symbol 都是唯一的)
 > **Q: Number 本体何来的位概念？**
 > A: 抽象的 `Number` 类型是数学上的数值集合，不具有机器表示的“位”概念。因此，本节定义的位运算符**仅对具体整数类型（Integer: I8-I64, U8-U64）有效**。对 `Float` 或抽象 `Number` 使用位算符将导致类型错误。
 
-*   **按位与**: `a *& b`
-*   **按位或**: `a *| b`
-*   **按位异或**: `a *^ b`
-*   **按位取反**: `*~a` (一元算符)
+* **按位与**: `a *& b`
+* **按位或**: `a *| b`
+* **按位异或**: `a *^ b`
+* **按位取反**: `*~a` (一元算符)
 
 这些算符的行为遵循标准二进制补码运算规则。参与运算的操作数将被提升（Promote）到相同的整数类型后进行计算。
 
@@ -775,20 +830,20 @@ x *| y   // -> 0b0000_1111
 
 逻辑运算符用于布尔逻辑组合，支持短路求值。
 
-*   **逻辑与**: `a && b`
-*   **逻辑或**: `a || b`
-*   **逻辑非**: `!a`
+* **逻辑与**: `a && b`
+* **逻辑或**: `a || b`
+* **逻辑非**: `!a`
 
 #### 3.10.1 类型约束与真值
 
 Morf 采用严格的布尔逻辑。
-*   操作数必须是 `Bool` 类型（`True` 或 `False`）。
+*   操作数必须是 `Bool` 类型（`true` 或 `false`）。
 *   不提供隐式的 "Truthy/Falsy" 转换（如将 `0` 或 `None` 视为假）。若需判断是否存在，应显式使用比较（如 `val != None`）。
 
 #### 3.10.2 短路求值
 
-*   `a && b`: 若 `a` 为 `False`，则直接返回 `False`，不求值 `b`。
-*   `a || b`: 若 `a` 为 `True`，则直接返回 `True`，不求值 `b`。
+*   `a && b`: 若 `a` 为 `false`，则直接返回 `false`，不求值 `b`。
+*   `a || b`: 若 `a` 为 `true`，则直接返回 `true`，不求值 `b`。
 
 ```morf
 let check = (x) {
@@ -800,19 +855,19 @@ let check = (x) {
 
 空值合并运算符 `??` 提供了一种处理 `None` 的便捷方式。
 
-*   **语法**: `L ?? R`
-*   **语义**:
+* **语法**: `L ?? R`
+* **语义**:
     1.  求值 `L`。
     2.  若 `L` 不为 `None`，则结果为 `L`（此时 `R` **不求值**，即短路）。
     3.  若 `L` 为 `None`，则求值并返回 `R`。
-*   **类型**: 结果类型为 `(Type(L) - None) | Type(R)`。
+* **类型**: 结果类型为 `(Type(L) - None) | Type(R)`。
 
 ```morf
 let val = maybeNone ?? "default"
 // 等价于
-let val = Cond {
-  Branch{ maybeNone != None, maybeNone },
-  Else{ "default" }
+let val = Switch {
+  Case { maybeNone != None, maybeNone },
+  "default"
 }
 ```
 
@@ -820,18 +875,18 @@ let val = Cond {
 
 Morf 支持基本的赋值与复合赋值操作。赋值操作仅对 `mut` 声明的变量槽位（Slot）有效（见第 8 章）。
 
-*   **基本赋值**: `a = b`。将 `b` 的值写入 `a` 对应的槽位。表达式的值为 `b`（右值）。
-*   **复合赋值**: `+=`, `-=`, `*=`, `/=`, `%=`, `??=`, `*&=`, `*|=`, `*^=` 等。
-*   **语义**: `a op= b` 语义上等价于 `a = a op b`，但 `a` 的地址计算（如果涉及属性访问）只进行一次。
+* **基本赋值**: `a = b`。将 `b` 的值写入 `a` 对应的槽位。表达式的值为 `b`（右值）。
+* **复合赋值**: `+=`, `-=`, `*=`, `/=`, `%=`, `??=`, `*&=`, `*|=`, `*^=` 等。
+* **语义**: `a op= b` 语义上等价于 `a = a op b`，但 `a` 的地址计算（如果涉及属性访问）只进行一次。
 
 ### 3.13 取引用运算符
 
 为了在需要时获取 `mut` 变量的槽位本身（而不是其值），Morf 引入了一元前缀运算符 `&`。
 
-*   **语法**: `&variable`
-*   **语义**: 获取 `variable` 对应的内存槽位（Slot）的引用。
-*   **类型**: 若 `x` 的类型为 `T`，且 `x` 是 `mut` 绑定的，则 `&x` 的类型为 `Slot<T>`（一种特殊的系统内建类型）。
-*   **用途**:
+* **语法**: `&variable`
+* **语义**: 获取 `variable` 对应的内存槽位（Slot）的引用。
+* **类型**: 若 `x` 的类型为 `T`，且 `x` 是 `mut` 绑定的，则 `&x` 的类型为 `Slot<T>`（一种特殊的系统内建类型）。
+* **用途**:
     1.  **身份比较**: 判断两个变量是否指向同一个存储槽位。
     2.  **传递引用**: 将槽位传递给接受 `mut` 参数的函数（虽然函数调用时通常会自动处理，但在某些泛型上下文中显式取址可能更清晰）。
 
@@ -839,8 +894,8 @@ Morf 支持基本的赋值与复合赋值操作。赋值操作仅对 `mut` 声�
 mut a = 1
 mut b = 1
 
-a == b   // True  (值相等)
-&a == &b // False (槽位不同)
+a == b   // true  (值相等)
+&a == &b // false (槽位不同)
 
 let refA = &a // refA 持有对 a 的引用
 ```
@@ -851,12 +906,12 @@ Morf 支持在 `let` 声明和赋值语句中使用模式匹配进行解构。
 
 #### 3.14.1 命名空间解构
 
-*   **基本语法**: `let { key1, key2 } = namespaceExpr`
-*   **重命名**: `let { sourceKey: newName } = namespaceExpr`
-*   **默认值**: `let { key = defaultValue } = namespaceExpr`
-    *   若对应键的值为 `None`，则使用 `defaultValue`。
-*   **剩余属性**: `let { x, ...rest } = namespaceExpr`
-    *   `rest` 收集除 `x` 以外的所有剩余属性为一个新的命名空间。
+* **基本语法**: `let { key1, key2 } = namespaceExpr`
+* **重命名**: `let { sourceKey: newName } = namespaceExpr`
+* **默认值**: `let { key = defaultValue } = namespaceExpr`
+  *   若对应键的值为 `None`，则使用 `defaultValue`。
+* **剩余属性**: `let { x, ...rest } = namespaceExpr`
+  *   `rest` 收集除 `x` 以外的所有剩余属性为一个新的命名空间。
 
 **示例**:
 ```morf
@@ -879,9 +934,9 @@ let { meta, ...coreInfo } = user
 
 由于序列（Seq/Tuple）也是命名空间（键为数字索引），解构语法通过 `[]` 糖衣支持位置解构。
 
-*   **语法**: `let [a, b, ...rest] = seqExpr`
-*   **语义**: 等价于访问索引 `0`, `1` 等。
-*   **跳过元素**: `let [first, , third] = seqExpr`
+* **语法**: `let [a, b, ...rest] = seqExpr`
+* **语义**: 等价于访问索引 `0`, `1` 等。
+* **跳过元素**: `let [first, , third] = seqExpr`
 
 ```morf
 let point = [10, 20, 30]
@@ -891,6 +946,46 @@ let [x, y] = point
 
 let [head, ...tail] = point
 // head = 10, tail = [20, 30]
+```
+
+---
+
+### 3.15 变量作用域与递归定义
+
+为了支持递归数据结构（如链表、树）与互递归函数，Morf 采用了 **块级提升 (Block-level Hoisting)** 机制。
+
+#### 3.15.1 提升与 Pending 状态
+
+在一个代码块（Block）或模块（Module）的作用域内，所有通过 `let` 定义的变量名在整个作用域内都是**可见的**。
+
+*   **初始化前**：在程序的控制流到达 `let x = ...` 语句之前，变量 `x` 处于 **"Pending" (待定)** 状态。
+*   **初始化后**：语句执行完成后，变量转为 **"Resolved" (已决)** 状态。
+
+#### 3.15.2 递归引用规则
+
+在 `let` 绑定的右值表达式中，允许引用当前作用域内处于 Pending 状态的变量（包括自身与其他尚未定义的变量），但必须满足**结构性引用约束**。
+
+*   **合法引用 (Structural Reference)**：
+    *   作为命名空间的属性值：`{ next: PendingVar }`
+    *   作为类型构造器的参数：`Option<PendingVar>`
+    *   作为 Union/Intersection 的成员：`A | PendingVar`
+    *   在函数体（闭包）内部引用：`() { PendingVar }`
+*   **非法引用 (Immediate Evaluation)**：
+    *   参与立即执行的计算：`PendingVar + 1`
+    *   作为被调用的函数：`PendingVar{ ... }`
+    *   访问其属性：`PendingVar.prop`
+
+**示例：互递归定义**
+
+```morf
+// 合法：Node 引用了 Pending 的 Tree
+let Node = { 
+  left: Tree, 
+  right: Tree 
+}
+
+// 合法：Tree 引用了已决的 Node
+let Tree = Node | None
 ```
 
 ---
@@ -915,12 +1010,12 @@ let [head, ...tail] = point
 * **求值时机**：Thunk 仅在其被调用（`thunk{}`）时才对原表达式求值。
 * **纯度**：构造 Thunk 本身必须是纯操作；表达式的 Effect 由后续调用释放并传播（见 Effect 规则）。
 * **定义示例**: 
-    `let Branch = (c, wrap d) { { case: c, do: d } }`
+    `let Case = (c, wrap d) { { case: c, do: d } }`
 * **调用示例**:
     ```javascript
     // 下面两者等价，Sys.Log{} 均不会立即执行
-    Branch{ x > 0, Sys.Log{ "Ok" } }
-    Branch{ x > 0, ( Log{ "Ok" }; True ) }
+    Case{ x > 0, Sys.Log{ "Ok" } }
+    Case{ x > 0, ( Log{ "Ok" }; true ) }
     ```
 
 #### 4.2.2 逃逸修饰符：`directly`
@@ -928,7 +1023,7 @@ let [head, ...tail] = point
 * **语法**: `f{ directly { expr } }`
 * **语义**: 当 `directly { expr }` 被绑定到某个 `wrap` 参数时，实现必须强制跳过自动 Thunk 逻辑，直接对 `expr` 求值并传递其值。
 * **示例**:
-    `Branch{ x > 0, directly { mySavedThunk } }`
+    `Case{ x > 0, directly { mySavedThunk } }`
 
 ### 4.3 函数定义语法
 
@@ -959,7 +1054,34 @@ let compute = (n) {
 }
 ```
 
-#### 4.3.2 参数与调用的映射关系
+#### 4.3.2 闭包与捕获语义
+
+在 Morf 中，所有函数都是**闭包 (Closure)**。闭包由**函数代码**与**创建时的词法环境**组成。
+
+* **捕获规则**:
+  * **捕获 `let` 绑定**: 对于作用域内的不可变绑定，闭包捕获其**值**。由于值不可变，这在语义上等价于拷贝。
+  * **捕获 `mut` 绑定**: 对于作用域内的 `mut` 绑定，闭包捕获其**槽位 (Slot)** 的引用。
+      *   这意味着闭包内部可以读取到外部对该变量的最新修改。
+      *   闭包内部对该变量的赋值也会同步修改外部变量的状态。
+
+**示例**:
+```morf
+let makeCounter = () {
+  mut count = 0
+  
+  // 返回一个闭包，它捕获了 `count` 的槽位
+  () { 
+    count += 1
+    count 
+  }
+}
+
+let c = makeCounter{}
+c{} // 1
+c{} // 2
+```
+
+#### 4.3.3 参数与调用的映射关系
 
 函数调用使用大括号 `{}` 进行，调用时的参数会被映射到一个命名空间（Namespace）。
 
@@ -1044,7 +1166,7 @@ add{ 1, 2 }
 ```morf
 // 位置参数收集
 let sum = (...[]nums) { 
-  nums.Reduce{ (a, b) { a + b }, 0 } 
+  nums.reduce{ (a, b) { a + b }, 0 } 
 }
 sum{ 1, 2, 3, 4 }  // 10
 
@@ -1151,9 +1273,9 @@ Morf 的函数返回类型模型严格区分“实现推导”与“接口承诺
 
 * **定义（返回类型函数）**: 令函数体为 `Body`，系统基于控制流分析（CFA）与流敏感细化，推导出一个**返回类型函数** $R_{inferred}(\vec{P})$。其中 $\vec{P}$ 是形参类型环境（可包含依赖于参数的类型变量），$R_{inferred}$ 的结果允许是**分段/条件类型**，以保留“控制流即类型”的语义。
 * **特性**:
-    *   **控制流保留**: 若分支条件依赖于形参（或由形参导出的类型谓词）且在编译期不可判定，实现应当把结果保留为条件类型（而不是立即拍扁为 Union）。
-    *   **精确性**: 反映了实现的真实行为。
-    *   **默认行为**: 若未显式标注返回承诺（见 4.4.2），函数对外暴露的静态签名类型可以直接是 $R_{inferred}$（一个类型函数）。
+  * **控制流保留**: 若分支条件依赖于形参（或由形参导出的类型谓词）且在编译期不可判定，实现应当把结果保留为条件类型（而不是立即拍扁为 Union）。
+  * **精确性**: 反映了实现的真实行为。
+  * **默认行为**: 若未显式标注返回承诺（见 4.4.2），函数对外暴露的静态签名类型可以直接是 $R_{inferred}$（一个类型函数）。
 
 * **定义（擦除上界）**: 为服务于“仅承诺父类型、不暴露控制流细节”的接口视角，可定义擦除后的上界：
   $$
@@ -1179,13 +1301,13 @@ let f = (x) {
 * **语法**: `(args) -> Cap { ... }`
 * **语义**: 声明该函数的返回值**必须**是 `Cap` 的子类型。这是一种**接口承诺**，屏蔽了实现细节。
 * **校验规则**:
-    *   **逐次实例化校验**: 对任意一次调用（或一次泛型实例化）得到的实参类型环境 $\sigma$，实现必须验证：
+  * **逐次实例化校验**: 对任意一次调用（或一次泛型实例化）得到的实参类型环境 $\sigma$，实现必须验证：
         $$
         R_{inferred}[\sigma] \ <: \ Cap[\sigma]
         $$
         若不满足则报错。
-    *   **对外类型视图**: 当存在显式 `Cap` 时，函数对外暴露的签名返回类型应当被视为 `Cap`（实现可以内部保留 $R_{inferred}$ 用于优化/诊断，但调用者只能依赖 `Cap`）。
-*   **依赖类型**: `Cap` 表达式可以引用参数列表中的变量，以支持泛型约束。
+  * **对外类型视图**: 当存在显式 `Cap` 时，函数对外暴露的签名返回类型应当被视为 `Cap`（实现可以内部保留 $R_{inferred}$ 用于优化/诊断，但调用者只能依赖 `Cap`）。
+* **依赖类型**: `Cap` 表达式可以引用参数列表中的变量，以支持泛型约束。
 
 ```morf
 // 显式承诺返回 Number (Contract)
@@ -1217,32 +1339,10 @@ impl Sub for ... {
 这种设计使得用户可以定义自定义的控制流结构，与内置控制流具有同等的地位和语法体验。
 
 #### 4.5.1 条件分支
-条件分支通过 `Cond` 或 `If` 函数实现。由于分支代码块被绑定到 `wrap` 参数，它们仅在满足条件时才会被求值。
-
-```morf
-// If 是一个普通函数，其定义类似于：
-// let If = (cond, wrap thenBranch, wrap elseBranch) { ... }
-
-If { x > 0,
-  Log{ "Positive" }, // 只有 x > 0 时才执行
-  Log{ "Non-positive" }
-}
-```
+条件分支通过 `Switch` 或 `If` 函数实现。由于分支代码块被绑定到 `wrap` 参数，它们仅在满足条件时才会被求值。
 
 #### 4.5.2 循环与递归
-Morf 不提供 `while` 或 `for` 循环关键字。循环通过**尾递归**（Tail Recursion）实现。实现必须对尾调用进行优化（TCO），以保证无限循环不会导致栈溢出。
-
-```morf
-let loop = (n) {
-  If { n > 0,
-    (
-      Log{ n },
-      loop{ n - 1 } // 尾调用：安全跳转
-    ),
-    "Done"
-  }
-}
-```
+（TODO）
 
 #### 4.5.3 异常与错误处理
 Morf 使用 `Result` 类型（`Ok | Err`）或 `Option` 类型（`Some | None`）进行错误处理，配合模式匹配或组合子（Combinators）进行流程控制，而非使用 `try-catch` 机制。
@@ -1250,9 +1350,9 @@ Morf 使用 `Result` 类型（`Ok | Err`）或 `Option` 类型（`Some | None`�
 ```morf
 let result = File.Read{ "data.txt" }
 
-Cond {
-  Branch{ result.isOk, Process{ result.value } },
-  Else{ Log{ "Error: " + result.error } }
+Switch {
+  Case { result.isOk, Process{ result.value } },
+  Log{ "Error: " + result.error }
 }
 ```
 
@@ -1268,20 +1368,20 @@ Cond {
 
 Morf 支持多种进制的整数字面量表示。
 
-*   **十进制**: `123`, `0`, `-42`
-*   **二进制**: `0b` 或 `0B` 前缀，如 `0b1010`, `0b1111_0000`
-*   **八进制**: `0o` 或 `0O` 前缀，如 `0o755`, `0o123`
-*   **十六进制**: `0x` 或 `0X` 前缀，如 `0xFF`, `0x1A2B`
+* **十进制**: `123`, `0`, `-42`
+* **二进制**: `0b` 或 `0B` 前缀，如 `0b1010`, `0b1111_0000`
+* **八进制**: `0o` 或 `0O` 前缀，如 `0o755`, `0o123`
+* **十六进制**: `0x` 或 `0X` 前缀，如 `0xFF`, `0x1A2B`
 
 #### 5.1.2 浮点数字面量
 
 浮点数必须包含小数点或指数部分。
 
-*   **小数形式**: `3.14`, `0.1`, `123.0`
-*   **科学计数法**: 使用 `e` 或 `E` 表示指数。
-    *   `1.2e3` (1200.0)
-    *   `1e-4` (0.0001)
-    *   `3.14E+2` (314.0)
+* **小数形式**: `3.14`, `0.1`, `123.0`
+* **科学计数法**: 使用 `e` 或 `E` 表示指数。
+  *   `1.2e3` (1200.0)
+  *   `1e-4` (0.0001)
+  *   `3.14E+2` (314.0)
 
 #### 5.1.3 数值分隔符
 
@@ -1295,16 +1395,16 @@ Morf 支持多种进制的整数字面量表示。
 
 *   数字是**具名空间**，每一个数字都有自己独有的名义符号。
 *   每一个具体的数字（如 `1` 和 `2`）都是互斥的类型。` 1 & 2 -> Never`。
-*   **子类型关系**: 数字之间**不存在**子类型关系。即 $1$ 不是 $2$ 的子类型，反之亦然。即 $1 \not<: 2$。
-*   **比较关系**: 数字之间支持比较运算。即 $1 < 2$ 为真。
+* **子类型关系**: 数字之间**不存在**子类型关系。即 $1$ 不是 $2$ 的子类型，反之亦然。即 $1 \not<: 2$。
+* **比较关系**: 数字之间支持比较运算。即 $1 < 2$ 为真。
 
 ### 5.2 区分 `<` 与 `<:`
 
-*   **`<` (小于)**: 这是一个比较运算符，返回布尔值。
-    *   `1 < 2 -> True`
-*   **`<:` (子类型)**: 这是一个类型系统的关系判定。
-    *   `1 <: 2 -> False` (因为它们是不同的值)
-    *   `1 <: Number -> True`
+* **`<` (小于)**: 这是一个比较运算符，返回布尔值。
+  *   `1 < 2 -> true`
+* **`<:` (子类型)**: 这是一个类型系统的关系判定。
+  *   `1 <: 2 -> false` (因为它们是不同的值)
+  *   `1 <: Number -> true`
 
 ### 5.3 数字集合体系
 
@@ -1312,26 +1412,26 @@ Morf 支持多种进制的整数字面量表示。
 
 #### 5.3.1 基础区间类型
 
-*   **`Interval`**: 所有区间类型的父接口。
-*   **`Lt<N>` (Less Than N)**: 集合 $\{ x \mid x < N \}$。
-*   **`Gt<N>` (Greater Than N)**: 集合 $\{ x \mid x > N \}$。
+* **`Interval`**: 所有区间类型的父接口。
+* **`Lt<N>` (Less Than N)**: 集合 $\{ x \mid x < N \}$。
+* **`Gt<N>` (Greater Than N)**: 集合 $\{ x \mid x > N \}$。
 
 #### 5.3.2 有界区间
 
 替代单一的 `Range`，支持完整的开闭区间组合：
 
-*   **`IntervalOO<Min, Max>`**: Open-Open, $(Min, Max)$, $\{ x \mid Min < x < Max \}$
-*   **`IntervalOC<Min, Max>`**: Open-Closed, $(Min, Max]$, $\{ x \mid Min < x \le Max \}$
-*   **`IntervalCO<Min, Max>`**: Closed-Open, $[Min, Max)$, $\{ x \mid Min \le x < Max \}$
-*   **`IntervalCC<Min, Max>`**: Closed-Closed, $[Min, Max]$, $\{ x \mid Min \le x \le Max \}$
+* **`IntervalOO<Min, Max>`**: Open-Open, $(Min, Max)$, $\{ x \mid Min < x < Max \}$
+* **`IntervalOC<Min, Max>`**: Open-Closed, $(Min, Max]$, $\{ x \mid Min < x \le Max \}$
+* **`IntervalCO<Min, Max>`**: Closed-Open, $[Min, Max)$, $\{ x \mid Min \le x < Max \}$
+* **`IntervalCC<Min, Max>`**: Closed-Closed, $[Min, Max]$, $\{ x \mid Min \le x \le Max \}$
 
 #### 5.3.3 与 Number 的相容性
 
 这些集合类型与具体的数字类型是**相容**的。这意味着一个具体的数字可以是这些集合的子类型。
 
 *   若 $x < N$，则 $x <: \text{Lt}<N>$。
-    *   `1 <: Lt<2>` 为 **True**。
-    *   `1 & Lt<2> -> 1`。
+  *   `1 <: Lt<2>` 为 **true**。
+  *   `1 & Lt<2> -> 1`。
 
 #### 5.3.4 集合运算
 
@@ -1453,9 +1553,9 @@ Promote.To{ a, C }<ArithC>.Add{ Promote.To{ b, C } }
 impl Promote for Number {
   // 将任意 Number 子类型提升到目标类型
   static To{ value: Number, target: Type } -> target {
-    Cond {
-      Branch{ value <: target, value },  // 已经兼容，无需转换
-      Else{ Intrinsic.Convert{ value, target } }  // 宿主环境执行转换
+    Switch {
+      Case { value <: target, value },  // 已经兼容，无需转换
+      Intrinsic.Convert{ value, target }
     }
   }
 }
@@ -1482,8 +1582,8 @@ let y = x + 1  // 运行时错误：I8 溢出
 
 F64/F32 遵循 IEEE 754 标准，支持：
 
-*   **Infinity**：`F64.Infinity`, `F64.NegInfinity`
-*   **NaN**：`F64.NaN`
+* **Infinity**：`F64.Infinity`, `F64.NegInfinity`
+* **NaN**：`F64.NaN`
 
 ```morf
 1.0 / 0.0  // -> F64.Infinity
@@ -1502,11 +1602,12 @@ F64.NaN == F64.NaN  // -> False（遵循 IEEE 754）
 // 标准库提供的转换工具
 impl Convert for Number {
   static ToI32{ value: Number } -> (I32 | None) {
-    Cond {
-      Branch{ value <: IntervalCC{ I32.Min, I32.Max }, 
+    Switch {
+      Case {
+        value <: IntervalCC{ I32.Min, I32.Max },
         Intrinsic.ConvertToI32{ value } 
       },
-      Else{ None }  // 超出范围返回 None
+      None  // 超出范围返回 None
     }
   }
   
@@ -1547,8 +1648,8 @@ Morf 的序列模型构建在命名空间与数字系统之上。Morf 中的序�
 
 元组是 Morf 中最基础的序列结构。
 
-*   **定义**: 包含数值索引属性，且 `length` 属性为 **Number** 的命名空间。
-*   **结构示例**:
+* **定义**: 包含数值索引属性，且 `length` 属性为 **Number** 的命名空间。
+* **结构示例**:
     ```morf
     let T = [A, B]
     // 展开等价于
@@ -1559,10 +1660,10 @@ Morf 的序列模型构建在命名空间与数字系统之上。Morf 中的序�
       1: B
     }
     ```
-*   **不变性**:
-    *   由于 `2` 和 `3` 是互斥的 (`2 & 3 -> Never`)。
-    *   因此 `[A, B]` (len=2) 和 `[A, B, C]` (len=3) 互斥，不存在子类型关系。
-    *   **结论**：定长元组天然避免了协变/逆变带来的类型安全问题。
+* **不变性**:
+  *   由于 `2` 和 `3` 是互斥的 (`2 & 3 -> Never`)。
+  *   因此 `[A, B]` (len=2) 和 `[A, B, C]` (len=3) 互斥，不存在子类型关系。
+  * **结论**：定长元组天然避免了协变/逆变带来的类型安全问题。
 
 ### 6.2 字符串 (String)
 
@@ -1570,20 +1671,20 @@ Morf 的序列模型构建在命名空间与数字系统之上。Morf 中的序�
 
 #### 6.2.1 定义与类型
 
-*   **原子性**: 字符串是 Unicode 码点（Code Point）的序列。在值层面，它是不可分割的原子实体，不是由更小的对象组合而成的。
-*   **类型层次**:
-    *   **String**: 所有字符串值的父类型。
-    *   **字面量类型**: 每一个具体的字符串字面量（如 `"hello"`）都是一个独立的单例类型。
-    *   **互斥性**: 不同的字符串字面量类型是互斥的。`"a" & "b" -> Never`。
+* **原子性**: 字符串是 Unicode 码点（Code Point）的序列。在值层面，它是不可分割的原子实体，不是由更小的对象组合而成的。
+* **类型层次**:
+  * **String**: 所有字符串值的父类型。
+  * **字面量类型**: 每一个具体的字符串字面量（如 `"hello"`）都是一个独立的单例类型。
+  * **互斥性**: 不同的字符串字面量类型是互斥的。`"a" & "b" -> Never`。
 
 #### 6.2.2 虚拟投影
 
 尽管字符串是原子的，但在进行属性访问时，系统将其投影为一个**只读元组**。
 
-*   **Length**: 具有 `length` 属性，值为字符串的字符数（Code Point 数量）。
-*   **索引访问**: 支持通过数字索引访问特定位置的字符。
-    *   Morf **不区分字符（Char）与字符串**。`s[i]` 的返回值仍然是一个 `String` 类型，其长度为 1。
-    *   越界访问返回 `None`。
+* **Length**: 具有 `length` 属性，值为字符串的字符数（Code Point 数量）。
+* **索引访问**: 支持通过数字索引访问特定位置的字符。
+  *   Morf **不区分字符（Char）与字符串**。`s[i]` 的返回值仍然是一个 `String` 类型，其长度为 1。
+  *   越界访问返回 `None`。
 
 ```morf
 let s = "Morf"
@@ -1617,46 +1718,63 @@ Morf 支持结构化递归，允许定义无限深度的类型结构（如链表
 
 1.  **结构递归**: 
     允许。当一个 Namespace 的属性指向自身，或者通过 Union 间接指向自身时，系统视为合法的“无限形状”。
-    * *语义*: 它是懒加载的 (Lazy)，只有在访问具体属性时才会展开。
-    * *与 None 的交互*: 若递归路径上的某节点计算结果为 `None`，根据 None 的传染性，整个递归访问路径将坍缩为 `None`。
+  * *语义*: 它是懒加载的 (Lazy)，只有在访问具体属性时才会展开。
+  * *与 None 的交互*: 若递归路径上的某节点计算结果为 `None`，根据 None 的传染性，整个递归访问路径将坍缩为 `None`。
 2.  **计算递归**: 
     禁止。在表达式求值（如 `a + b`）或函数逻辑中出现的无终止循环将导致系统坍缩。
-    * *语义*: 这种循环在逻辑上等价于无法到达终点，因此求值结果为 `Never`（底空间）。
+  * *语义*: 这种循环在逻辑上等价于无法到达终点，因此求值结果为 `Never`（底空间）。
 
-### 7.2 实现建议：打结法
+### 7.2 等价性与子类型
 
-为了在保持不可变性（Immutability）和驻留（Interning）的前提下支持递归，推荐采用“打结”算法。
+#### 7.2.1 递归等价性
 
-#### 7.2.1 占位符与路由
-1.  **检测循环**: 在求值 `let A = { ... }` 时，将变量名 `A` 放入当前作用域的 "Pending" 栈。
-2.  **创建入口**: 若在构造过程中再次遇到 `A`，不立即递归求值，而是创建一个 **`RecursiveRef` (递归引用)** 节点。该节点仅包含一个指向 `A` 最终地址的“入口”。
+Morf 采用 **Equi-recursive（等递归）** 语义。这意味着只要展开后的无限树结构同构，两个递归类型即视为定义等价（`≡`）。
+
+*   类型名本身不参与等价性判定，仅作为结构的别名。
+*   例：若 `A = { next: A | None }` 且 `B = { next: B | None }`，则 `A ≡ B`。
+
+#### 7.2.2 共归纳子类型
+
+在判定两个递归类型的子类型关系（`RecA <: RecB`）时，实现必须采用**共归纳（Co-inductive）**或**假定-验证（Assume-Guarantee）**算法，以确保判定过程终止。
+
+* **原则**：在判定过程中，若遇到正在判定的目标 `RecA <: RecB`（即检测到循环依赖），则直接假定该关系成立（返回 `true`），并继续验证其他分支。若所有分支验证均通过，则该假设最终成立。
+
+### 7.3 实现建议：打结法
+
+为了在保持不可变性和驻留的前提下支持递归（即实现 3.15 定义的变量提升语义），推荐采用“打结”算法。
+
+#### 7.3.1 占位符与路由
+1.  **检测 Pending**: 在求值表达式时，若遇到对 **Pending** 状态变量（如 `A`）的引用，不立即报错，而是检查当前操作是否属于“结构性引用”。
+2.  **创建入口**: 若是结构性引用，创建一个 **`RecursiveRef` (递归引用)** 节点。该节点仅包含一个指向 `A` 最终地址的“入口”（此时该地址尚未填充）。
 3.  **延迟绑定**: `{ next: Ref(A) }` 的 Hash 计算应包含其结构的“形状”而不包含 `Ref(A)` 的具体值，或者使用特殊的循环 Hash 算法。
 
-#### 7.2.2 打结过程
+#### 7.3.2 打结过程
 1.  **构造形状**: 完成 Namespace 的初步构造。
-2.  **回填**: 在 Interner 池中注册该形状前，将 `RecursiveRef` 内部的指针指向该 Namespace 自身的内存地址。
-3.  **化简**: `A & A` 在递归层面上应能识别出它们是同一个“结”，从而避免无限展开。
+2.  **转正**: `let A = ...` 执行完毕后，将 `A` 标记为 **Resolved**，并分配最终的内存地址。
+3.  **回填**: 扫描当前作用域内所有指向 `A` 的 `RecursiveRef`，将其内部指针更新为 `A` 的真实地址。
+4.  **化简**: `A & A` 在递归层面上应能识别出它们是同一个“结”，从而避免无限展开。
 
-### 7.3 示例与推导
+### 7.4 示例与推导
 
-#### 7.3.1 链表定义
+#### 7.4.1 链表定义
 ```javascript
 // 定义 List 为：要么是 End，要么是 Node 且 next 指向 List
+// 使用前缀 | 语法，类似 TypeScript (注意: 无需逗号分隔)
 let List = 
-  | { kind: "End" },
+  | { kind: "End" }
   | { kind: "Node", next: List } 
 ```
 * **推导**: 系统识别出 `List` 在定义中引用了自身。内部表示为 `End | { Node, next: Ref(List) }`。
 * **合法性**: 这是一个合法的结构递归。
 
-#### 7.3.2 别名循环
+#### 7.4.2 别名循环
 ```javascript
 let A = B
 let B = A
 ```
 * **结论**: 没有任何构造器（Namespace `{}`）介入。这种纯粹的别名循环导致符号解析死锁，系统无法确定其结构，判定为 **`Never`**。
 
-#### 7.3.3 计算循环
+#### 7.4.3 计算循环
 ```javascript
 let Num = Num - 1
 ```
@@ -1670,8 +1788,10 @@ Morf 引入了 **"一等公民槽位"** 模型。这一设计旨在弥合纯函�
 
 ### 8.1 核心模型：变量即槽位
 
-*   **`let`**: 创建一个值的直接绑定。在作用域内不可重绑定。
-*   **`mut`**: 创建一个可变的 **变量槽**。
+* **`let`**: 创建一个值的直接绑定。在作用域内不可重绑定。
+* **`mut`**: 创建一个可变的 **变量槽**。
+
+`Mut` 实际上也是一个命名空间。可以通过 `Mut { T }` 定义类型，也可以通过 `mut T` 定义（简写）。
 
 当声明 `mut a = 1` 时，编译器在底层构建了一个隐式的命名空间，其逻辑结构类似于：
 ```morf
@@ -1683,10 +1803,10 @@ let $slot_a = { value: 1 }
 
 为了保证语法的简洁性，Morf 在普通表达式中对 `mut` 变量进行自动拆箱。
 
-*   **读取**: `let b = a + 1`。编译器自动将其转换为 `$slot_a.value + 1`。
-*   **取址**: `let r = &a`。使用 `&` 运算符获取 `$slot_a` 本身（见 3.13）。
-*   **赋值**: `a = 2`。编译器自动将其转换为 `$slot_a.value = 2`。
-*   **快照传递**: 当 `mut` 变量传递给**非 mut** 参数时，传递的是其当前值的快照。
+* **读取**: `let b = a + 1`。编译器自动将其转换为 `$slot_a.value + 1`。
+* **取址**: `let r = &a`。使用 `&` 运算符获取 `$slot_a` 本身（见 3.13）。
+* **赋值**: `a = 2`。编译器自动将其转换为 `$slot_a.value = 2`。
+* **快照传递**: 当 `mut` 变量传递给**非 mut** 参数时，传递的是其当前值的快照。
 
 ```morf
 let LogVal = (v) { Log{v} }
@@ -1699,9 +1819,9 @@ LogVal(x) // 传递的是 1 (Copy)，而非 x 的槽位
 
 为了在函数间共享状态（例如异步更新或原地修改），函数参数可以显式标记为 `mut`。这实现了类似于“引用传递”的效果。
 
-*   **语法**: `f: (target: mut Number) { ... }`
-*   **语义**: 此时传递的不再是值的快照，而是 **Slot 本身**。
-*   **效果**: 函数内部对 `target` 的赋值会直接更新外部的 Slot。
+* **语法**: `f: (target: mut Number) { ... }`
+* **语义**: 此时传递的不再是值的快照，而是 **Slot 本身**。
+* **效果**: 函数内部对 `target` 的赋值会直接更新外部的 Slot。
 
 示例：
 ```morf
@@ -1720,14 +1840,21 @@ AsyncInc(a) // a 变为 2
 
 由于 Morf 的基础类型是不可变的，对 `mut` 变量的属性更新遵循 **"Copy-on-Write"** 语义的变体。
 
-*   **语法**: `obj.prop = val`
-*   **语义**: 等价于 `obj = Update(obj, "prop", val)`。
-*   **底层行为**:
+* **语法**: `obj.prop = val`
+* **语义**: 等价于 `obj = Update(obj, "prop", val)`。
+* **底层行为**:
     1.  创建一个包含新属性值的新 Namespace。
     2.  将 `mut` 变量槽指向这个新地址。
     3.  利用结构共享优化内存开销。
 
 这确保了即便引入了可变性，每次赋值操作产生的都是一个新的、合法的不可变快照，从而天然支持时间旅行调试。
+
+#### 8.4.1 编译期优化：原地更新
+
+尽管语义上每次更新都产生新对象，但为了保证性能，实现应当进行**唯一引用分析** 或 **引用计数检查**。
+
+* **原则**: 若编译器或运行时能证明在执行 `obj.prop = val` 时，原对象 `obj` **没有其他活跃的引用**（即当前持有的是唯一引用），则实现**可以**（且应当）将其优化为底层的**原地修改**。
+* **透明性**: 这种优化必须对用户透明。即无论底层是否进行了原地修改，程序的观测行为（如相等性判断结果）必须与“总是创建新对象”的语义一致。
 
 ### 8.5 流敏感分析
 
@@ -1738,33 +1865,104 @@ AsyncInc(a) // a 变为 2
 ```morf
 mut x = Number | String  // x 类型宽泛
 
-Cond {
-  Type.IsNum{x}, {
-    // 在此块中，x 被细化为 Number
-    // 编译器允许数学运算
-    x += 1 
+Switch {
+  Case {
+    Type.IsNum{x},
+    {
+      // 在此块中，x 被细化为 Number
+      // 编译器允许数学运算
+      x += 1 
+    }
   },
-  Else {
-    // 在此块中，x 被细化为 String
-    Log{ "String: " + x }
-  }
+  // 在此块中，x 被细化为 String
+  Log{ "String: " + x }
 }
 ```
 
+### 8.6 确定性资源管理 (RAII)
+
+对于文件句柄、网络连接等非内存资源，依赖 GC 进行回收是不确定的。Morf 引入 `Disposable` 模式来支持确定性的资源释放。
+
+#### 8.6.1 Disposable 协议
+
+若一个 Impl 实现了 `Disposable` 接口（定义了 `Dispose` 方法），则该对象被视为需要显式清理的资源。
+
+#### 8.6.2 Using 作用域
+
+Morf 不提供特殊的 `try-with-resources` 语法，而是通过标准库函数 `Using` 实现：
+
+```morf
+// 打开文件，确保在块结束时关闭
+Using{ File.Open{"data.txt"}, (file) {
+  file.ReadLines{}
+}} 
+// 此处 file.Dispose{} 已被自动调用
+```
+
+### 8.7 高级内存控制：Unique 与 Arena
+
+为了满足系统级编程或高性能场景的需求，Morf 允许高级用户通过**线性类型（Linear Types）**或**区域内存（Regions）**来绕过 GC 机制。
+
+#### 8.7.1 线性类型 (Unique)
+
+`Unique<T>` 是一个特殊的类型包装器，它向编译器传达以下约束：
+1.  **唯一所有权**: 该值在同一时刻只能有一个引用。
+2.  **禁止复制**: 赋值或传参操作会发生**移动 (Move)**，原变量失效。
+3.  **立即释放**: 当 `Unique` 对象离开作用域且未被移动时，系统**立即**回收其内存（不经过 GC）。
+
+```morf
+// 创建一个由 Unique 管理的对象
+let ptr = Unique.New{ { x: 1, y: 2 } }
+
+let process = (p: Unique) { ... }
+
+process{ ptr } // 所有权转移给 process
+// Log{ ptr }  // 编译错误！ptr 已被移动
+```
+
+#### 8.7.2 区域内存 (Arena)
+
+对于大量产生且生命周期一致的小对象（如游戏实体、请求级上下文），可以使用 `Arena` 进行批量管理。
+
+*   `Arena` 内分配的对象不进行独立的 GC 追踪。
+*   当 `Arena` 销毁时，其内部所有对象一次性释放。
+
+### 8.8 垃圾回收与内存模型
+
+Morf 运行时必须实现自动内存管理。考虑到 Morf "默认不可变、局部可变" 的语言特性，规范建议实现采用 **分代式垃圾回收 (Generational Garbage Collection)** 策略。
+
+#### 8.8.1 分代假设
+
+基于 "大部分对象朝生夕死" 的弱分代假设，堆内存被划分为：
+
+1.  **新生代 (Young Generation / Nursery)**:
+  *   新对象在此通过指针碰撞 (Bump Allocation) 极速分配。
+  *   回收时采用 **Copying GC**，存活对象晋升至老年代。
+2.  **老年代 (Old Generation)**:
+  *   存放长生命周期对象。
+  *   回收时采用 **Mark-Sweep** 或 **Mark-Compact**。
+
+#### 8.8.2 不可变性对 GC 的优化
+
+Morf 的不可变特性天然利于分代 GC：
+
+* **老年代引用新生代**：在纯不可变数据中，老对象不可能指向新对象（新对象创建时老对象已存在且不可变）。
+* **写屏障 (Write Barrier)**：仅需监控 `mut` 槽位 (Slot) 的更新。只有当 `mut` 变量（位于老年代）被更新为指向新生代对象时，才需记录到 **记忆集 (Remembered Set)**。这极大降低了屏障开销。
+
 ---
 
-### 9. Effect 传播与坍缩
+## 9. Effect 传播与坍缩
 
-为了支持编译时展开并保证副作用的可预测性，Morf 0.2 引入了基于污染追踪的 Effect 系统。
+支持编译时展开并保证副作用的可预测性。
 
 #### 9.1 核心定义
 
-*   **Effect**: 一个名义符号，表示某种非纯粹的计算行为。
-*   **Effect 集合 ($\epsilon$)**: 一个表达式在求值过程中可能触发的所有 Effect 的并集。
-*   **固有效应 (`intrinsic_effect`)**: 对任意可调用值 `f`，`f.intrinsic_effect` 是“一次调用 `f{...}` 在其函数体内部可能触发的 Effect 集合”。  
-    *   **用户函数**：若 `let f = (...) { E }`，则定义 `ε(f) = None`，且 `f.intrinsic_effect = ε(E)`。  
-    *   **宿主 primitive**：其 `intrinsic_effect` 由宿主环境在定义处显式标注（例如 `Sys.IO.Write` 具有 `Effect.IO`）。
-*   **纯粹性 (Purity)**: 若 $\epsilon(E) = \text{None}$，则称表达式 $E$ 是纯的。
+* **Effect**: 一个名义符号，表示某种非纯粹的计算行为。
+* **Effect 集合 ($\epsilon$)**: 一个表达式在求值过程中可能触发的所有 Effect 的并集。
+* **固有效应 (`intrinsic_effect`)**: 对任意可调用值 `f`，`f.intrinsic_effect` 是“一次调用 `f{...}` 在其函数体内部可能触发的 Effect 集合”。  
+  * **用户函数**：若 `let f = (...) { E }`，则定义 `ε(f) = None`，且 `f.intrinsic_effect = ε(E)`。  
+  * **宿主 primitive**：其 `intrinsic_effect` 由宿主环境在定义处显式标注（例如 `Sys.IO.Write` 具有 `Effect.IO`）。
+* **纯粹性**: 若 $\epsilon(E) = \text{None}$，则称表达式 $E$ 是纯的。
 
 
 #### 9.2 Effect 的源头
@@ -1772,10 +1970,10 @@ Cond {
 系统中存在两类原子级的 Effect 源头：
 
 1.  **状态源**:
-    *   对任何 `mut` 槽位的读取（Read）或写入（Write）操作，自动被赋予 `Effect.State`。
-    *   *注：若分析器能证明 `mut` 变量未逃逸出当前闭合块且不影响外部环境，可进行纯化优化。*
+  *   对任何 `mut` 槽位的读取（Read）或写入（Write）操作，自动被赋予 `Effect.State`。
+  * *注：若分析器能证明 `mut` 变量未逃逸出当前闭合块且不影响外部环境，可进行纯化优化。*
 2.  **原生源**:
-    *   由宿主环境提供的 primitive 函数（如 `Sys.IO.Write`, `Sys.Time.Now`）带有特定的名义 Effect（如 `Effect.IO`）。
+  *   由宿主环境提供的 primitive 函数（如 `Sys.IO.Write`, `Sys.Time.Now`）带有特定的名义 Effect（如 `Effect.IO`）。
 
 #### 9.3 传播规则
 
@@ -1785,21 +1983,21 @@ Effect 遵循“向上污染”的代数并集规则：
 2.  **属性访问**: $\epsilon(obj.prop) = \epsilon(obj)$。
 3.  **集合/元组构造**: $\epsilon([a, b]) = \epsilon(a) \cup \epsilon(b)$。构造本身是纯的，但其成员的求值可能带有 Effect。
 
-这意味着如果 `List.Map` 的回调函数 `f` 带有 `IO` Effect，那么 `List.Map{list, f}` 整个表达式的 Effect 集合也将包含 `IO`。
+这意味着如果 `List.map` 的回调函数 `f` 带有 `IO` Effect，那么 `List.map{list, f}` 整个表达式的 Effect 集合也将包含 `IO`。
 
 #### 9.4 封印与坍缩
 
 为了在含有副作用的系统中保留纯粹的片段，Morf 使用函数抽象和 `wrap` 来隔离 Effect。
 
 1.  **函数定义 (Abstraction)**: 
-    *   定义一个函数 `let F = () { E }` 是纯的操作。$\epsilon(F) = \text{None}$。
-    *   内部的 Effect $\epsilon(E)$ 被“封印”在函数体中。
+  *   定义一个函数 `let F = () { E }` 是纯的操作。$\epsilon(F) = \text{None}$。
+  *   内部的 Effect $\epsilon(E)$ 被“封印”在函数体中。
 2.  **自动 Thunk (Wrap)**:
-    *   `wrap { E }` 将表达式 $E$ 的 Effect 坍缩。`wrap` 表达式本身的结果是一个纯的 Namespace（一个零参函数）。
+  *   `wrap { E }` 将表达式 $E$ 的 Effect 坍缩。`wrap` 表达式本身的结果是一个纯的 Namespace（一个零参函数）。
 3.  **解封 (Apply)**:
-    *   当表达式发生调用（Apply）时，被封印的 Effect 释放并向上污染。对调用表达式 `f{a, b, ...}`，其 Effect 定义为：
+  *   当表达式发生调用（Apply）时，被封印的 Effect 释放并向上污染。对调用表达式 `f{a, b, ...}`，其 Effect 定义为：
         $$ \epsilon(f\{a,b,\dots\}) = \epsilon(f)\ \cup\ \epsilon(a)\ \cup\ \epsilon(b)\ \cup\ \dots\ \cup\ f.\text{intrinsic\_effect} $$
-    *   特别地，若 `wrap { E }` 产生一个零参 thunk `t`，则 `t{}` 的 Effect 恰为 `t.intrinsic_effect`（并按上式传播到调用点）。
+  *   特别地，若 `wrap { E }` 产生一个零参 thunk `t`，则 `t{}` 的 Effect 恰为 `t.intrinsic_effect`（并按上式传播到调用点）。
 
 #### 9.5 编译展开准则
 
@@ -1807,9 +2005,9 @@ Effect 遵循“向上污染”的代数并集规则：
 
 1.  **完全展开**: 若 $\epsilon(E) = \text{None}$ 且所有依赖项为常量，则进行常量折叠。
 2.  **部分展开**:
-    *   对于 Namespace $\{ a: E_1, b: E_2 \}$，若 $E_1$ 是纯的而 $E_2$ 是有副作用的。
-    *   编译器可以安全地预计算并将 `obj.a` 替换为结果值。
-    *   `obj.b` 必须保留为原始调用，或仅在确定执行顺序的前提下进行展开。
+  *   对于 Namespace $\{ a: E_1, b: E_2 \}$，若 $E_1$ 是纯的而 $E_2$ 是有副作用的。
+  *   编译器可以安全地预计算并将 `obj.a` 替换为结果值。
+  *   `obj.b` 必须保留为原始调用，或仅在确定执行顺序的前提下进行展开。
 3.  **副作用隔离**: 编译器禁止跨越有 Effect 的表达式进行指令重排，除非能证明两个 Effect 集合是正交的（Orthogonal）。
 
 **正交 (Orthogonal) 的最小定义（保守）**：
@@ -1897,14 +2095,14 @@ impl TreeImpls for (Tree | None) { ... }
 查找步骤如下：
 
 1.  **Data 查找**:
-    *   检查 `E` 本身是否拥有名为 `Key` 的属性。
-    *   若存在 -> 返回 `E[Key]` (直接属性访问)。
-    *   **优先级**: 数据的 Key 永远高于 impl 的方法名称。这意味着如果数据中存在与方法同名的属性，方法将被“遮蔽”。
+  *   检查 `E` 本身是否拥有名为 `Key` 的属性。
+  *   若存在 -> 返回 `E[Key]` (直接属性访问)。
+  * **优先级**: 数据的 Key 永远高于 impl 的方法名称。这意味着如果数据中存在与方法同名的属性，方法将被“遮蔽”。
 
 2.  **Impl 查找 (Contextual Lookup)**:
-    *   若 Data 查找失败，则在 **适用 Impl 候选集** 中查找名为 `Key` 的方法。
-    *   若命中实现 `I` 中的方法 `M` -> 根据 `M` 的修饰符进行脱糖调用（见 10.3.3）。
-    *   若未命中 -> 返回 `None` (或报错，视具体语境)。
+  *   若 Data 查找失败，则在 **适用 Impl 候选集** 中查找名为 `Key` 的方法。
+  *   若命中实现 `I` 中的方法 `M` -> 根据 `M` 的修饰符进行脱糖调用（见 10.3.3）。
+  *   若未命中 -> 返回 `None` (或报错，视具体语境)。
 
 #### 10.3.2 Impl 候选集合
 
@@ -1923,12 +2121,12 @@ Impl 查找 **仅允许**在以下候选集合中进行：
 若 `E.Method{ args }` 通过 Impl 查找命中实现 `X`，则采取以下脱糖规则：
 
 1.  **普通方法**：
-    *   脱糖为：`X.Method{ E, args }`
-    *   语义：`E` 被作为第一个位置参数（`self`）注入。这是最常见的“实例方法”行为。
+  *   脱糖为：`X.Method{ E, args }`
+  *   语义：`E` 被作为第一个位置参数（`self`）注入。这是最常见的“实例方法”行为。
 
 2.  **静态方法** (`static`)：
-    *   脱糖为：`X.Method{ args }`
-    *   语义：`E` 仅作为**寻址锚点**（用于在上下文查找中命中实现 `X`），随后**被丢弃**，不参与参数传递。
+  *   脱糖为：`X.Method{ args }`
+  *   语义：`E` 仅作为**寻址锚点**（用于在上下文查找中命中实现 `X`），随后**被丢弃**，不参与参数传递。
 
 ---
 
@@ -2047,440 +2245,164 @@ Morf 标准库采用 **“类型根 + 后台实现”** 的组织范式：
 - **类型根 `X`**：一个具名空间，作为该概念的父类型入口。
 - **实现 `XxxImpl`**：一个或多个 `impl` 命名空间，为类型根提供方法与工具函数。
 
+### 11.1 核心全集 (Core)
 
-### 11.1 核心全集
 定义在全局作用域的基元。
 
-*   **Uni**: `{}`。全集，所有类型的父类型。
-*   **None**: 递归的空值。
-*   **Proof**: `~None`。实存值。
-*   **Never**: 逻辑矛盾。
+* **Uni**: `{}`。全集，所有类型的父类型。也常写作 `Any`。
+* **None**: 递归的空值。表示值的缺失。
+* **Proof**: `~None`。实存值。表示除 None 以外的所有值。
+* **Never**: 逻辑矛盾。底空间。
+* **Function**: 所有函数值的父类型。
+  *   `impl FunctionImpl for Function` 提供 `Apply`, `Bind` 等基础能力。
+* **Type**: 所有“类型值”的父类型（在 Morf 中，类型即值，通常指代用于描述类型的命名空间）。
 
-### 11.2 流程控制
-*   **Cond{ ...branches }**
-*   **Branch{ cond, wrap do }**
-*   **Else{ wrap do }**
-*   **If{ cond, wrap then, wrap else }**
+### 11.2 流程控制 (Control)
 
-### 11.3 数字模块
-*   **Interval**: (类型根) 所有区间的父类型。
-*   **impl IntervalImpl for Interval**: (工具集)
-    *   **static Lt{ n }**:返回类型 `Lt<n>`。
-    *   **static Gt{ n }**:返回类型 `Gt<n>`。
-    *   **static OO{ min, max }**: 返回 $(min, max)$。
-    *   **static OC{ min, max }**: 返回 $(min, max]$。
-    *   **static CO{ min, max }**: 返回 $[min, max)$。
-    *   **static CC{ min, max }**: 返回 $[min, max]$。
+* **Switch{ wrap ...branches }**: 多路分支。最后一个分支是默认值。
+* **Match{ cond, wrap do }**: 分支项。
+* **If{ cond, wrap then, wrap else }**: 双路分支。
+* **While{ cond, wrap body }**
+* **Loop{ cond, wrap body }**
+* **Iter{ cond, body }**
 
-*   **Number**: 所有数值的父类型。其父类型是 `Interval`。
+### 11.3 数字模块 (Math)
 
-### 11.4 序列模块
-* **Seq**: 所有序列（Tuple / String 投影等）的父类型。
+* **Interval**: (类型根) 所有区间的父类型。
+* **impl IntervalImpl for Interval**: (工具集)
+  * **static Lt{ n }**:返回类型 `Lt<n>`。
+  * **static Gt{ n }**:返回类型 `Gt<n>`。
+  * **static OO{ min, max }**: 返回 $(min, max)$。
+  * **static OC{ min, max }**: 返回 $(min, max]$。
+  * **static CO{ min, max }**: 返回 $[min, max)$。
+  * **static CC{ min, max }**: 返回 $[min, max]$。
+
+* **Number**: 所有数值的父类型。其父类型是 `Interval`。
+  *   具体类型：`Float` (`F32`, `F64`), `Integer` (`I8`-`I64`, `U8`-`U64`)。
+* **impl NumberOps for Number**:
+  *   提供了 `Abs`, `Ceil`, `Floor`, `Round`, `Sqrt`, `Pow` 等通用数学方法。
+  *   提供了 `ToString`, `ToInt`, `ToFloat` 等转换方法。
+
+### 11.4 序列与集合 (Collections)
+
+* **Seq**: 所有序列（Tuple / String 投影 / Array）的父类型。
 * **impl SeqImpl for Seq**:
+  * **length**: (属性) 序列长度。
   * **static Of{ ...items }: Seq**: 构造序列。
-  * **Head{}**: 取首元素。
-  * **Tail{}**: 取剩余部分。
-  * **Map{ f }**: 投影。
-  * **Filter{ pred }**:过滤。
+  * **get{ index }: T | None**: 安全索引访问。
+  * **head{}: T | None**: 取首元素。
+  * **tail{}: Seq**: 取除去首元素后的剩余部分。
+  * **map{ f: (T)->U }: Seq**: 映射。
+  * **filter{ pred: (T)->Bool }: Seq**: 过滤。
+  * **reduce{ init, f }**: 归约。
+  * **slice{ start, end }**: 切片。
+  * **concat{ other }**: 连接。
+  * **push{ item }**: 返回追加元素后的新序列。
+  * **join{ separator }: String**: 连接为字符串。
+  * **startsWith{ prefix }**: 前缀检查。
+  * **endsWith{ suffix }**: 后缀检查。
+  * **contains{ sub }**: 包含检查。
+  * **split{ sep }: Seq**: 分割。
 
-### 11.5 符号和名义
+* **String**: 字符串类型（值类型）。
+* **impl StringOps for String**:
+  * **length**: 字符数。
+  * **trim{}**: 去除首尾空白。
+
+* **List**: 链表或动态数组结构（通常作为递归结构实现）。
+* **impl ListImpl for List**: 提供类似 `Seq` 的操作，但针对递归结构优化。
+
+### 11.5 错误处理 (Option & Result)
+
+* **Option**: 表示可能存在的值。
+  *   定义: `Option = (T) { T | None }`。
+* **impl OptionImpl for Option**:
+  * **isSome{}**: 返回 Bool。
+  * **unwrapOr{ default }**: 取值或默认。
+  * **map{ f }**: 若为 Some 则映射，否则返回 None。
+
+* **Result**: 表示操作成功或失败。
+  *   定义: `Result = Ok | Err`。
+  * **ResultSymbol**: `Nominal.create{}`
+  * **OkSymbol**: `Nominal.create{ ResultSymbol }`
+  * **ErrSymbol**: `Nominal.create{ ErrSymbol }`
+  * **Ok**: `(T) {{ [NominalKey]: OkSymbol, value: T }}`。
+  * **Err**: `(E) {{ [NominalKey]: ErrSymbol, value: T }}`。
+* **impl ResultImpl for Result**:
+  * **isOk{}**: 返回 Bool。
+  * **unwrap{}**: 取值，若为 Err 则 Panic（或返回 Never）。
+  * **map{ f }**: 映射 Ok 值。
+  * **mapErr{ f }**: 映射 Err 值。
+
+### 11.7 反射与元编程
+
 * **Symbol**: 所有符号的父类型。
 * **impl SymbolImpl for Symbol**:
-  * **Create{}: Symbol**: 创建一个符号。 
+  * **static create{ description? }: Symbol**: 创建一个唯一符号。
 
-* **Nominal**: 名义系统的入口命名空间。
+* **Nominal**: 名义系统入口。
 * **impl NominalImpl for Nominal**:
-  * **Create{ ...[]parents: NominalSet }: NominalSet**: 创建一个新的名义符号；若提供 `parents`，新符号在子类型系统中是 `parents` 的子类型（见 3.3）。
-  * **CreateNs{ ...[]parents: NamedNamespace, ...keys: Namespace }: Namespace**: 创建一个新的具名空间作为“类型根”，并注入其 `[NominalKey]` 身份（可选继承 `parents`）。
+  * **create{ ...parents }**: 创建名义符号。
+  * **createNs{ ... }**: 创建具名空间。该空间自动获得构造器能力（见 2.3.10）。
+* **struct**: `NominalImpl.createNs`
 
-### 11.6 基础逻辑
+### 11.8 基础逻辑
 
-* **Bool**: 布尔父类型。`True | False`（规范化为 `DiSet{ True, False }`）
-  * **True**: `Bool` 的子单例，表示真。
-  * **False**: `Bool` 的子单例，表示假。
-
-* **Assert**: 断言工具入口。
-* **impl AssertImpl for Assert**: (工具集)
-  * **Eq{ a, b }**: 强相等性检查，不相等则返回 `Never` 或触发宿主异常。
+* **Bool**: `true | false`。
+* **Assert**: 断言工具。
+  * **static Eq{ a, b }**: 强相等检查。
+  * **static True{ cond }**: 真值检查。
 
 ## 附录
-### 示例代码
+### 1. 示例代码
 #### 二叉树反转
 ```morf
-let Tree = Nominal.CreateNs {
-  val: Number,
+let Node = struct {
+  value: Number,
   left: Tree,
   right: Tree
 }
+let Tree = Node | None
 
-impl TreeOps for (Tree | None) {
-  Invert: (self) {
-    Cond {
-      Branch{ self == None, None },
-      Else {
-        Tree {
-          self.val,
-          self.right.Invert{},
-          self.left.Invert{}
+impl TreeOps for Tree {
+  invert: (self) {
+    Switch {
+      Case { self == None, self },
+      (
+        let { left, right, value } = self
+        Node {
+          value,
+          right.invert{},
+          left.invert{}
         }
-      }
+      )
     }
   }
 }
 
-let myTree = Tree { 1, None, Tree { 2, None, None } }
-let invertedTree = myTree.Invert{}
+let main = () {
+  // 构造一棵树
+  let root = Node { 
+    1,
+    Node { 2, None, None },
+    Node { 3, None, None }
+  }
+
+  // 调用反转
+  // 结果应为: 
+  // Node {
+  //   1,
+  //   Node { 3, None, None },
+  //   Node { 2, None, None }
+  // }
+  let inverted = root.invert{}
+}
 ```
 
 #### 数据库 Schema
-```
-// DB 命名空间作为工具集
-let DB = Nominal.CreateNs {}
-
-impl DBImpl for DB {
-  Int: (width) { 
-    { 
-      __kind__: "Column", 
-      type: "INT", 
-      width: width,
-      nullable: False
-    } 
-  }
-
-  Varchar: (len) {
-    { 
-      __kind__: "Column",
-      type: "VARCHAR", 
-      length: len,
-      nullable: False
-    }
-  }
-
-  Text: {
-    { 
-      __kind__: "Column",
-      type: "TEXT",
-      nullable: False
-    }
-  }
-
-  // --- 约束/修饰符 (Trait) ---
-  // 这些是用来与基础类型做 Intersection (&) 的片段
-  
-  // 主键标记
-  PK: { primary_key: True }
-  
-  // 自增标记
-  AI: { auto_increment: True }
-  
-  // 可空标记 (覆盖默认值)
-  Null: { nullable: True }
-  
-  // 外键生成器
-  FK: (target) {
-    { foreign_key: target }
-  }
-}
-
-// 引入词汇
-let { Int, Varchar, Text, PK, AI, FK, Null } = DB
-
-// 定义 Users 表结构
-let UserSchema = {
-  // 1. 组合：是 Int64, 且是 PK, 且是 AI
-  // 结果：{ type: "INT", width: 64, primary_key: True, auto_increment: True, ... }
-  id: Int{64} & PK & AI,
-
-  // 2. 普通字段
-  username: Varchar{50},
-  
-  // 3. 可空字段
-  email: Varchar{100} & Null,
-  
-  // 4. 带默认值的逻辑 (可以用 Block 里的逻辑处理，或者扩展 DSL)
-  created_at: Int{64} // 存时间戳
-}
-
-// 定义 Posts 表结构
-let PostSchema = {
-  id: Int{64} & PK & AI,
-  
-  title: Varchar{200},
-  content: Text,
-  
-  // 5. 外键关联
-  // 这里的 UserSchema.id 是引用，体现了结构化类型的优势
-  author_id: Int{64} & FK{ UserSchema.id }
-}
-```
 
 #### 查询构建器
-```
-// --- 1. 基础设施 (Infrastructure) ---
-
-// 定义 Query 为一个名义类型根
-let Query = Nominal.CreateNs {
-  table: String,
-  fields: List,
-  conditions: List,
-  limit: Interval // 限制只能是数字或 None
-}
-
-// 模拟 SQL 操作符的结构表达
-// 在 Morf 里，Gt{18} 本身就是一个合法的 Interval 类型/值
-let Op = Nominal.CreateNs {}
-impl OpImpl for Op {
-  // 将结构化条件转为 SQL 字符串
-  Format: (val) {
-    Cond {
-      // 利用模式匹配识别 Interval 类型
-      Branch{ val <: Interval.Gt, "> " + val.min },
-      Branch{ val <: Interval.Lt, "< " + val.max },
-      // 默认为相等
-      Else  { "= '" + val + "'" } 
-    }
-  }
-}
-
-// --- 2. Query 实现 (The Builder) ---
-
-impl QueryBuilder for Query {
-  
-  // 核心：Where 不是修改 this，而是返回一个新的 Intersection
-  // 这里的 condition 是一个对象，如 { age: Gt{18} }
-  Where: (self, condition) {
-    // 结构更新：保留原属性，追加新条件
-    Query & {
-      ...self,
-      conditions: self.conditions.Push{ condition }
-    }
-  }
-
-  // 字段选择
-  Select: (self, ...cols) {
-    Query & {
-      ...self,
-      fields: self.fields.Concat{ cols }
-    }
-  }
-
-  Limit: (self, n) {
-    Query & { ...self, limit: n }
-  }
-
-  // 终结操作：生成 SQL
-  ToSql: (self) {
-    let base = "SELECT " + self.fields.Join{", "} + " FROM " + self.table
-    
-    let whereClause = Cond {
-      Branch{ self.conditions.length == 0, "" },
-      Else {
-        " WHERE " + self.conditions.Map{ (cond) {
-           // 将 { age: Gt{18} } 转换为 "age > 18"
-           cond.Entries{}.Map{ (kv) {
-             kv.key + " " + Op.Format{ kv.value }
-           }}.Join{ " AND " }
-        }}.Join{ " AND " }
-      }
-    }
-    
-    let limitClause = Cond{
-      Branch{ self.limit != None, " LIMIT " + self.limit },
-      Else{ "" }
-    }
-
-    base + whereClause + limitClause
-  }
-}
-
-// --- 3. 定义表结构 (Table Definition) ---
-
-let UserTable = Nominal.CreateNs {
-  __table_name__: "users"
-}
-
-// 扩展 Table 的能力，让它能充当查询起点
-impl TableStart for UserTable {
-  Find: () {
-    Query & {
-      table: self.__table_name__,
-      fields: List.Of{ "*" }, // 默认查所有
-      conditions: List.Of{},
-      limit: None
-    }
-  }
-}
-
-// --- 4. 业务实战：组合式查询 (The Magic) ---
-
-// 基础查询
-let baseQuery = UserTable.Find{}.Select{ "id", "email", "role" }
-
-// 定义一个“可复用的查询片段” (Query Scope)
-// 这是一个普通的 Namespace，不是函数！
-let ActiveUserFilter = { 
-  conditions: List.Of{ 
-    { status: "active", deleted_at: None } 
-  }
-}
-
-let AdultFilter = {
-  conditions: List.Of{
-    { age: Interval.Gt{18} }
-  }
-}
-
-// === 见证奇迹的时刻 ===
-
-// 直接利用 Namespace 的合并特性。
-// 我们把 Query 当作数据，把 Filter 当作补丁，直接 "&" 在一起！
-let q2 = baseQuery & ActiveUserFilter & AdultFilter
-
-// 此时 q2 的结构自动合并了：
-// {
-//   table: "users",
-//   fields: ["id", "email", "role"],
-//   conditions: [
-//     { status: "active", deleted_at: None },
-//     { age: Gt{18} }
-//   ]
-// }
-
-Log{ q2.ToSql{} }
-// 输出: 
-// SELECT id, email, role FROM users 
-// WHERE status = 'active' AND deleted_at = NULL 
-// AND age > 18
-```
 
 #### 订单处理
-```
-// --- 1. 定义状态 (States) ---
-// 每一个状态都是一种“类型”，而不仅仅是一个字符串字段
-let Order = Nominal.CreateNs {}
-
-let Pending = Order & { status: "Pending", unpaidAmount: Number }
-let Paid    = Order & { status: "Paid",    paidAt: Number, paymentId: String }
-let Shipped = Order & { status: "Shipped", trackingNo: String }
-let Closed  = Order & { status: "Closed",  reason: String }
-
-// 订单的全集是所有可能状态的 Union
-// 在 Morf 里，Pending 和 Paid 是互斥的 (因为 status 字符串不同)
-let AnyOrder = Pending | Paid | Shipped | Closed
-
-// --- 2. 定义流转规则 (Transitions) ---
-
-// [规则 1]: 只有 Pending 状态的订单才能支付
-impl PayFlow for Pending {
-  Pay: (self, pId) {
-    // 支付成功，状态跃迁：Pending -> Paid
-    Paid { 
-      ...self,       // 继承原订单信息
-      status: "Paid", 
-      paidAt: Sys.Time.Now{},
-      paymentId: pId
-    }
-  }
-  
-  // 只有未支付的订单才能取消
-  Cancel: (self) {
-    Closed { ...self, status: "Closed", reason: "User Cancelled" }
-  }
-}
-
-// [规则 2]: 只有 Paid 状态的订单才能发货
-impl ShipFlow for Paid {
-  Ship: (self, trackNo) {
-    Shipped { 
-      ...self, 
-      status: "Shipped", 
-      trackingNo: trackNo 
-    }
-  }
-  
-  // 已支付订单退款后关闭
-  Refund: (self) {
-    Closed { ...self, status: "Closed", reason: "Refunded" }
-  }
-}
-
-// [规则 3]: 只有 Shipped 状态才能查看物流
-impl TrackFlow for Shipped {
-  ShowTrace: (self) {
-    Log{ "Tracking: " + self.trackingNo }
-  }
-}
-
-// --- 3. 业务代码体验 ---
-
-let handleOrder = (o: AnyOrder) {
-  // 此时 o 是 Union 类型
-  // o.Pay{}  <-- ❌ 编译错误！因为 Shipped/Closed 状态没有 Pay 方法
-  // o.Ship{} <-- ❌ 编译错误！
-  
-  // 你被“强迫”先理清业务状态
-  Cond {
-    Branch { o.status == "Pending", 
-      o.Pay{ "WeChat_12345" }.Ship{ "SF_001" }
-    },
-    Branch { o.status == "Shipped",
-      o.ShowTrace{}  // ✅ 只有这里能看物流
-      // o.Cancel{}  // ❌ 根本点不出来！已发货不能直接 Cancel，必须走售后流程
-    },
-    Else { Log{ "Order is finalized." } }
-  }
-}
-```
 
 #### UI 组件系统与声明式界面
-
-```morf
-// VNode：虚拟 DOM 节点
-let VNode = Nominal.CreateNs {
-  tag: String,              // 元素标签或组件名
-  props: Uni,               // 属性对象
-  children: Seq             // 子节点序列
-}
-
-// Component：组件类型
-// 组件是一个接收 props 并返回 VNode 的函数
-let Component = (props: Uni) -> VNode
-
-// 创建基础 HTML 元素的工厂函数
-let createElement = (tag: String) {
-  // 返回一个接收混合参数的函数
-  (...[]posArgs, ...namedProps) {
-    VNode {
-      tag,
-      props: namedProps,
-      children: posArgs
-    }
-  }
-}
-
-// 1. 定义基础元素构造器
-let div = createElement{"div"}
-let h1 = createElement{"h1"}
-let button = createElement{"button"}
-
-// 2. 定义计数器组件
-let Counter = (count, onIncrement) {
-  div {
-    class: "counter-container"
-    
-    h1 { "Count is: " + count }
-    
-    button {
-      class: "primary-btn"
-      onClick: onIncrement
-      "Click Me (+1)"
-    }
-  }
-}
-
-// 3. 调用组件
-let vnode = Counter {
-  count: 5
-  onIncrement: () { console.log{"Clicked!"} }
-}
-```
