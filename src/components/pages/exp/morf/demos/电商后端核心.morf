@@ -1,0 +1,340 @@
+// =============================================================================
+// Morf 大型应用架构演示：电商核心交易系统 (E-Commerce Core)
+//
+// 本演示展示了 Morf 如何利用以下特性构建解耦、健壮的企业级应用：
+// 1. Namespace 模块化：领域模型与逻辑的封装
+// 2. Impl + Nominal：类型安全的领域原语 (Domain Primitives)
+// 3. 动态 Impl (Algebraic Effects)：无侵入的依赖注入与错误处理
+// 4. 自定义控制流：声明式的事务与重试机制
+// 5. Direct Style：同步风格书写异步逻辑，Effect 自动传播
+// =============================================================================
+
+// 模拟宿主环境 Sys
+let Sys = {
+  Log: (msg) { },
+  Sleep: (ms) { Async.Sleep{ ms } },
+  Random: () { 0.5 },
+  Uuid: () { "uuid" },
+  Time: { 
+    Now: () { 1234567890 } 
+  }
+}
+
+// -----------------------------------------------------------------------------
+// 1. 领域原语 (Domain Primitives)
+// 利用名义类型 (Nominal) 防止"基本类型偏执" (Primitive Obsession)
+// -----------------------------------------------------------------------------
+
+// 定义货币类型，防止与普通数字混淆
+let Money = named {
+  amount: Number,
+  currency: String
+}
+
+let MoneyOps = impl Money {
+  plus: (self, other: Money) {
+    Assert.True{ self.currency == other.currency }
+    Money { amount: self.amount + other.amount, currency: self.currency }
+  }
+}
+
+// 强类型 ID，避免 ID 混用
+let UserId = named { id: String }
+let OrderId = named { id: String }
+let Sku = named { code: String }
+// 简单的泛型序列占位符（如果标准库 Seq 不支持泛型调用）
+let Seq = (T) { { length: Number, [...Number]: T } }
+
+// -----------------------------------------------------------------------------
+// 2. 领域实体 (Domain Entities)
+// -----------------------------------------------------------------------------
+
+let OrderStatus = 
+  | "Pending"
+  | "Paid"
+  | "Shipped" 
+  | "Cancelled"
+
+let OrderItem = named {
+  sku: Sku,
+  quantity: Gt{0}, // 依赖类型约束：数量必须大于0
+  price: Money
+}
+
+let Order = named {
+  id: OrderId,
+  userId: UserId,
+  items: Seq{OrderItem},
+  status: OrderStatus,
+  createdAt: Number
+}
+
+// -----------------------------------------------------------------------------
+// 3. 能力接口 (Capabilities / Ports)
+// 定义系统需要的"副作用能力"，但不绑定具体实现
+// 这是 Hexagonal Architecture 的"端口"层
+// -----------------------------------------------------------------------------
+
+let Transaction = named{}
+let Database = named{}
+
+// 数据库接口（使用 static 方法 + PascalCase 命名）
+let DatabaseOps = impl Database {
+  static FindOrder: (id: OrderId) -> Order | None { 
+    Throw.Raise{ "Not Implemented" }
+  }
+  
+  static SaveOrder: (order: Order) -> Uni { 
+    Throw.Raise{ "Not Implemented" } 
+  }
+  
+  static BeginTransaction: () -> Transaction { 
+    Throw.Raise{ "Not Implemented" }
+  }
+}
+
+let PaymentGateway = Symbol.Create{}
+
+// 支付网关接口
+let PaymentOps = impl PaymentGateway {
+  static Charge: (amount: Money, user: UserId) -> String {
+    Throw.Raise{ "No Payment Gateway" }
+  }
+}
+
+// -----------------------------------------------------------------------------
+// 4. 基础设施组件 (Infrastructure as Custom Control Flow)
+// Morf 的杀手锏：利用 wrap (Thunk) 定义自定义控制流
+// -----------------------------------------------------------------------------
+
+// 4.1 自动重试机制
+let Retry = (
+  config: { maxAttempts: Integer, backoff: Number },
+  wrap operation
+) {
+  mut attempts: Integer = 0
+  
+  Loop {
+    attempts += 1
+    
+    // 使用 handle 注入自定义的错误处理逻辑
+    handle Throw with {
+      static Raise: (err) {
+        If { attempts >= config.maxAttempts,
+          // 重试次数用尽，真正抛出
+          Intrinsic.Panic{ { error: err, attempts: attempts } }
+        }
+        
+        // 指数退避（看起来是同步的，实际上会挂起 Fiber）
+        Async.Sleep{ config.backoff * (2 << attempts) }
+        continue // 触发 Loop 的 continue 信号
+      }
+    } {
+      // 执行业务逻辑，如果 operation 内部抛出 Throw，会被上面的 handler 捕获
+      return operation{}
+    }
+  }
+}
+
+// 4.2 事务作用域
+// 用户自定义的"事务"控制流，看起来像语言关键字，实际上是普通函数
+let WithTransaction = (wrap body) {
+  // 开启事务（自动挂起等待，无需 await）
+  let tx = Database.BeginTransaction{} 
+  
+  // 构造一个带事务上下文的 Database 实现
+  let TxDatabase = impl Database {
+    static FindOrder: (id) { tx.FindOrder{ id } }
+    static SaveOrder: (order) { tx.SaveOrder{ order } }
+    static BeginTransaction: () { tx.BeginTransaction{} }
+  }
+  
+  // 注入事务版本的数据库实现
+  handle DatabaseOps with TxDatabase {
+    // 劫持 Throw：异常发生时自动回滚
+    handle Throw with {
+      static Raise: (err) {
+        tx.Rollback{} 
+        Intrinsic.Panic{ err } 
+      }
+    } {
+      let result = body{}
+      tx.Commit{} // 正常结束，提交
+      result
+    }
+  }
+}
+
+// -----------------------------------------------------------------------------
+// 5. 业务服务 (Business Logic)
+// 纯粹的业务逻辑，不依赖具体实现
+// 所有依赖都通过"环境" (Impl) 隐式获取
+// -----------------------------------------------------------------------------
+
+let OrderService = {
+  
+  // 创建订单核心逻辑
+  PlaceOrder: (user: UserId, items: Seq{OrderItem}) {
+    
+    // 1. 业务校验
+    If { items.length == 0,
+      Throw.Raise{ "Cart is empty" }
+    }
+    
+    // 2. 计算总价 (FP 风格)
+    let total = items
+      .Map{ (i) { Money{ i.price.amount * i.quantity, i.price.currency } } }
+      .Reduce{ Money{0, "USD"}, (acc, price) { acc.plus{ price } } }
+      
+    // 3. 构建订单对象
+    let order = Order {
+      id: OrderId{ Sys.Uuid{} },
+      userId: user,
+      items: items,
+      status: "Pending",
+      createdAt: Sys.Time.Now{}
+    }
+    
+    // 4. 执行核心交易流程（在事务中）
+    WithTransaction {
+      
+      // 保存订单（看起来是同步调用，实际会自动挂起等待 IO）
+      Database.SaveOrder{ order }
+      
+      // 扣款（带自动重试，失败会抛出 Throw 效应）
+      let txId = Retry{ { maxAttempts: 3, backoff: 100 }, 
+        PaymentGateway.Charge{ total, user }
+      }
+      
+      // 更新状态为已支付
+      let paidOrder = { ...order, status: "Paid" }
+      Database.SaveOrder{ paidOrder }
+      
+      paidOrder
+    }
+  },
+  
+  // 查询订单
+  GetOrder: (id: OrderId) {
+    let order = Database.FindOrder{ id }
+    If { order == None,
+      Throw.Raise{ "Order not found" }
+    }
+    order
+  }
+}
+
+// -----------------------------------------------------------------------------
+// 6. 实现层 (Adapters)
+// 具体的外部系统适配器
+// -----------------------------------------------------------------------------
+
+// 模拟的内存数据库
+let InMemoryDb = () {
+  mut store: { [...String]: mut (Order | None) } = { }
+  
+  impl Database {
+    static FindOrder: (id) {
+      Async.Sleep{ 10 } // 模拟 IO 延迟（自动触发 Effect.Async）
+      store[id.id]
+    }
+    
+    static SaveOrder: (order) {
+      Async.Sleep{ 10 }
+      store[order.id.id] = order
+      None
+    }
+    
+    // 简单的模拟事务
+    static BeginTransaction: () {
+      mut pending: Seq{Order} = []
+      // 返回一个 Transaction 对象
+      {
+        FindOrder: (id) { store[id.id] },
+        SaveOrder: (order) { pending.Push{ order } },
+        Commit: () { 
+          pending.Each{ (o) { store[o.id.id] = o } }
+        },
+        Rollback: () { pending = [] },
+        BeginTransaction: () { this }
+      }
+    }
+  }
+}
+
+// 模拟的支付网关
+let MockPayment = impl PaymentGateway {
+  static Charge: (amount, user) {
+    Async.Sleep{ 50 } // 模拟网络延迟
+    
+    // 业务规则：超过限额直接抛异常（通过 Throw 效应）
+    If { amount.amount > 10000,
+      Throw.Raise{ "Payment limit exceeded" }
+    }
+    
+    // 10% 概率模拟支付失败
+    If { Sys.Random{} < 0.1,
+      Throw.Raise{ "Payment gateway timeout" }
+    }
+    
+    // 成功返回交易 ID
+    "Tx_" + Sys.Uuid{}
+  }
+}
+
+// -----------------------------------------------------------------------------
+// 7. 应用组装与入口 (Composition Root)
+// -----------------------------------------------------------------------------
+
+let main = () {
+  
+  // 初始化基础设施
+  let dbImpl = InMemoryDb{}
+  
+  // 依赖注入：使用 handle 注入具体实现
+  handle DatabaseOps with dbImpl {
+    handle PaymentOps with MockPayment {
+      
+      // 准备测试数据
+      let user = UserId{ "u_007" }
+      let items = [
+        OrderItem{ Sku{"iphone_16"}, 1, Money{ 999, "USD" } },
+        OrderItem{ Sku{"case"}, 2, Money{ 50, "USD" } }
+      ]
+      
+      // 劫持 Throw 效应，用于全局错误处理
+      handle Throw with {
+        static Raise: (err) {
+          Sys.Log{ "❌ Order Failed: " + err }
+          None // 返回 None 表示失败
+        }
+      } {
+        // 执行业务逻辑（看起来是同步的！）
+        let order = OrderService.PlaceOrder{ user, items }
+        Sys.Log{ "✅ Order Success: " + order.id.id }
+        order
+      }
+      
+    }
+  }
+}
+
+// -----------------------------------------------------------------------------
+// 8. 并发示例：只有在需要并行执行时才使用 async/await
+// -----------------------------------------------------------------------------
+
+let BatchPlaceOrders = (orders: Seq{
+  { user: UserId, items: Seq{OrderItem} }
+}) {
+  
+  // 创建多个并发任务
+  let tasks = orders.Map{ (req) {
+    // async 创建一个 Future，任务立即在后台开始执行
+    async OrderService.PlaceOrder{ req.user, req.items }
+  }}
+  
+  // 等待所有任务完成
+  let results = tasks.Map{ (task) { await task } }
+  
+  results
+}

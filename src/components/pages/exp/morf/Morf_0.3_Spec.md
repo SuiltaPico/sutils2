@@ -40,10 +40,6 @@
 
 ### 1.2 核心理念
 
-1.  **万物皆命名空间**: 系统中的基本构成单元是键值对集合。
-2.  **名义即属性**: 类型的名义不是一种特殊的难以访问的元数据，而是一个特殊的、不可伪造的属性。
-3.  **数值与其关系**: 摒弃 IEEE 754 浮点数限制。数字之间仅存在大小比较关系（$<$）。
-4.  **类型即值**: 类型和值的统一使得 Morf 自然支持高阶类型，类型构造器可以作为一等公民传递和操作。
 
 ---
 
@@ -244,7 +240,7 @@ $$
 
 ### 2.3.10 具名空间构造器
 
-通过 `Nominal.createNs` 创建的具名空间（NamedNamespace）不仅仅是类型定义，它自动获得**构造器**能力。
+通过 `Nominal.CreateNs` 创建的具名空间（NamedNamespace）不仅仅是类型定义，它自动获得**构造器**能力。
 
 #### 构造调用语法
 具名空间 `T` 可以像函数一样被调用：`T { ...args }`。这提供了一种基于原型的对象构造方式。
@@ -253,7 +249,7 @@ $$
 调用 `T { ... }` 等价于执行以下步骤：
 
 1.  **参数映射**：将传入的实参映射到 `T` 的属性键上。
-    *   **顺序依据**：映射依据 `T` 定义时的**键声明顺序**。实现必须保留 `createNs` 传入对象的键顺序元数据。
+    *   **顺序依据**：映射依据 `T` 定义时的**键声明顺序**。实现必须保留 `CreateNs` 传入对象的键顺序元数据。
     *   **映射规则**：遵循 **4.3.3** 定义的函数参数绑定算法（命名优先，位置补齐）。
 2.  **实例化覆盖**：生成一个新的命名空间，其结构为 `{ ...T, ...mapped_args }`。
 3.  **类型检查**：对于每一个被覆盖的键 `k`，验证 `mapped_args[k] <: T[k]`。即新值必须符合原属性的类型约束。
@@ -262,7 +258,7 @@ $$
 
 ```morf
 // 定义 Point 类型，确立了 x, y, z 的顺序
-let Point = Nominal.createNs { 
+let Point = Nominal.CreateNs { 
   x: Number, 
   y: Number,
   z: Number
@@ -579,7 +575,7 @@ obj[key]        // 1
 **命名空间键示例**:
 ```morf
 // 使用符号作为键
-let sym = Symbol.create{}
+let sym = Symbol.Create{}
 let secretData = { [sym]: "Hidden Value" }
 
 secretData[sym]       // "Hidden Value"
@@ -786,8 +782,8 @@ let p1 = { x: 1, y: 2 }
 let p2 = { x: 1, y: 2 }
 p1 == p2  // true (结构相等)
 
-let s1 = Symbol.create{}
-let s2 = Symbol.create{}
+let s1 = Symbol.Create{}
+let s2 = Symbol.Create{}
 s1 == s2  // false (每一个 Symbol 都是唯一的)
 ```
 
@@ -885,7 +881,7 @@ Morf 支持基本的赋值与复合赋值操作。赋值操作仅对 `mut` 声�
 
 * **语法**: `&variable`
 * **语义**: 获取 `variable` 对应的内存槽位（Slot）的引用。
-* **类型**: 若 `x` 的类型为 `T`，且 `x` 是 `mut` 绑定的，则 `&x` 的类型为 `Slot<T>`（一种特殊的系统内建类型）。
+* **类型**: 若 `x` 的类型为 `T`，且 `x` 是 `mut` 绑定的，则 `&x` 的类型为 `Slot{T}`（一种特殊的系统内建类型）。
 * **用途**:
     1.  **身份比较**: 判断两个变量是否指向同一个存储槽位。
     2.  **传递引用**: 将槽位传递给接受 `mut` 参数的函数（虽然函数调用时通常会自动处理，但在某些泛型上下文中显式取址可能更清晰）。
@@ -967,7 +963,7 @@ let [head, ...tail] = point
 
 *   **合法引用 (Structural Reference)**：
     *   作为命名空间的属性值：`{ next: PendingVar }`
-    *   作为类型构造器的参数：`Option<PendingVar>`
+    *   作为类型构造器的参数：`Option{PendingVar}`
     *   作为 Union/Intersection 的成员：`A | PendingVar`
     *   在函数体（闭包）内部引用：`() { PendingVar }`
 *   **非法引用 (Immediate Evaluation)**：
@@ -1210,7 +1206,7 @@ let greet = (name: String) { "Hello, " + name }
 let divide = (a: Number, b: Number) { a / b }
 
 // 使用区间类型约束
-let positive_sqrt = (x: Gt<0>) { Sqrt{ x } }
+let positive_sqrt = (x: Gt{0}) { Sqrt{ x } }
 ```
 
 #### 4.3.5 参数作为泛型
@@ -1289,7 +1285,7 @@ let f = (x) {
 }
 // 推导返回类型：一个依赖于参数 x 的条件类型/类型函数
 // 直观等价于 Typescript：
-//   x extends Gt<0> ? 1 : "error"
+//   x extends Gt{0} ? 1 : "error"
 //
 // 若把依赖擦除，仅取对外承诺上界（约定返回类型的候选）：
 //   1 | "error"
@@ -1342,19 +1338,104 @@ impl Sub for ... {
 条件分支通过 `Switch` 或 `If` 函数实现。由于分支代码块被绑定到 `wrap` 参数，它们仅在满足条件时才会被求值。
 
 #### 4.5.2 循环与递归
-（TODO）
 
-#### 4.5.3 异常与错误处理
-Morf 使用 `Result` 类型（`Ok | Err`）或 `Option` 类型（`Some | None`）进行错误处理，配合模式匹配或组合子（Combinators）进行流程控制，而非使用 `try-catch` 机制。
+Morf 中的循环并非特殊的语法结构，而是标准库提供的普通函数。
+
+*   **While**: `While { cond, wrap body }`。只要 `cond` 为真就重复执行 `body`。
+*   **Loop**: `Loop { wrap body }`。无限循环，通常配合 `break` 使用。
+*   **递归**: 由于函数是头等公民且支持块级提升（3.15），直接的函数递归是处理重复逻辑的首选方式，也是函数式编程的惯用模式。
 
 ```morf
-let result = File.Read{ "data.txt" }
-
-Switch {
-  Case { result.isOk, Process{ result.value } },
-  Log{ "Error: " + result.error }
+let factorial = (n) {
+  If { n <= 1, 1, n * factorial{n - 1} }
 }
 ```
+
+### 4.6 非局部控制流与信号
+
+为了在基于函数的控制流（如 `If`, `Switch`, `While`）中支持传统的“提前返回”或“循环中断”，Morf 将 `return`, `break`, `continue` 建模为 **控制流信号 (Control Signal)**。这是一种特殊的、隐式的代数效应。
+
+#### 4.6.1 信号模型
+
+*   **发射 (Emit)**: 语句如 `return x` 或 `break` 本质上发射了一个信号。这会导致当前执行流立即中断（类型为 `Never`），信号沿着调用栈向上逃逸。
+*   **穿透 (Penetrate)**: 信号会自动穿透所有的 `wrap` Thunk 边界和普通函数调用栈。
+*   **捕获 (Trap)**: 信号直到遇到特定的**词法边界 (Lexical Boundary)** 或 **Handler** 才会被捕获并处理。
+
+#### 4.6.2 Return 语句
+
+*   **语法**: `return Expr`
+*   **语义**: 发射 `Signal.Return`，携带返回值。
+*   **捕获边界**: **最近的词法层级函数定义**（Lexical Function Definition）。
+    *   即 `let f = (...) { ... }` 定义的函数体边界。
+    *   注意：传递给 `If`, `Switch` 的 `wrap` 块**不是**独立的函数定义边界（虽然底层实现为 Thunk），因此 `return` 会穿透它们，直接从宿主函数返回。这实现了直观的 **Non-local Return**。
+
+```morf
+let findUser = (users, targetId) {
+  // users.each 接受一个回调函数
+  users.each { user ->
+    // If 是一个普通函数调用，其第二个参数是 wrap thunk
+    If { user.id == targetId, 
+      // 这里的 return 不会只从 If 返回，也不会只从 each 的回调返回
+      // 而是作为信号穿透，直接终止 findUser 函数，并返回 user
+      return user 
+    }
+  }
+  None
+}
+```
+
+#### 4.6.3 Break 与 Continue
+
+*   **语法**: `break` / `continue`
+*   **语义**: 发射 `Signal.Break` 或 `Signal.Continue`。
+*   **捕获边界**: **最近的循环函数调用**（Loop Context）。
+    *   标准库中的循环函数（如 `While`, `Loop`, `Iter`）内部实现了 Signal Handler，负责捕获这些信号并执行相应逻辑（终止循环或跳过当前迭代）。
+
+```morf
+let sumUntil = (nums, limit) {
+  mut sum = 0
+  
+  // Iterate 是一个普通函数
+  Iterate { nums, (n) ->
+    if { sum + n > limit, break } // 发射 Break 信号，被 Iterate 捕获
+    if { n < 0, continue }        // 发射 Continue 信号，被 Iterate 捕获
+    sum += n
+  }
+  
+  sum
+}
+```
+
+### 4.5.3 异常与错误处理
+
+Morf 倡导 **“能力导向 (Capability-based)”** 的错误处理哲学。
+
+* **控制流错误（Exceptions）**：对于系统级错误或中断流程的异常（如文件未找到、网络错误），推荐使用 **动态 Impl（代数效应）** 进行处理（见 10.7）。这避免了 `Result` 类型对函数签名的污染，实现了“直接风格（Direct Style）”的编程体验。
+* **数据化错误（Errors as Data）**：仅当错误需要作为业务逻辑的数据进行存储、传递或批量处理时，才使用 `Result` 类型（`Ok | Err`）。
+
+```morf
+// 使用 Impl 处理错误 (Direct Style)
+let div = (a, b) {
+  if b == 0 { Uni<Throw>.raise{ "ZeroDivision" } }
+  a / b
+}
+
+// 在上层处理
+using impl Throw = { 
+  raise: (msg) { Log{ "Error: " + msg }; 0 } 
+} {
+  div{ 10, 0 } // -> Log "Error...", returns 0
+}
+```
+
+### 4.5.4 异步与并发
+
+Morf 采用 **“同步偏好 (Synchronous Preference)”** 或 **Direct Style** 的异步模型。
+
+* **默认同步**：任何异步操作（如 IO）在语法上看起来都是同步阻塞的调用。编译器会自动处理底层的挂起与调度（Effect 染色）。
+* **显式并发**：仅当需要通过并行执行来优化性能时，才使用 `async` 关键字获取任务句柄（Future）。
+
+详细规范见 **12. 异步系统**。
 
 ---
 
@@ -1413,31 +1494,31 @@ Morf 支持多种进制的整数字面量表示。
 #### 5.3.1 基础区间类型
 
 * **`Interval`**: 所有区间类型的父接口。
-* **`Lt<N>` (Less Than N)**: 集合 $\{ x \mid x < N \}$。
-* **`Gt<N>` (Greater Than N)**: 集合 $\{ x \mid x > N \}$。
+* **`Lt{N}` (Less Than N)**: 集合 $\{ x \mid x < N \}$。
+* **`Gt{N}` (Greater Than N)**: 集合 $\{ x \mid x > N \}$。
 
 #### 5.3.2 有界区间
 
 替代单一的 `Range`，支持完整的开闭区间组合：
 
-* **`IntervalOO<Min, Max>`**: Open-Open, $(Min, Max)$, $\{ x \mid Min < x < Max \}$
-* **`IntervalOC<Min, Max>`**: Open-Closed, $(Min, Max]$, $\{ x \mid Min < x \le Max \}$
-* **`IntervalCO<Min, Max>`**: Closed-Open, $[Min, Max)$, $\{ x \mid Min \le x < Max \}$
-* **`IntervalCC<Min, Max>`**: Closed-Closed, $[Min, Max]$, $\{ x \mid Min \le x \le Max \}$
+* **`IntervalOO{Min, Max}`**: Open-Open, $(Min, Max)$, $\{ x \mid Min < x < Max \}$
+* **`IntervalOC{Min, Max}`**: Open-Closed, $(Min, Max]$, $\{ x \mid Min < x \le Max \}$
+* **`IntervalCO{Min, Max}`**: Closed-Open, $[Min, Max)$, $\{ x \mid Min \le x < Max \}$
+* **`IntervalCC{Min, Max}`**: Closed-Closed, $[Min, Max]$, $\{ x \mid Min \le x \le Max \}$
 
 #### 5.3.3 与 Number 的相容性
 
 这些集合类型与具体的数字类型是**相容**的。这意味着一个具体的数字可以是这些集合的子类型。
 
 *   若 $x < N$，则 $x <: \text{Lt}<N>$。
-  *   `1 <: Lt<2>` 为 **true**。
-  *   `1 & Lt<2> -> 1`。
+  *   `1 <: Lt{2}` 为 **true**。
+  *   `1 & Lt{2} -> 1`。
 
 #### 5.3.4 集合运算
 
-*   `Lt<5> & Lt<3> -> Lt<3>`
-*   `Gt<1> & Lt<3> -> IntervalOO<1, 3>`
-*   `Lt<1> & Gt<3> -> Never`
+*   `Lt{5} & Lt{3} -> Lt{3}`
+*   `Gt{1} & Lt{3} -> IntervalOO{1, 3}`
+*   `Lt{1} & Gt{3} -> Never`
 
 ## 5.4 具体数字类型体系
 
@@ -1477,14 +1558,14 @@ I32 & F64 -> Never
 
 #### 字面量类型
 
-- **整数**字面量 `n` 的类型为 `IntLit<n>`
-- **小数**字面量 `r` 的类型为 `FloatLit<r>`
+- **整数**字面量 `n` 的类型为 `IntLit{n}`
+- **小数**字面量 `r` 的类型为 `FloatLit{r}`
 
 字面量类型可实例化为兼容的具体数字类型：
 
-- `IntLit<n> <: I8/I16/I32/I64` 当 `n` 落在对应值域内
-- `IntLit<n> <: U8/U16/U32/U64` 当 `n` 落在对应值域内
-- `IntLit<n> <: Float` 与 `FloatLit<r> <: Float` 总是成立（可能损失精度）
+- `IntLit{n} <: I8/I16/I32/I64` 当 `n` 落在对应值域内
+- `IntLit{n} <: U8/U16/U32/U64` 当 `n` 落在对应值域内
+- `IntLit{n} <: Float` 与 `FloatLit{r} <: Float` 总是成立（可能损失精度）
 
 #### 默认推断
 
@@ -1625,10 +1706,10 @@ impl Convert for Number {
 
 ```morf
 // 区间约束自动推断具体类型
-let positive_i32 = Gt<0> & I32
-// 等价于 I32 & IntervalOO<0, I32.Max>
+let positive_i32 = Gt{0} & I32
+// 等价于 I32 & IntervalOO{ 0, I32.Max }
 
-let byte_range = IntervalCC<0, 255> & I32
+let byte_range = IntervalCC{ 0, 255 } & I32
 // 类型检查器知道这个值可以安全转换为 U8
 
 // 在函数签名中使用
@@ -1799,6 +1880,8 @@ Morf 引入了 **"一等公民槽位"** 模型。这一设计旨在弥合纯函�
 let $slot_a = { value: 1 }
 ```
 
+> **建议**：如果在定义命名空间类型时，某个属性预期是可变的（即后续会对该属性进行赋值更新），应当（SHOULD）使用 `{ key: mut Type }` 的语法进行显式标注。虽然底层更新机制可能基于 Copy-on-Write，但这能清晰传达设计意图。
+
 ### 8.2 自动解引用
 
 为了保证语法的简洁性，Morf 在普通表达式中对 `mut` 变量进行自动拆箱。
@@ -1905,7 +1988,7 @@ Using{ File.Open{"data.txt"}, (file) {
 
 #### 8.7.1 线性类型 (Unique)
 
-`Unique<T>` 是一个特殊的类型包装器，它向编译器传达以下约束：
+`Unique{T}` 是一个特殊的类型包装器，它向编译器传达以下约束：
 1.  **唯一所有权**: 该值在同一时刻只能有一个引用。
 2.  **禁止复制**: 赋值或传参操作会发生**移动 (Move)**，原变量失效。
 3.  **立即释放**: 当 `Unique` 对象离开作用域且未被移动时，系统**立即**回收其内存（不经过 GC）。
@@ -2030,17 +2113,36 @@ Morf 中的 “方法”，是由 **Impl 命名空间** 提供的一组函数定
 
 ### 10.1 Impl 也是命名空间
 
-#### 10.1.1 Impl 的声明形式
+Impl 的本质是一个被特殊标记的命名空间，因此它可以通过变量绑定的方式进行定义。
 
-`impl` 用于声明一个实现命名空间，其内部包含若干“方法条目”（键为方法名，值为函数）。
+#### 10.1.1 Impl 表达式
 
-```morf
-impl TreeImpls for (Tree | None) {
-  Invert: (self) { ... }
-}
-```
+Morf 支持 `impl for T { ... }` 表达式，该表达式求值后返回一个“匿名 Impl 命名空间”。通常我们将其绑定到一个变量上以供后续引用（如 `.` 查找）。
 
-该声明的**规范性含义**是：构造一个命名空间 `TreeImpls`，并将其标记为“一个 impl”，且该 impl 与某个**目标类型**（此处为 `Tree | None`）关联。
+* **语法**：
+  ```morf
+  let ImplName = impl TargetType {
+      Method: (self) { ... }
+  }
+  // 也可以显式加上 for 关键字
+  // let ImplName = impl for TargetType { ... }
+  ```
+
+* **语法糖（声明式写法）**：
+  为了兼容习惯，也支持声明式写法，其语义等价于上述 `let` 绑定：
+  ```morf
+  impl ImplName for TargetType { ... }
+  // 等价于
+  let ImplName = impl TargetType { ... }
+  ```
+
+* **匿名用法**：
+  Impl 表达式可以直接用于 `handle` 或作为值传递，无需命名。
+  ```morf
+  handle impl Uni { ... } with {
+      // ...
+  }
+  ```
 
 #### 10.1.2 Impl 的名义标记
 为了使“这是一个 impl”这一事实可被系统可靠识别，impl 命名空间必须携带名义标记。其可以这样表示：
@@ -2063,6 +2165,8 @@ AnotherImpls
 
 - **普通方法 (Ordinary Method)**：默认状态。期望在调用时接收“调用者（Subject）”作为第一个参数（即 `self`）。
 - **静态方法 (Static Method)**：使用 `static` 修饰。在调用时**不接收**调用者，仅利用 Impl 机制进行上下文查找。
+
+> **建议**：静态方法应当（SHOULD）使用首字母大写的命名风格（PascalCase），例如 `Create`, `From`；以便于在调用点与普通方法（camelCase）进行视觉区分。
 
 ---
 
@@ -2090,7 +2194,7 @@ impl TreeImpls for (Tree | None) { ... }
 
 #### 10.3.1 统一访问规则
 
-表达式 `E.Key` 的解析遵循 **"Data 优先，Impl 兜底"** 的原则。
+表达式 `E.Key` 的解析遵循 **"Data 优先，动态 Impl 其次，静态 Impl 兜底"** 的原则。
 
 查找步骤如下：
 
@@ -2099,8 +2203,13 @@ impl TreeImpls for (Tree | None) { ... }
   *   若存在 -> 返回 `E[Key]` (直接属性访问)。
   * **优先级**: 数据的 Key 永远高于 impl 的方法名称。这意味着如果数据中存在与方法同名的属性，方法将被“遮蔽”。
 
-2.  **Impl 查找 (Contextual Lookup)**:
-  *   若 Data 查找失败，则在 **适用 Impl 候选集** 中查找名为 `Key` 的方法。
+2.  **动态 Impl 查找 (Dynamic Context)**:
+  *   若 Data 查找失败，则在当前调用栈的 **动态 Impl 上下文** 中查找。
+  *   实现必须从栈顶向下搜索最近的 `using impl` 作用域。
+  *   若命中 -> 脱糖调用。
+
+3.  **静态 Impl 查找 (Static Context)**:
+  *   若动态查找失败，则在 **适用 Impl 候选集** 中查找名为 `Key` 的方法。
   *   若命中实现 `I` 中的方法 `M` -> 根据 `M` 的修饰符进行脱糖调用（见 10.3.3）。
   *   若未命中 -> 返回 `None` (或报错，视具体语境)。
 
@@ -2238,14 +2347,151 @@ let inv = t.Invert{}
 
 ---
 
-## 11. 标准库
+### 10.7 动态 Impl 与上下文注入
+
+Morf 支持在运行时动态替换 Impl 的实现，这一机制被称为 **动态 Impl**。它将 Impl 系统从单纯的静态多态扩展为 **代数效应 (Algebraic Effects)** 和 **依赖注入 (Dependency Injection)** 的统一模型。
+
+#### 10.7.1 语法：`handle ... with`
+
+为了简化上下文注入的语法，Morf 引入 `handle` 关键字（意为“处理接口请求”或“提供能力实现”）。
+
+* **语法**: `handle Interface with Implementation { Block }`
+* **匿名对象简写**: `handle Interface with { ...methods } { Block }`
+  *   当 `with` 后跟随一个对象字面量时，编译器会自动将其视为“实现了 Interface 目标类型的匿名 Impl”。
+
+* **语义**: 
+    1.  在 `Block` 的执行期间（包括其调用的所有子函数），任何对 `Interface` 的方法查找都将优先分派给 `Implementation`。
+    2.  这种替换是 **动态作用域 (Dynamic Scoped)** 的，即它影响当前的调用栈。
+    3.  当 `Block` 执行结束，Impl 环境自动恢复。
+
+#### 10.7.2 示例：依赖注入
+
+`handle` 允许在不修改函数签名的情况下传递上下文依赖，且语法非常接近自然语言。
+
+```morf
+// 定义接口 (Effect)
+let Logger = impl Uni {
+  log: (msg) { Sys.Print{ msg } } // 默认实现
+}
+
+// 业务函数 (无需传递 logger 参数)
+let worker = (data) {
+  Uni<Logger>.log{ "Processing..." }
+}
+
+let main = () {
+  // 1. 使用默认 Logger
+  worker{ "A" }
+
+  // 2. 注入已有实现
+  let FileLogger = impl Uni {
+      log: (msg) { File.Append{ "log.txt", msg } }
+  }
+  handle Logger with FileLogger {
+    worker{ "B" }
+  }
+
+  // 3. 注入匿名实现 (类似 extend/override)
+  handle Logger with {
+    log: (msg) { Sys.Print{ "[MOCK] " + msg } }
+  } {
+    worker{ "C" }
+  }
+}
+```
+
+#### 10.7.3 用途：代数效应与控制流
+
+配合 `wrap` (Thunk) 机制，动态 Impl 可以实现复杂的控制流，如异常、生成器、协程等。
+
+* **Continuation (Resume)**: 
+    *   虽然 Morf 0.3 暂未暴露显式的 `resume` 原语，但用户可以通过在 Impl 方法中抛出特定的控制流信号（或返回特定的控制流对象），并在 `using impl` 边界处进行处理，来模拟效应处理程序 (Effect Handler)。
+    *   未来的 Morf 版本可能引入原生的一次性延续 (One-shot Continuation)。
+
+---
+
+
+
+## 11. 异步系统
+
+Morf 的异步模型建立在 **Effect 系统** 与 **轻量级线程 (Fiber)** 之上。其设计目标是消除“函数染色问题”，让异步代码像同步代码一样直观，同时提供强大的并发控制能力。
+
+### 11.1 核心概念
+
+#### 11.1.1 Effect.Async
+
+*   **定义**: `Effect.Async` 是一个系统内置的 Effect。
+*   **源头**: 所有涉及耗时操作（IO、Timer 等）的宿主原语（如 `Sys.Net.Fetch`）都带有 `Effect.Async`。
+*   **传播**: 任何调用了异步函数的函数，其 `intrinsic_effect` 都会自动染上 `Effect.Async`。
+*   **调度**: 当在同步上下文调用带有 `Effect.Async` 的函数时，编译器会自动插入调度点：挂起当前 Fiber，直到操作完成，然后恢复执行。
+
+#### 11.1.2 Future (Task)
+
+*   **定义**: `Future{T}` 是一个代表“正在进行的计算”的句柄（Handle）。
+*   **热启动**: Future 在创建时即开始执行（Hot Future）。
+*   **封装**: `Future` 对象本身**不带有** `Effect.Async`。这意味着获取一个 Future 是纯粹的、非阻塞的操作。
+
+### 11.2 关键字
+
+#### 11.2.1 `async`
+
+*   **语法**: `async Expr`
+*   **约束**: `Expr` 必须是一个函数调用或代码块。
+*   **语义**: 
+    1.  创建一个新的 Fiber。
+    2.  在该 Fiber 中并发执行 `Expr`。
+    3.  立即返回一个指向该 Fiber 结果的 `Future{T}`。
+    4.  **切断 Effect**: 即使 `Expr` 带有 `Effect.Async`，`async Expr` 表达式本身也没有 `Effect.Async`。这允许在不阻塞当前线程的情况下启动后台任务。
+
+#### 11.2.2 `await`
+
+*   **语法**: `await Expr`
+*   **约束**: `Expr` 的类型必须是 `Future{T}`。
+*   **语义**:
+    1.  挂起当前 Fiber。
+    2.  等待目标 `Future` 完成。
+    3.  返回 `Future` 的结果 `T`。
+    4.  **释放 Effect**: `await` 表达式带有 `Effect.Async`。
+
+### 11.3 编程模式对比
+
+#### 11.3.1 串行（默认风格）
+
+```morf
+// 看起来是同步的，实际上底层是异步调度的
+let data1 = fetch{ "http://a.com" } 
+let data2 = fetch{ "http://b.com" } // 等待 data1 完成后才开始
+```
+
+#### 11.3.2 并行（优化风格）
+
+```morf
+// 使用 async 显式并发
+let task1 = async fetch{ "http://a.com" } 
+let task2 = async fetch{ "http://b.com" } 
+
+// 此时两个请求都在后台跑
+
+// 在需要结果时汇合
+let res1 = await task1
+let res2 = await task2
+```
+
+### 11.4 标准库支持
+
+关于 `Future` 类型及 `Async` 工具集的详细 API 定义，请参阅 **11.9 异步与并发**。
+
+
+---
+
+## 12. 标准库
 
 Morf 标准库采用 **“类型根 + 后台实现”** 的组织范式：
 
 - **类型根 `X`**：一个具名空间，作为该概念的父类型入口。
 - **实现 `XxxImpl`**：一个或多个 `impl` 命名空间，为类型根提供方法与工具函数。
 
-### 11.1 核心全集 (Core)
+### 12.1 核心全集
 
 定义在全局作用域的基元。
 
@@ -2257,7 +2503,7 @@ Morf 标准库采用 **“类型根 + 后台实现”** 的组织范式：
   *   `impl FunctionImpl for Function` 提供 `Apply`, `Bind` 等基础能力。
 * **Type**: 所有“类型值”的父类型（在 Morf 中，类型即值，通常指代用于描述类型的命名空间）。
 
-### 11.2 流程控制 (Control)
+### 12.2 流程控制
 
 * **Switch{ wrap ...branches }**: 多路分支。最后一个分支是默认值。
 * **Match{ cond, wrap do }**: 分支项。
@@ -2265,13 +2511,20 @@ Morf 标准库采用 **“类型根 + 后台实现”** 的组织范式：
 * **While{ cond, wrap body }**
 * **Loop{ cond, wrap body }**
 * **Iter{ cond, body }**
+* **Signal**: 控制流信号操作与原语。
+  * **static Emit{ tag: Nominal, payload: Any }: Never**: 发射信号，中断当前流并向上逃逸。
+  * **static Handle{ wrap block, handlers }: Any**: 执行 `block` 并捕获其中发射的信号。
+    * `handlers` 是一个映射 `{ [SignalTag]: (payload) -> Result }`。
+  * **ReturnTag**: (名义符号) 返回信号标识。
+  * **BreakTag**: (名义符号) 中断信号标识。
+  * **ContinueTag**: (名义符号) 继续信号标识。
 
-### 11.3 数字模块 (Math)
+### 12.3 数字模块
 
 * **Interval**: (类型根) 所有区间的父类型。
 * **impl IntervalImpl for Interval**: (工具集)
-  * **static Lt{ n }**:返回类型 `Lt<n>`。
-  * **static Gt{ n }**:返回类型 `Gt<n>`。
+  * **static Lt{ n }**:返回类型 `Lt{n}`。
+  * **static Gt{ n }**:返回类型 `Gt{n}`。
   * **static OO{ min, max }**: 返回 $(min, max)$。
   * **static OC{ min, max }**: 返回 $(min, max]$。
   * **static CO{ min, max }**: 返回 $[min, max)$。
@@ -2283,7 +2536,7 @@ Morf 标准库采用 **“类型根 + 后台实现”** 的组织范式：
   *   提供了 `Abs`, `Ceil`, `Floor`, `Round`, `Sqrt`, `Pow` 等通用数学方法。
   *   提供了 `ToString`, `ToInt`, `ToFloat` 等转换方法。
 
-### 11.4 序列与集合 (Collections)
+### 12.4 序列与集合
 
 * **Seq**: 所有序列（Tuple / String 投影 / Array）的父类型。
 * **impl SeqImpl for Seq**:
@@ -2312,7 +2565,7 @@ Morf 标准库采用 **“类型根 + 后台实现”** 的组织范式：
 * **List**: 链表或动态数组结构（通常作为递归结构实现）。
 * **impl ListImpl for List**: 提供类似 `Seq` 的操作，但针对递归结构优化。
 
-### 11.5 错误处理 (Option & Result)
+### 12.5 错误处理
 
 * **Option**: 表示可能存在的值。
   *   定义: `Option = (T) { T | None }`。
@@ -2323,81 +2576,82 @@ Morf 标准库采用 **“类型根 + 后台实现”** 的组织范式：
 
 * **Result**: 表示操作成功或失败。
   *   定义: `Result = Ok | Err`。
-  * **ResultSymbol**: `Nominal.create{}`
-  * **OkSymbol**: `Nominal.create{ ResultSymbol }`
-  * **ErrSymbol**: `Nominal.create{ ErrSymbol }`
-  * **Ok**: `(T) {{ [NominalKey]: OkSymbol, value: T }}`。
-  * **Err**: `(E) {{ [NominalKey]: ErrSymbol, value: T }}`。
+  * **ResultSymbol**: `Nominal.Create{}`
+  * **OkSymbol**: `Nominal.Create{ ResultSymbol }`
+  * **ErrSymbol**: `Nominal.Create{ ResultSymbol }`
+  * **Ok**:
+  ```
+  (T) {
+    Nominal.CreateNsOf{ OkSymbol, { value: T } }
+  }
+  ```
+  * **Err**: 
+  ```
+  (E) {
+    Nominal.CreateNsOf{ ErrSymbol, { value: E } }
+  }
+  ```
+  。
 * **impl ResultImpl for Result**:
   * **isOk{}**: 返回 Bool。
   * **unwrap{}**: 取值，若为 Err 则 Panic（或返回 Never）。
   * **map{ f }**: 映射 Ok 值。
   * **mapErr{ f }**: 映射 Err 值。
 
-### 11.7 反射与元编程
+### 12.6 效应与能力
+
+Morf 标准库提供了一组标准的 Effect 接口，用于统一错误处理与副作用管理。
+
+* **Throw**: 异常抛出能力。
+  * `impl Throw for Uni`
+  * `raise: (error: Any) -> Never`: 抛出异常并中断当前控制流。
+
+* **Rectify**: 可恢复错误能力。
+  * `impl Rectify for Uni`
+  * `fix: (issue: Issue) -> Bool`: 尝试修复问题。返回 `true` 表示已修复，调用者应重试；返回 `false` 表示放弃。
+
+* **Resource**: 资源访问能力。
+  * `impl Resource for Uni`
+  * `quota: () -> Number`: 获取当前剩余配额。
+
+### 12.7 反射与元编程
 
 * **Symbol**: 所有符号的父类型。
 * **impl SymbolImpl for Symbol**:
-  * **static create{ description? }: Symbol**: 创建一个唯一符号。
+  * **static Create{ description? }: Symbol**: 创建一个唯一符号。
 
 * **Nominal**: 名义系统入口。
 * **impl NominalImpl for Nominal**:
-  * **create{ ...parents }**: 创建名义符号。
-  * **createNs{ ... }**: 创建具名空间。该空间自动获得构造器能力（见 2.3.10）。
-* **struct**: `NominalImpl.createNs`
+  * **static Create{ ...parents }**: 创建名义符号。
+  * **static CreateNs{ ... }**: 创建具名空间。该空间自动获得构造器能力（见 2.3.10）。
+  * **static CreateNsOf{ set: NominalSet, ns: Uni }**: 创建具名空间。该空间自动获得构造器能力（见 2.3.10）。
+* **named**: `NominalImpl.CreateNs`
 
-### 11.8 基础逻辑
+### 12.8 基础逻辑
 
 * **Bool**: `true | false`。
 * **Assert**: 断言工具。
   * **static Eq{ a, b }**: 强相等检查。
   * **static True{ cond }**: 真值检查。
 
+### 12.9 异步与并发
+
+* **Future**: 代表一个正在执行或已完成的异步计算任务。
+  * `impl FutureImpl for Future`:
+    * `isReady: (self) -> Bool`: 检查任务是否已完成（非阻塞）。
+    * `cancel: (self) -> Bool`: 尝试取消任务。
+
+* **Async**: 异步流程控制工具。
+  * `impl AsyncImpl for Async` (通常作为 `Async.All` 静态调用):
+    * `static All: (tasks: Seq{ Future{T} }) -> Seq{T}`: 等待所有任务完成。
+    * `static Race: (tasks: Seq{ Future{T} }) -> T`: 等待任意一个任务完成。
+    * `static Sleep: (ms: Number) -> Uni`: 休眠当前 Fiber 指定时间。
+
+---
+
 ## 附录
 ### 1. 示例代码
 #### 二叉树反转
-```morf
-let Node = struct {
-  value: Number,
-  left: Tree,
-  right: Tree
-}
-let Tree = Node | None
-
-impl TreeOps for Tree {
-  invert: (self) {
-    Switch {
-      Case { self == None, self },
-      (
-        let { left, right, value } = self
-        Node {
-          value,
-          right.invert{},
-          left.invert{}
-        }
-      )
-    }
-  }
-}
-
-let main = () {
-  // 构造一棵树
-  let root = Node { 
-    1,
-    Node { 2, None, None },
-    Node { 3, None, None }
-  }
-
-  // 调用反转
-  // 结果应为: 
-  // Node {
-  //   1,
-  //   Node { 3, None, None },
-  //   Node { 2, None, None }
-  // }
-  let inverted = root.invert{}
-}
-```
 
 #### 数据库 Schema
 

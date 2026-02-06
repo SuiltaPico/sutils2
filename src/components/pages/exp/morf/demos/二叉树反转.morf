@@ -1,0 +1,40 @@
+let Node = named {
+  value: Number,
+  left: Tree,
+  right: Tree
+}
+let Tree = Node | None
+
+let TreeOps = impl Tree {
+  invert: (self) {
+    Switch {
+      Case { self == None, self },
+      (
+        let { left, right, value } = self
+        Node {
+          value,
+          right.invert{},
+          left.invert{}
+        }
+      )
+    }
+  }
+}
+
+let main = () {
+  // 构造一棵树
+  let root = Node { 
+    1,
+    Node { 2, None, None },
+    Node { 3, None, None }
+  }
+
+  // 调用反转
+  // 结果应为: 
+  // Node {
+  //   1,
+  //   Node { 3, None, None },
+  //   Node { 2, None, None }
+  // }
+  let inverted = root.invert{}
+}
