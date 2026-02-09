@@ -2668,10 +2668,6 @@ Morf 标准库提供了一组标准的 Effect 接口，用于统一错误处理�
   * `impl Rectify for Uni`
   * `fix: (issue: Issue) -> Bool`: 尝试修复问题。返回 `true` 表示已修复，调用者应重试；返回 `false` 表示放弃。
 
-* **Resource**: 资源访问能力。
-  * `impl Resource for Uni`
-  * `quota: () -> Number`: 获取当前剩余配额。
-
 ### 12.7 反射与元编程
 
 * **Symbol**: 所有符号的父类型。
@@ -2704,17 +2700,3 @@ Morf 标准库提供了一组标准的 Effect 接口，用于统一错误处理�
     * `static All: (tasks: Seq{ Future{T} }) -> Seq{T}`: 等待所有任务完成。
     * `static Race: (tasks: Seq{ Future{T} }) -> T`: 等待任意一个任务完成。
     * `static Sleep: (ms: Number) -> Uni`: 休眠当前 Fiber 指定时间。
-
----
-
-## 附录
-### 1. 示例代码
-#### 二叉树反转
-
-#### 数据库 Schema
-
-#### 查询构建器
-
-#### 订单处理
-
-#### UI 组件系统与声明式界面
