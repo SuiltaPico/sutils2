@@ -2,7 +2,7 @@
 // Morf 大型应用架构演示：电商核心交易系统 (E-Commerce Core)
 //
 // 本演示展示了 Morf 如何利用以下特性构建解耦、健壮的企业级应用：
-// 1. Namespace 模块化：领域模型与逻辑的封装
+// 1. Morph 模块化：领域模型与逻辑的封装
 // 2. Impl + Nominal：类型安全的领域原语 (Domain Primitives)
 // 3. 动态 Impl (Algebraic Effects)：无侵入的依赖注入与错误处理
 // 4. 自定义控制流：声明式的事务与重试机制
