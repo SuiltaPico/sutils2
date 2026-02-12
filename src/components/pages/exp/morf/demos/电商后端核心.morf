@@ -1,13 +1,7 @@
 // =============================================================================
 // Morf 大型应用架构演示：电商核心交易系统 (E-Commerce Core)
 //
-// 本演示展示了 Morf 如何利用以下特性构建解耦、健壮的企业级应用：
-// 1. Morph 模块化：领域模型与逻辑的封装
-// 2. Impl + Nominal：类型安全的领域原语 (Domain Primitives)
-// 3. 动态 Impl (Algebraic Effects)：无侵入的依赖注入与错误处理
-// 4. 自定义控制流：声明式的事务与重试机制
-// 5. Direct Style：同步风格书写异步逻辑，Effect 自动传播
-// =============================================================================
+// 本演示展示了 Morf 如何利用以下特性构建解耦、健壮的企业级应用
 
 // 模拟宿主环境 Sys
 let Sys = {
@@ -64,7 +58,7 @@ let OrderItem = named {
 let Order = named {
   id: OrderId,
   userId: UserId,
-  items: Seq{OrderItem},
+  items: Seq{ OrderItem },
   status: OrderStatus,
   createdAt: Number
 }
@@ -75,8 +69,8 @@ let Order = named {
 // 这是 Hexagonal Architecture 的"端口"层
 // -----------------------------------------------------------------------------
 
-let Transaction = named{}
-let Database = named{}
+let Transaction = named {}
+let Database = named {}
 
 // 数据库接口（使用 static 方法 + PascalCase 命名）
 let DatabaseOps = impl Database {
@@ -197,7 +191,6 @@ let OrderService = {
     
     // 4. 执行核心交易流程（在事务中）
     WithTransaction {
-      
       // 保存订单（看起来是同步调用，实际会自动挂起等待 IO）
       Database.SaveOrder{ order }
       
