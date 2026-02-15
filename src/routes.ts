@@ -247,14 +247,14 @@ export const routes = [
     description: "地图生成：Perlin/Simplex 噪声",
     done: false,
   },
-  {
-    path: "/exp/game/wayland",
-    name: "Wayland 战斗原型",
-    description: "1D 编队 · RTwP 基础循环与指令（转位/替位/施放）",
-    component: lazy(
-      () => import("./components/pages/exp/game/wayland/sandbox")
-    ),
-  },
+  // {
+  //   path: "/exp/game/wayland",
+  //   name: "Wayland 战斗原型",
+  //   description: "1D 编队 · RTwP 基础循环与指令（转位/替位/施放）",
+  //   component: lazy(
+  //     () => import("./components/pages/exp/game/wayland/sandbox")
+  //   ),
+  // },
   {
     path: "/exp/game/urbanflow",
     name: "UrbanFlow 网格编辑器（原型）",
@@ -262,6 +262,12 @@ export const routes = [
     component: lazy(
       () => import("./components/pages/exp/game/urbanflow/index")
     ),
+  },
+  {
+    path: "/exp/game/t0",
+    name: "扑克抽牌 (T0)",
+    description: "随机抽取 8 张扑克牌并显示在屏幕下方",
+    component: lazy(() => import("./components/pages/exp/game/t0")),
   },
   {
     path: "/exp/game/tower",
