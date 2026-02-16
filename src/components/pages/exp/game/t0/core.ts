@@ -196,7 +196,7 @@ export const analyzeBuffs = (cards: CardData[], pattern: string): BuffResult => 
   if (suitCounts['♣'] >= 3) {
     const val = suitCounts['♣'] - 2;
     if (val > 0) {
-      const poisonGain = val + 1;
+      const poisonGain = val;
       result.poison += poisonGain;
       result.descriptions.push(`梅花: 中毒 +${poisonGain}`);
     }

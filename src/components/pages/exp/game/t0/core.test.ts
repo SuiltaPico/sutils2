@@ -234,7 +234,7 @@ describe("扑克牌型识别测试", () => {
       assert.ok(result.descriptions.some(d => d.includes("真伤")));
     });
 
-    it("3张梅花应触发2层中毒", () => {
+    it("3张梅花应触发1层中毒", () => {
       const hand = [
         createCard("A", "♣"),
         createCard("K", "♣"),
@@ -243,7 +243,7 @@ describe("扑克牌型识别测试", () => {
         createCard("9", "♦"),
       ];
       const result = analyzeBuffs(hand, "无效牌型");
-      assert.strictEqual(result.poison, 2); // (3 - 2) + 1 = 2
+      assert.strictEqual(result.poison, 1); // 3 - 2 = 1
       assert.ok(result.descriptions.some(d => d.includes("中毒")));
     });
   });
