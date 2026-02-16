@@ -96,13 +96,27 @@ function pageMetadataPlugin() {
 }
 
 export default defineConfig({
+  esbuild: {
+    // Use esbuild-only syntax downleveling (no Babel).
+    target: "es2015",
+  },
   plugins: [
     unocssPlugin(),
     solid(),
     pageMetadataPlugin(),
     viteStaticCopyPyodide(),
   ],
-  optimizeDeps: { exclude: ["pyodide"] },
+  optimizeDeps: {
+    exclude: ["pyodide"],
+    esbuildOptions: {
+      target: "es2015",
+    },
+  },
+  build: {
+    // Keep output in older JS/CSS syntax where possible, without @vitejs/plugin-legacy.
+    target: "es2015",
+    cssTarget: "chrome61",
+  },
   server: {
     cors: true,
     headers: {

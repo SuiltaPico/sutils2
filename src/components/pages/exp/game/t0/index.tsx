@@ -82,13 +82,13 @@ const useFlipAnimation = (
   };
 };
 
-const Card = (props: { card: CardData; selected: boolean; onClick: () => void; small?: boolean; index?: number; noEntryAnimation?: boolean; dimmed?: boolean }) => {
+const Card = (props: { card: CardData; selected: boolean; onClick: () => void; small?: boolean; index?: number; noEntryAnimation?: boolean; dimmed?: boolean; suitBoosted?: boolean }) => {
   return (
     <div
       data-id={props.card.id} // Important for FLIP tracking
       onClick={props.onClick}
       style={{ "animation-delay": `${(props.index || 0) * 0.1}s` }}
-      class={`${props.small ? 'w-16 h-24 text-sm' : 'w-24 h-36 text-lg'} bg-white rounded-lg shadow-lg border border-gray-200 flex flex-col justify-between p-2 select-none cursor-pointer relative overflow-hidden ${props.noEntryAnimation ? '' : 'animate-card-enter'} ${props.selected ? '-translate-y-4 ring-4 ring-yellow-400' : 'hover:-translate-y-2 transition-transform duration-200'} ${props.dimmed ? 'grayscale opacity-60' : ''}`}
+      class={`${props.small ? 'w-16 h-24 text-sm' : 'w-24 h-36 text-lg'} bg-white rounded-lg shadow-lg border border-gray-200 flex flex-col justify-between p-2 select-none cursor-pointer relative overflow-hidden transition-all duration-200 ${props.noEntryAnimation ? '' : 'animate-card-enter'} ${props.suitBoosted ? '-translate-y-4 ring-4 ring-cyan-400 shadow-[0_0_20px_rgba(34,211,238,0.8)] z-10' : props.selected ? '-translate-y-4 ring-4 ring-yellow-400' : 'hover:-translate-y-2'} ${props.dimmed ? 'grayscale opacity-60' : ''}`}
     >
       <div class={`font-bold ${props.card.color === 'red' ? 'text-red-600' : 'text-gray-900'}`}>
         {props.card.rank}
@@ -235,6 +235,17 @@ export default function RoundSimulation() {
   });
 
   const addLog = (msg: string) => setLogs(prev => [...prev, msg]);
+
+  const getDamageSourceFormula = (attackVal: number, defenseVal: number, trueDmg: number) => {
+    const truePart = trueDmg > 0 ? ` + 真实伤害[${trueDmg}]` : '';
+    return `攻击[${attackVal}]-防御[${defenseVal}]${truePart}`;
+  };
+
+  const getDamageSourceWithTotal = (attackVal: number, defenseVal: number, trueDmg: number) => {
+    const rawDmg = Math.max(0, attackVal - defenseVal);
+    const totalBeforeShield = rawDmg + trueDmg;
+    return `${totalBeforeShield} (${getDamageSourceFormula(attackVal, defenseVal, trueDmg)})`;
+  };
 
   const createDeck = (): CardData[] => {
     const deck: CardData[] = [];
@@ -594,7 +605,12 @@ export default function RoundSimulation() {
     const newHp = Math.max(0, currentHp - finalDmg);
     defSetter('hp', newHp);
     
-    addLog(`战斗结果: ${attacker.name} 对 ${defender.name} 造成 ${finalDmg} 点伤害 (真伤: ${trueDmg})`);
+    const sourceText = getDamageSourceWithTotal(attackVal, defenseVal, trueDmg);
+    if (blocked > 0) {
+      addLog(`战斗结果: ${attacker.name} 对 ${defender.name} 造成 ${finalDmg} 点伤害 (${sourceText} - 护盾抵消[${blocked}])`);
+    } else {
+      addLog(`战斗结果: ${attacker.name} 对 ${defender.name} 造成 ${finalDmg} 点伤害 (${sourceText})`);
+    }
 
     // 3. Apply Poison Damage (End of Round)
     // Apply to both players
@@ -843,6 +859,28 @@ export default function RoundSimulation() {
       };
     });
 
+    const suitBoostedCardIds = createMemo(() => {
+      const result = new Set<string>();
+      if (!isAttacker() || !isAttackPhase(phase())) return result;
+
+      const selectedCards = props.player.hand.filter(c => props.player.selectedIds.has(c.id));
+      if (selectedCards.length < 3) return result;
+
+      const bySuit: Record<string, CardData[]> = {};
+      selectedCards.forEach(card => {
+        if (!bySuit[card.suit]) bySuit[card.suit] = [];
+        bySuit[card.suit].push(card);
+      });
+
+      Object.values(bySuit).forEach(cards => {
+        if (cards.length >= 3) {
+          cards.forEach(card => result.add(card.id));
+        }
+      });
+
+      return result;
+    });
+
     return (
       <div class={`w-full max-w-6xl p-6 ${isMyTurn() ? 'bg-gradient-to-r from-amber-900/40 to-slate-900/40 border-amber-500/30' : 'bg-slate-900/40 border-slate-700/30'} backdrop-blur-sm rounded-2xl border transition-all duration-300 shadow-xl`}>
         <div class="flex justify-between items-end mb-4 text-white">
@@ -959,6 +997,7 @@ export default function RoundSimulation() {
                 card={card}
                 index={index()}
                 selected={props.player.selectedIds.has(card.id)}
+                suitBoosted={suitBoostedCardIds().has(card.id)}
                 onClick={() => toggleSelect(props.player.id, card.id)}
                 small={props.isOpponent}
               />
@@ -979,6 +1018,10 @@ export default function RoundSimulation() {
 
     const attacker = () => currentAttackerId() === 'A' ? playerA : playerB;
     const defender = () => currentAttackerId() === 'A' ? playerB : playerA;
+    const attackerPower = () => attacker().lastAction?.totalValue || 0;
+    const defenderPower = () => defender().lastAction?.totalValue || 0;
+    const attackerTrueDamage = () => attacker().lastAction?.buffs?.trueDamage || 0;
+    const showdownDamage = () => Math.max(0, attackerPower() - defenderPower()) + attackerTrueDamage();
 
     return (
       <Show when={shouldShow()} fallback={
@@ -1049,7 +1092,7 @@ export default function RoundSimulation() {
                 <div class="flex flex-col items-center gap-2 animate-bounce-in bg-black/60 p-4 rounded-2xl border border-amber-500/30 shadow-2xl backdrop-blur-xl">
                   {/* Main Damage Number (Net Damage) */}
                   <div class="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-b from-yellow-300 to-amber-600 drop-shadow-lg">
-                    {Math.max(0, (attacker().lastAction?.totalValue || 0) - (defender().lastAction?.totalValue || 0)) + (attacker().lastAction?.buffs?.trueDamage || 0)}
+                    {showdownDamage()}
                   </div>
                   
                   {/* Detailed Breakdown */}
@@ -1078,7 +1121,7 @@ export default function RoundSimulation() {
 
                   <div class="w-full h-px bg-gradient-to-r from-transparent via-amber-500/50 to-transparent my-1" />
                   <div class="text-[10px] text-slate-400 font-mono whitespace-nowrap">
-                    {attacker().lastAction?.totalValue || 0} - {defender().lastAction?.totalValue || 0}
+                    {getDamageSourceWithTotal(attackerPower(), defenderPower(), attackerTrueDamage())}
                   </div>
                 </div>
               </Show>
