@@ -613,14 +613,28 @@ export default function RoundSimulation() {
     }
 
     // 3. Apply Poison Damage (End of Round)
-    // Apply to both players
+    // Poison damage now follows the same order: shield first, then HP.
     [playerA, playerB].forEach((p, idx) => {
       if (p.poisonStacks > 0) {
-        const pDmg = p.poisonStacks;
+        const poisonDmg = p.poisonStacks;
         const setter = idx === 0 ? setPlayerA : setPlayerB;
-        setter('hp', h => Math.max(0, h - pDmg));
+        const shieldBefore = p.shield;
+        const blockedByShield = Math.min(shieldBefore, poisonDmg);
+        const hpDmg = poisonDmg - blockedByShield;
+
+        if (blockedByShield > 0) {
+          setter('shield', s => s - blockedByShield);
+        }
+        if (hpDmg > 0) {
+          setter('hp', h => Math.max(0, h - hpDmg));
+        }
         setter('poisonStacks', s => Math.max(0, s - 1));
-        addLog(`${p.name} 受到 ${pDmg} 点中毒伤害`);
+
+        if (blockedByShield > 0) {
+          addLog(`${p.name} 受到 ${poisonDmg} 点中毒伤害 (护盾抵消 ${blockedByShield}，实际掉血 ${hpDmg})`);
+        } else {
+          addLog(`${p.name} 受到 ${poisonDmg} 点中毒伤害`);
+        }
       }
     });
 

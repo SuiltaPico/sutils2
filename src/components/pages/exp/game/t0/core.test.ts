@@ -196,7 +196,7 @@ describe("扑克牌型识别测试", () => {
   });
 
   describe("Buff (元素机制) 测试", () => {
-    it("4张黑桃应触发2点真伤", () => {
+    it("4张黑桃应触发4点真伤", () => {
       const hand4 = [
         createCard("A", "♠"),
         createCard("2", "♠"),
@@ -204,7 +204,7 @@ describe("扑克牌型识别测试", () => {
         createCard("4", "♠"),
       ];
       const res4 = analyzeBuffs(hand4, "同花"); // 哪怕识别为同花/单张，analyzeBuffs 只看传入的 cards
-      assert.strictEqual(res4.trueDamage, 2);
+      assert.strictEqual(res4.trueDamage, 4);
       assert.ok(res4.descriptions.some(d => d.includes("真伤")));
     });
 
@@ -230,8 +230,21 @@ describe("扑克牌型识别测试", () => {
       ];
       // 3张黑桃
       const result = analyzeBuffs(hand, "无效牌型");
-      assert.strictEqual(result.trueDamage, 1); // 3 - 2 = 1
+      assert.strictEqual(result.trueDamage, 2); // (3 - 2) * 2 = 2
       assert.ok(result.descriptions.some(d => d.includes("真伤")));
+    });
+
+    it("3张梅花应触发2层中毒", () => {
+      const hand = [
+        createCard("A", "♣"),
+        createCard("K", "♣"),
+        createCard("Q", "♣"),
+        createCard("J", "♥"),
+        createCard("9", "♦"),
+      ];
+      const result = analyzeBuffs(hand, "无效牌型");
+      assert.strictEqual(result.poison, 2); // (3 - 2) + 1 = 2
+      assert.ok(result.descriptions.some(d => d.includes("中毒")));
     });
   });
 });

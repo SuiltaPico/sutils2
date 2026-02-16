@@ -176,8 +176,9 @@ export const analyzeBuffs = (cards: CardData[], pattern: string): BuffResult => 
   if (suitCounts['♠'] >= 3) {
     const val = suitCounts['♠'] - 2;
     if (val > 0) {
-      result.trueDamage += val;
-      result.descriptions.push(`黑桃: 真伤 +${val}`);
+      const trueDamageGain = val * 2;
+      result.trueDamage += trueDamageGain;
+      result.descriptions.push(`黑桃: 真伤 +${trueDamageGain}`);
     }
   }
 
@@ -195,8 +196,9 @@ export const analyzeBuffs = (cards: CardData[], pattern: string): BuffResult => 
   if (suitCounts['♣'] >= 3) {
     const val = suitCounts['♣'] - 2;
     if (val > 0) {
-      result.poison += val;
-      result.descriptions.push(`梅花: 中毒 +${val}`);
+      const poisonGain = val + 1;
+      result.poison += poisonGain;
+      result.descriptions.push(`梅花: 中毒 +${poisonGain}`);
     }
   }
 
