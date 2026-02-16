@@ -395,6 +395,8 @@ export default function RoundSimulation() {
       ? analyzeBuffs(selectedCards, patternName)
       : { shield: 0, trueDamage: 0, heal: 0, cleanse: 0, poison: 0, descriptions: [] };
 
+    console.log(`[Action] ${player.name} Phase:${currentPhase} Pattern:${patternName} Cards:${selectedCards.length} Buffs:`, buffs);
+
     // Record Action
     setter('lastAction', {
       pattern: patternName,
@@ -823,13 +825,21 @@ export default function RoundSimulation() {
       
       const actualHpDamage = Math.min(props.player.hp, netDamageToHp);
 
+      // Calculate Projected Shield Gain (Overkill Defense)
+      // Note: Buff shield doesn't apply on defense
+      let projectedShield = 0;
+      if (defense > totalIncoming) {
+        projectedShield = defense - totalIncoming;
+      }
+
       return {
         incoming,
         defense,
         blockedByShield,
         netDamage: netDamageToHp,
         actualDamage: actualHpDamage,
-        damagePercent: 0 // Unused now
+        damagePercent: 0, // Unused now
+        projectedShield
       };
     });
 
@@ -908,6 +918,9 @@ export default function RoundSimulation() {
                 {props.player.hp}
                 <Show when={props.player.shield > 0}>
                    <span class="text-slate-300 drop-shadow-sm text-[9px] ml-0.5 font-normal">(+{props.player.shield})</span>
+                </Show>
+                <Show when={pendingDamageInfo() && pendingDamageInfo()!.projectedShield > 0}>
+                   <span class="text-emerald-300 drop-shadow-sm text-[9px] ml-0.5 font-bold animate-pulse">(+{pendingDamageInfo()!.projectedShield})</span>
                 </Show>
                 <span class="text-slate-400 mx-0.5">/</span>
                 {props.player.maxHp}
@@ -1034,12 +1047,35 @@ export default function RoundSimulation() {
                 <div class="text-4xl font-black text-slate-700/50 italic pr-2 animate-pulse">VS</div>
               }>
                 <div class="flex flex-col items-center gap-2 animate-bounce-in bg-black/60 p-4 rounded-2xl border border-amber-500/30 shadow-2xl backdrop-blur-xl">
+                  {/* Main Damage Number (Net Damage) */}
                   <div class="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-b from-yellow-300 to-amber-600 drop-shadow-lg">
-                    {Math.max(0, (attacker().lastAction?.totalValue || 0) - (defender().lastAction?.totalValue || 0))}
+                    {Math.max(0, (attacker().lastAction?.totalValue || 0) - (defender().lastAction?.totalValue || 0)) + (attacker().lastAction?.buffs?.trueDamage || 0)}
                   </div>
-                  <div class="text-xs font-bold text-amber-500 uppercase tracking-[0.2em] bg-black/50 px-2 py-1 rounded">
-                    最终伤害
+                  
+                  {/* Detailed Breakdown */}
+                  <div class="flex flex-col items-center gap-1 w-full">
+                    {/* True Damage */}
+                    <Show when={attacker().lastAction?.buffs?.trueDamage && attacker().lastAction!.buffs!.trueDamage > 0}>
+                      <div class="flex items-center gap-1 text-xs font-bold text-purple-400 animate-pulse">
+                        <span>⚡</span> 真伤: {attacker().lastAction?.buffs?.trueDamage}
+                      </div>
+                    </Show>
+
+                    {/* Poison Applied */}
+                    <Show when={attacker().lastAction?.buffs?.poison && attacker().lastAction!.buffs!.poison > 0}>
+                      <div class="flex items-center gap-1 text-xs font-bold text-green-400">
+                        <span>☠️</span> 中毒: +{attacker().lastAction?.buffs?.poison}
+                      </div>
+                    </Show>
+
+                    {/* Healing */}
+                    <Show when={attacker().lastAction?.buffs?.heal && attacker().lastAction!.buffs!.heal > 0}>
+                      <div class="flex items-center gap-1 text-xs font-bold text-emerald-400">
+                        <span>❤️</span> 回复: +{attacker().lastAction?.buffs?.heal}
+                      </div>
+                    </Show>
                   </div>
+
                   <div class="w-full h-px bg-gradient-to-r from-transparent via-amber-500/50 to-transparent my-1" />
                   <div class="text-[10px] text-slate-400 font-mono whitespace-nowrap">
                     {attacker().lastAction?.totalValue || 0} - {defender().lastAction?.totalValue || 0}

@@ -161,8 +161,16 @@ export const analyzeBuffs = (cards: CardData[], pattern: string): BuffResult => 
 
   if (pattern === '') return result;
   
-  const suitCounts: Record<Suit, number> = { '♠': 0, '♥': 0, '♣': 0, '♦': 0 };
-  cards.forEach(c => suitCounts[c.suit]++);
+  // Initialize counts using SUITS constant to avoid typo/encoding issues
+  const suitCounts: Record<string, number> = {};
+  SUITS.forEach(s => suitCounts[s] = 0);
+
+  // Count suits
+  for (const card of cards) {
+    if (card && card.suit) {
+      suitCounts[card.suit] = (suitCounts[card.suit] || 0) + 1;
+    }
+  }
   
   // ♠ Spade: True Damage
   if (suitCounts['♠'] >= 3) {
