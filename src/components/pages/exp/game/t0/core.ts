@@ -33,24 +33,15 @@ export const getRankValue = (rank: Rank): number => {
   }
 };
 
-/**
- * 计算单张牌的战斗力数值
- * 1-10: 正常算
- * JQK: 11, 12, 13
- * A: 14
- * 2: 15
- */
-export const getPowerValue = (rank: Rank): number => {
-  return 1;
-};
 
 export const getStraightRankValue = (rank: Rank): number => {
   switch (rank) {
+    case '2': return 15;
     case 'A': return 14;
     case 'K': return 13;
     case 'Q': return 12;
     case 'J': return 11;
-    case '2': return 15;
+    case '10': return 10;
     default: return parseInt(rank);
   }
 };
@@ -91,52 +82,18 @@ export function identifyPattern(cards: CardData[]): PatternResult {
   // Helper: Check for consecutive (Straight)
   const isStraight = (len: number) => {
     if (len < 5) return false;
-    
-    // Check normal straight (using current values)
-    const values = sorted.map(c => getStraightRankValue(c.rank)).sort((a, b) => a - b);
-    let isConsecutive = true;
+
+    const values = sorted
+      .map(c => getStraightRankValue(c.rank))
+      .sort((a, b) => a - b);
+
     for (let i = 0; i < values.length - 1; i++) {
-      if (values[i+1] !== values[i] + 1) {
-        isConsecutive = false;
-        break;
+      if (values[i + 1] !== values[i] + 1) {
+        return false;
       }
     }
-    if (isConsecutive) return true;
 
-    // Check special straight A,2,3,4,5 (A=1, 2=2, 3=3, 4=4, 5=5)
-    // In our current value system: A=14, 2=15, 3=3, 4=4, 5=5
-    // We need to map A->1, 2->2 for this check
-    const lowValues = sorted.map(c => {
-      if (c.rank === 'A') return 1;
-      if (c.rank === '2') return 2;
-      return getStraightRankValue(c.rank);
-    }).sort((a, b) => a - b);
-    
-    isConsecutive = true;
-    for (let i = 0; i < lowValues.length - 1; i++) {
-      if (lowValues[i+1] !== lowValues[i] + 1) {
-        isConsecutive = false;
-        break;
-      }
-    }
-    if (isConsecutive) return true;
-
-    // Check special straight 2,3,4,5,6 (2=2)
-    // Map 2->2
-    const low2Values = sorted.map(c => {
-      if (c.rank === '2') return 2;
-      return getStraightRankValue(c.rank);
-    }).sort((a, b) => a - b);
-
-    isConsecutive = true;
-    for (let i = 0; i < low2Values.length - 1; i++) {
-      if (low2Values[i+1] !== low2Values[i] + 1) {
-        isConsecutive = false;
-        break;
-      }
-    }
-    
-    return isConsecutive;
+    return true;
   };
 
   const isFlush = (len: number) => {
@@ -147,7 +104,7 @@ export function identifyPattern(cards: CardData[]): PatternResult {
   const len = cards.length;
 
   // 1. Check 5-card patterns (Strictly need 5 cards to form these)
-  if (len === 5) {
+  if (len >= 5) {
      const straight = isStraight(5); // Checks if all 5 are straight
      const flush = isFlush(5);       // Checks if all 5 are flush
      
@@ -183,27 +140,73 @@ export function identifyPattern(cards: CardData[]): PatternResult {
   return { name: '无效牌型', multiplier: 0, relevantCards: [] };
 }
 
-export const analyzeBuffs = (cards: CardData[], pattern: string): string[] => {
-  if (pattern === '无效牌型' || pattern === '') return [];
+export interface BuffResult {
+  shield: number;
+  trueDamage: number;
+  heal: number;
+  cleanse: number;
+  poison: number;
+  descriptions: string[];
+}
+
+export const analyzeBuffs = (cards: CardData[], pattern: string): BuffResult => {
+  const result: BuffResult = {
+    shield: 0,
+    trueDamage: 0,
+    heal: 0,
+    cleanse: 0,
+    poison: 0,
+    descriptions: []
+  };
+
+  if (pattern === '') return result;
   
   const suitCounts: Record<Suit, number> = { '♠': 0, '♥': 0, '♣': 0, '♦': 0 };
   cards.forEach(c => suitCounts[c.suit]++);
   
-  const buffs: string[] = [];
-  if (suitCounts['♠'] >= 3) buffs.push('黑桃: 真伤');
-  if (suitCounts['♥'] >= 3) buffs.push('红桃: 吸血');
-  if (suitCounts['♣'] >= 3) buffs.push('梅花: 毒伤');
-  if (suitCounts['♦'] >= 3) buffs.push('方片: 易伤');
+  // ♠ Spade: True Damage
+  if (suitCounts['♠'] >= 3) {
+    const val = suitCounts['♠'] - 2;
+    if (val > 0) {
+      result.trueDamage += val;
+      result.descriptions.push(`黑桃: 真伤 +${val}`);
+    }
+  }
+
+  // ♥ Heart: Heal + Cleanse
+  if (suitCounts['♥'] >= 3) {
+    const val = suitCounts['♥'] - 2;
+    if (val > 0) {
+      result.heal += val;
+      result.cleanse += val;
+      result.descriptions.push(`红桃: 回复/净化 +${val}`);
+    }
+  }
+
+  // ♣ Club: Poison
+  if (suitCounts['♣'] >= 3) {
+    const val = suitCounts['♣'] - 2;
+    if (val > 0) {
+      result.poison += val;
+      result.descriptions.push(`梅花: 中毒 +${val}`);
+    }
+  }
+
+  // ♦ Diamond: Shield
+  if (suitCounts['♦'] >= 3) {
+    const val = suitCounts['♦'] - 2;
+    if (val > 0) {
+      result.shield += val;
+      result.descriptions.push(`方片: 护盾 +${val}`);
+    }
+  }
   
-  return buffs;
+  return result;
 };
 
-export function calculateBaseSum(cards: CardData[]): number {
-  return cards.reduce((sum, card) => sum + getPowerValue(card.rank), 0);
-}
 
 export function calculateMultiplier(cards: CardData[], pattern: string): number {
   const result = identifyPattern(cards);
   if (result.name === '无效牌型' || result.name === '') return 0;
-  return calculateBaseSum(result.relevantCards) * result.multiplier;
+  return result.multiplier;
 }

@@ -7,7 +7,7 @@ import {
   SUITS,
   HIGH_LEVEL_PATTERNS,
   analyzeBuffs,
-  calculateBaseSum,
+  type BuffResult,
   getRankValue,
   getSuitValue,
   identifyPattern
@@ -126,6 +126,8 @@ const isDefendPhase = (p: GamePhase) => p === GamePhase.P1_DEFEND || p === GameP
     name: string;
     hp: number;
     maxHp: number;
+    shield: number;
+    poisonStacks: number;
     hand: CardData[];
     deck: CardData[];
     discardPile: CardData[];
@@ -133,10 +135,10 @@ const isDefendPhase = (p: GamePhase) => p === GamePhase.P1_DEFEND || p === GameP
     lastAction: {
       pattern: string;
       multiplier: number;
-      baseValue: number;
       totalValue: number;
       cards: CardData[];
       relevantCardIds: Set<string>;
+      buffs?: BuffResult;
     } | null;
   }
 
@@ -193,8 +195,10 @@ export default function RoundSimulation() {
     const [playerA, setPlayerA] = createStore<PlayerState>({
     id: 'A',
     name: '玩家 A',
-    hp: 50,
-    maxHp: 50,
+    hp: 10,
+    maxHp: 10,
+    shield: 0,
+    poisonStacks: 0,
     hand: [],
     deck: [],
     discardPile: [],
@@ -205,8 +209,10 @@ export default function RoundSimulation() {
   const [playerB, setPlayerB] = createStore<PlayerState>({
     id: 'B',
     name: '玩家 B',
-    hp: 50,
-    maxHp: 50,
+    hp: 10,
+    maxHp: 10,
+    shield: 0,
+    poisonStacks: 0,
     hand: [],
     deck: [],
     discardPile: [],
@@ -217,7 +223,16 @@ export default function RoundSimulation() {
   const [phase, setPhase] = createSignal<GamePhase>(GamePhase.INIT);
   const [attackerId, setAttackerId] = createSignal<string>('A');
   const [logs, setLogs] = createSignal<string[]>([]);
+  const [showLogs, setShowLogs] = createSignal(false);
   const [feedback, setFeedback] = createSignal<string | null>(null);
+  
+  let logsEndRef: HTMLDivElement | undefined;
+
+  createEffect(() => {
+    if (showLogs() && logs().length > 0 && logsEndRef) {
+      logsEndRef.scrollIntoView({ behavior: 'smooth' });
+    }
+  });
 
   const addLog = (msg: string) => setLogs(prev => [...prev, msg]);
 
@@ -247,7 +262,9 @@ export default function RoundSimulation() {
 
     for (let i = 0; i < count; i++) {
       if (currentDeck.length === 0) {
-        if (currentDiscard.length === 0) break; // No cards left at all
+        if (currentDiscard.length === 0) {
+            break; // No cards left at all
+        }
         // Reshuffle discard pile
         currentDeck = [...currentDiscard];
         // Shuffle logic
@@ -258,14 +275,20 @@ export default function RoundSimulation() {
         currentDiscard = [];
         addLog(`${playerGetter.name} 牌堆耗尽，重新洗牌。`);
       }
-      newCards.push(currentDeck.pop()!);
+      
+      const card = currentDeck.pop();
+      if (card) {
+        newCards.push(card);
+      }
     }
 
-    const combined = [...playerGetter.hand, ...newCards].sort((a, b) => {
-      const diff = getRankValue(b.rank) - getRankValue(a.rank);
-      if (diff !== 0) return diff;
-      return getSuitValue(b.suit) - getSuitValue(a.suit);
-    });
+    const combined = [...playerGetter.hand, ...newCards]
+      .filter(c => !!c) // Filter out any potential undefined/nulls
+      .sort((a, b) => {
+        const diff = getRankValue(b.rank) - getRankValue(a.rank);
+        if (diff !== 0) return diff;
+        return getSuitValue(b.suit) - getSuitValue(a.suit);
+      });
 
     playerSetter('hand', combined);
     playerSetter('deck', currentDeck);
@@ -276,8 +299,8 @@ export default function RoundSimulation() {
     const deckA = createDeck();
     const deckB = createDeck();
 
-    setPlayerA({ hp: 50, maxHp: 50, hand: [], deck: deckA, discardPile: [], selectedIds: new Set(), lastAction: null });
-    setPlayerB({ hp: 50, maxHp: 50, hand: [], deck: deckB, discardPile: [], selectedIds: new Set(), lastAction: null });
+    setPlayerA({ hp: 10, maxHp: 10, shield: 0, poisonStacks: 0, hand: [], deck: deckA, discardPile: [], selectedIds: new Set(), lastAction: null });
+    setPlayerB({ hp: 10, maxHp: 10, shield: 0, poisonStacks: 0, hand: [], deck: deckB, discardPile: [], selectedIds: new Set(), lastAction: null });
 
     // Draw initial cards
     // Need to use a timeout or effect to ensure state is updated? 
@@ -335,6 +358,7 @@ export default function RoundSimulation() {
     const setter = isA ? setPlayerA : setPlayerB;
 
     const selectedCards = getSelectedCards(player);
+    const selectedIdsSnapshot = new Set(player.selectedIds);
     if (selectedCards.length === 0) return;
 
     if (selectedCards.length > 5) {
@@ -364,30 +388,48 @@ export default function RoundSimulation() {
       }
     }
 
-    const baseSum = calculateBaseSum(patternResult.relevantCards);
-    const totalValue = baseSum * multiplier;
+    const totalValue = multiplier;
+
+    // Buffs only trigger during Attack Phase
+    const buffs = isAttackPhase(currentPhase) 
+      ? analyzeBuffs(selectedCards, patternName)
+      : { shield: 0, trueDamage: 0, heal: 0, cleanse: 0, poison: 0, descriptions: [] };
 
     // Record Action
     setter('lastAction', {
       pattern: patternName,
       multiplier: multiplier,
-      baseValue: baseSum,
       totalValue: totalValue,
       cards: selectedCards,
-      relevantCardIds: new Set(patternResult.relevantCards.map(c => c.id))
+      relevantCardIds: new Set(patternResult.relevantCards.map(c => c.id)),
+      buffs: buffs
     });
 
     // Remove cards
-    setter('hand', h => h.filter(c => !player.selectedIds.has(c.id)));
+    setter('hand', h => h.filter(c => !selectedIdsSnapshot.has(c.id)));
     // Add to discard pile
     setter('discardPile', d => [...d, ...selectedCards]);
     setter('selectedIds', new Set());
 
     addLog(`${player.name} 打出 ${patternResult.name} (${totalValue})`);
 
-    const buffs = analyzeBuffs(patternResult.relevantCards, patternResult.name);
-    if (buffs.length > 0) {
-      addLog(`触发增益: ${buffs.join(', ')}`);
+    if (buffs.descriptions.length > 0) {
+      addLog(`触发增益: ${buffs.descriptions.join(', ')}`);
+    }
+
+    // Apply Immediate Buff Effects
+    if (buffs.heal > 0) {
+      setter('hp', h => Math.min(player.maxHp, h + buffs.heal));
+    }
+    if (buffs.cleanse > 0) {
+      setter('poisonStacks', p => Math.max(0, p - buffs.cleanse));
+    }
+    if (buffs.poison > 0) {
+      const opponentSetter = isA ? setPlayerB : setPlayerA;
+      opponentSetter('poisonStacks', p => p + buffs.poison);
+    }
+    if (buffs.shield > 0) {
+      setter('shield', s => s + buffs.shield);
     }
 
     // State Transition
@@ -423,7 +465,6 @@ export default function RoundSimulation() {
     defSetter('lastAction', {
       pattern: '放弃防御',
       multiplier: 0,
-      baseValue: 0,
       totalValue: 0,
       cards: [],
       relevantCardIds: new Set()
@@ -446,7 +487,6 @@ export default function RoundSimulation() {
     attSetter('lastAction', {
       pattern: '放弃攻击',
       multiplier: 0,
-      baseValue: 0,
       totalValue: 0,
       cards: [],
       relevantCardIds: new Set()
@@ -470,6 +510,7 @@ export default function RoundSimulation() {
     const setter = isAttackerA ? setPlayerA : setPlayerB;
 
     const selectedCards = getSelectedCards(player);
+    const selectedIdsSnapshot = new Set(player.selectedIds);
 
     if (selectedCards.length === 0) {
       setFeedback('请选择要丢弃的牌');
@@ -484,12 +525,13 @@ export default function RoundSimulation() {
     }
 
     // Remove cards
-    const remainingHand = player.hand.filter(c => !player.selectedIds.has(c.id));
+    const remainingHand = player.hand.filter(c => !selectedIdsSnapshot.has(c.id));
+    setter('hand', remainingHand);
     // Add to discard pile
     setter('discardPile', d => [...d, ...selectedCards]);
 
     // Draw new cards (refill to 8)
-    drawCards(setter, player, 8); // Pass player state to access deck/discard
+    drawCards(setter, { ...player, hand: remainingHand }, 8); // Use updated hand snapshot
 
     setter('selectedIds', new Set());
 
@@ -498,7 +540,6 @@ export default function RoundSimulation() {
     setter('lastAction', {
       pattern: '弃牌',
       multiplier: 0,
-      baseValue: 0,
       totalValue: 0,
       cards: selectedCards,
       relevantCardIds: new Set()
@@ -512,17 +553,68 @@ export default function RoundSimulation() {
     const attacker = attackerId() === 'A' ? playerA : playerB;
     const defender = attackerId() === 'A' ? playerB : playerA;
     const defSetter = attackerId() === 'A' ? setPlayerB : setPlayerA;
+    const attSetter = attackerId() === 'A' ? setPlayerA : setPlayerB;
 
-    const dmg = Math.max(0, (attacker.lastAction?.totalValue || 0) - (defender.lastAction?.totalValue || 0));
+    // 1. Calculate Combat Damage
+    // Raw damage is Attack - Defense
+    // But we need to handle "Full Defense" logic carefully.
+    // If Defense > Attack, damage is 0.
+    // The "Full Defense" bonus (Shield) is handled separately.
+    
+    const attackVal = attacker.lastAction?.totalValue || 0;
+    const defenseVal = defender.lastAction?.totalValue || 0;
+    
+    const rawDmg = Math.max(0, attackVal - defenseVal);
+    const trueDmg = attacker.lastAction?.buffs?.trueDamage || 0;
+    const totalIncoming = rawDmg + trueDmg;
 
+    // 2. Apply Shield Mitigation
+    const shield = defender.shield;
+    const blocked = Math.min(shield, totalIncoming);
+    const finalDmg = totalIncoming - blocked;
+
+    // Update Shield (Reduce by damage taken)
+    if (blocked > 0) {
+      defSetter('shield', s => s - blocked);
+      addLog(`${defender.name} 护盾抵消了 ${blocked} 点伤害`);
+    }
+
+    // Check for Full Defense (Overkill Defense -> Shield)
+    // Only if defender actually played a defense card (not skipped) and defense > attack
+    if (defenseVal > attackVal && defender.lastAction?.pattern !== '放弃防御') {
+      const overkill = defenseVal - attackVal;
+      defSetter('shield', s => s + overkill);
+      addLog(`${defender.name} 完全防御！溢出的 ${overkill} 点防御转化为护盾`);
+    }
+
+    // Update HP
     const currentHp = defender.hp;
-    const newHp = Math.max(0, currentHp - dmg);
-
+    const newHp = Math.max(0, currentHp - finalDmg);
     defSetter('hp', newHp);
-    addLog(`战斗结果: ${attacker.name} 对 ${defender.name} 造成 ${dmg} 点伤害`);
+    
+    addLog(`战斗结果: ${attacker.name} 对 ${defender.name} 造成 ${finalDmg} 点伤害 (真伤: ${trueDmg})`);
 
-    if (newHp <= 0) {
-      addLog(`${defender.name} 被击败！游戏结束。`);
+    // 3. Apply Poison Damage (End of Round)
+    // Apply to both players
+    [playerA, playerB].forEach((p, idx) => {
+      if (p.poisonStacks > 0) {
+        const pDmg = p.poisonStacks;
+        const setter = idx === 0 ? setPlayerA : setPlayerB;
+        setter('hp', h => Math.max(0, h - pDmg));
+        setter('poisonStacks', s => Math.max(0, s - 1));
+        addLog(`${p.name} 受到 ${pDmg} 点中毒伤害`);
+      }
+    });
+
+    // 4. Check Game Over
+    if (playerA.hp <= 0 || playerB.hp <= 0) {
+      if (playerA.hp <= 0 && playerB.hp <= 0) {
+        addLog(`双方同时倒下！平局！`);
+      } else if (playerA.hp <= 0) {
+        addLog(`${playerA.name} 被击败！${playerB.name} 获胜！`);
+      } else {
+        addLog(`${playerB.name} 被击败！${playerA.name} 获胜！`);
+      }
       setPhase(GamePhase.GAME_OVER);
       return;
     }
@@ -617,7 +709,14 @@ export default function RoundSimulation() {
       // AI Thinking Time
       const timer = setTimeout(() => {
         // Calculate best move
-        const bestCards = getBestMove(playerB.hand, isAttack, isSecondAttack, incomingDamage);
+        const bestCards = getBestMove(
+          playerB.hand, 
+          isAttack, 
+          isSecondAttack, 
+          incomingDamage,
+          playerB.hp,
+          playerB.maxHp
+        );
 
         if (bestCards.length > 0) {
           // Select cards
@@ -666,7 +765,30 @@ export default function RoundSimulation() {
     const isAttacker = () => attackerId() === props.player.id;
     const isMyTurn = () => (isAttacker() && isAttackPhase(phase())) || (!isAttacker() && isDefendPhase(phase()));
     const role = () => isAttacker() ? '攻击方' : '防守方';
-    const hpPercent = () => (props.player.hp / props.player.maxHp) * 100;
+    const effectiveMax = () => Math.max(props.player.maxHp, props.player.hp + props.player.shield);
+
+    const hpPercent = () => {
+      return (props.player.hp / effectiveMax()) * 100;
+    };
+
+    const shieldPercent = () => {
+      return (props.player.shield / effectiveMax()) * 100;
+    };
+
+    // Logic to prevent damage trail animation when shield is added (scale changes)
+    const [trailKey, setTrailKey] = createSignal(0);
+    let lastMax = 0; // Initialize with 0
+
+    createEffect(() => {
+      const cur = effectiveMax();
+      // If max increases, we are rescaling down the green bar visually.
+      // We don't want the red bar to lag behind (which looks like damage).
+      // So we force a re-render of the trail element to snap it.
+      if (cur > lastMax) {
+        setTrailKey(k => k + 1);
+      }
+      lastMax = cur;
+    });
 
     // Calculate Pending Damage
     const pendingDamageInfo = createMemo(() => {
@@ -682,23 +804,34 @@ export default function RoundSimulation() {
       if (selectedCards.length > 0) {
         const pattern = identifyPattern(selectedCards);
         if (pattern.name !== '无效牌型') {
-          defense = calculateBaseSum(selectedCards) * pattern.multiplier;
+          defense = pattern.multiplier;
         }
       }
 
-      const netDamage = Math.max(0, incoming - defense);
-      const actualDamage = Math.min(props.player.hp, netDamage); // Can't lose more than current HP
+      // 1. Shield mitigation
+      const totalIncoming = incoming; // Assuming no true damage preview for now or it's included
+      // Note: The original logic in resolveCombat handles true damage separately.
+      // Here we are just estimating visual feedback.
+      // Let's grab true damage if possible, but it's in the action.
+      const trueDmg = opponent.lastAction?.buffs?.trueDamage || 0;
+      
+      const rawIncoming = Math.max(0, totalIncoming - defense);
+      const actualIncoming = rawIncoming + trueDmg;
+
+      const blockedByShield = Math.min(props.player.shield, actualIncoming);
+      const netDamageToHp = actualIncoming - blockedByShield;
+      
+      const actualHpDamage = Math.min(props.player.hp, netDamageToHp);
 
       return {
         incoming,
         defense,
-        netDamage,
-        actualDamage,
-        damagePercent: (actualDamage / props.player.maxHp) * 100
+        blockedByShield,
+        netDamage: netDamageToHp,
+        actualDamage: actualHpDamage,
+        damagePercent: 0 // Unused now
       };
     });
-
-    const safeHpPercent = () => Math.max(0, hpPercent() - (pendingDamageInfo()?.damagePercent || 0));
 
     return (
       <div class={`w-full max-w-6xl p-6 ${isMyTurn() ? 'bg-gradient-to-r from-amber-900/40 to-slate-900/40 border-amber-500/30' : 'bg-slate-900/40 border-slate-700/30'} backdrop-blur-sm rounded-2xl border transition-all duration-300 shadow-xl`}>
@@ -709,22 +842,55 @@ export default function RoundSimulation() {
               <span class={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider shadow-sm ${isAttacker() ? 'bg-rose-600 text-white' : 'bg-sky-600 text-white'}`}>
                 {role()}
               </span>
+              
+              {/* Poison Indicator */}
+              <Show when={props.player.poisonStacks > 0}>
+                <div class="flex items-center gap-1 bg-green-500/20 px-2 py-1 rounded-full text-green-300 text-xs font-bold border border-green-500/30 animate-pulse">
+                  <span>☠️</span> {props.player.poisonStacks}
+                </div>
+              </Show>
             </div>
-            <div class="w-64 h-4 bg-slate-700/50 rounded-full overflow-hidden relative shadow-inner flex bg-slate-900">
-              {/* Layer 1: Damage Trail (Delayed Red Bar) */}
-              <div
-                class="absolute top-0 left-0 h-full bg-rose-600 transition-all duration-700 ease-out delay-300"
-                style={{ width: `${hpPercent()}%` }}
-              />
+            <div class="w-64 h-4 bg-slate-800 rounded-full overflow-hidden relative shadow-inner flex">
+              
+              {/* Layer 1: Shield (Grey) - Behind Trail */}
+              <Show when={props.player.shield > 0}>
+                <div
+                  class="absolute top-0 h-full bg-slate-400 border-l border-slate-500/30 transition-all duration-300 ease-out z-0"
+                  style={{
+                    left: `${hpPercent()}%`,
+                    width: `${shieldPercent()}%`
+                  }}
+                >
+                   {/* Shield Pending Damage */}
+                   <Show when={pendingDamageInfo() && pendingDamageInfo()!.blockedByShield > 0}>
+                     <div 
+                        class="absolute right-0 top-0 h-full bg-rose-500/70 animate-pulse z-10"
+                        style={{
+                          width: `${(pendingDamageInfo()!.blockedByShield / props.player.shield) * 100}%`
+                        }}
+                     />
+                   </Show>
+                </div>
+              </Show>
 
-              {/* Layer 2: Actual HP (Contains Safe + Pending) */}
+              {/* Layer 2: Damage Trail (Delayed Red Bar) */}
+              <Show when={trailKey()} keyed>
+                {(_) => (
+                  <div
+                    class="absolute top-0 left-0 h-full bg-rose-900 transition-all duration-700 ease-out delay-300 z-10"
+                    style={{ width: `${hpPercent()}%` }}
+                  />
+                )}
+              </Show>
+
+              {/* Layer 3: Actual HP (Contains Safe + Pending) */}
               <div
-                class="absolute top-0 left-0 h-full transition-all duration-200 ease-out flex overflow-hidden"
+                class="absolute top-0 left-0 h-full transition-all duration-200 ease-out flex overflow-hidden z-20"
                 style={{ width: `${hpPercent()}%` }}
               >
                 {/* Safe Part */}
                 <div
-                  class={`h-full transition-colors duration-300 ${props.player.hp > 30 ? 'bg-emerald-500' : 'bg-rose-500'}`}
+                  class={`h-full transition-colors duration-300 ${(props.player.hp / props.player.maxHp) > 0.2 ? 'bg-emerald-500' : 'bg-rose-500'}`}
                   style={{
                     width: `${pendingDamageInfo() && props.player.hp > 0 ? ((props.player.hp - pendingDamageInfo()!.actualDamage) / props.player.hp) * 100 : 100}%`
                   }}
@@ -738,10 +904,15 @@ export default function RoundSimulation() {
                 </Show>
               </div>
 
-              <span class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-[10px] font-bold text-white drop-shadow-md z-10 flex gap-1 whitespace-nowrap pointer-events-none">
-                {props.player.hp} / {props.player.maxHp}
+              <span class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-[10px] font-bold text-white drop-shadow-md z-30 flex gap-1 whitespace-nowrap pointer-events-none items-center">
+                {props.player.hp}
+                <Show when={props.player.shield > 0}>
+                   <span class="text-slate-300 drop-shadow-sm text-[9px] ml-0.5 font-normal">(+{props.player.shield})</span>
+                </Show>
+                <span class="text-slate-400 mx-0.5">/</span>
+                {props.player.maxHp}
                 <Show when={pendingDamageInfo() && pendingDamageInfo()!.netDamage > 0}>
-                  <span class="text-rose-200 drop-shadow-md font-black">(-{pendingDamageInfo()!.netDamage})</span>
+                  <span class="text-rose-200 drop-shadow-md font-black ml-1">(-{pendingDamageInfo()!.netDamage})</span>
                 </Show>
               </span>
             </div>
@@ -849,7 +1020,7 @@ export default function RoundSimulation() {
                         {action.totalValue}
                       </div>
                       <div class="text-[10px] text-slate-500 font-mono">
-                        {action.baseValue} × {action.multiplier} ({action.pattern})
+                        {action.multiplier} ({action.pattern})
                       </div>
                     </div>
                   </>
@@ -918,8 +1089,8 @@ export default function RoundSimulation() {
                           {action.totalValue}
                         </div>
                         <div class="text-[10px] text-slate-500 font-mono">
-                          {action.baseValue} × {action.multiplier} ({action.pattern})
-                        </div>
+                        {action.multiplier} ({action.pattern})
+                      </div>
                       </div>
                     </>
                   )}
@@ -992,14 +1163,25 @@ export default function RoundSimulation() {
       {/* Battle Field Area */}
       <BattleArea />
 
-      {/* Center Area (Logs only) */}
-      <div class="w-full max-w-6xl my-4">
-        <div class="bg-slate-900/60 backdrop-blur-md rounded-2xl border border-slate-800 p-4 text-slate-300 overflow-y-auto h-32 font-mono text-sm shadow-inner scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent">
-          <For each={logs()}>
-            {(log) => <div class="mb-1 border-b border-slate-800/50 pb-1 last:border-0">{log}</div>}
-          </For>
+      {/* Log Modal */}
+      <Show when={showLogs()}>
+        <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setShowLogs(false)}>
+          <div class="w-full max-w-2xl bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[80vh]" onClick={e => e.stopPropagation()}>
+            <div class="flex justify-between items-center p-4 border-b border-slate-800 bg-slate-900/50">
+              <h3 class="text-lg font-bold text-slate-200">战斗日志</h3>
+              <button onClick={() => setShowLogs(false)} class="text-slate-400 hover:text-white transition-colors">
+                ✕
+              </button>
+            </div>
+            <div class="flex-1 overflow-y-auto p-4 font-mono text-sm text-slate-300 space-y-1 scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent">
+              <For each={logs()}>
+                {(log) => <div class="border-b border-slate-800/50 pb-1 last:border-0">{log}</div>}
+              </For>
+              <div ref={logsEndRef} />
+            </div>
+          </div>
         </div>
-      </div>
+      </Show>
 
       {/* Player Area (A) + Control Panel */}
       <div class="w-full max-w-7xl flex gap-6 items-start">
@@ -1047,6 +1229,13 @@ export default function RoundSimulation() {
             </Show>
           </Show>
 
+
+          <button
+            onClick={() => setShowLogs(true)}
+            class="mt-2 w-full px-4 py-2 bg-slate-800/50 hover:bg-slate-700/50 text-slate-400 font-medium rounded-lg border border-slate-700/50 transition-colors text-xs uppercase tracking-wider flex items-center justify-center gap-2"
+          >
+            <span>📜</span> 查看日志
+          </button>
 
           <button
             onClick={initGame}
