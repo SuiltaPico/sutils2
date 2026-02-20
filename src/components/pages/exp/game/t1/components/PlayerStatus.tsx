@@ -48,7 +48,19 @@ export const PlayerStatus = (props: {
     }
 
     const trueDmg = opponent.lastAction?.buffs?.trueDamage || 0;
-    const rawIncoming = Math.max(0, incoming - defense);
+    
+    // Apply Rage to incoming damage
+    const rageBonus = opponent.nextAttackBonus;
+    const effectiveIncoming = incoming > 0 ? incoming + rageBonus : 0;
+    
+    let rawIncoming = Math.max(0, effectiveIncoming - defense);
+
+    // Apply Damage Reduction
+    const reduction = props.player.damageReduction;
+    if (reduction > 0 && rawIncoming > 0) {
+      rawIncoming -= Math.floor(rawIncoming * reduction);
+    }
+
     const actualIncoming = rawIncoming + trueDmg;
 
     const blockedByShield = Math.min(props.player.shield, actualIncoming);
@@ -56,12 +68,12 @@ export const PlayerStatus = (props: {
     const actualHpDamage = Math.min(props.player.hp, netDamageToHp);
 
     let projectedShield = 0;
-    if (defense > incoming) {
-      projectedShield = defense - incoming;
+    if (defense > effectiveIncoming) {
+      projectedShield = defense - effectiveIncoming;
     }
 
     return {
-      incoming,
+      incoming: effectiveIncoming,
       defense,
       blockedByShield,
       netDamage: netDamageToHp,
@@ -135,8 +147,27 @@ export const PlayerStatus = (props: {
 
       <div class="flex flex-wrap gap-2 items-center">
         <Show when={props.player.poisonStacks > 0}>
-          <div class="flex items-center gap-1 text-green-400 text-xs font-bold">
+          <div
+            class="flex items-center gap-1 text-green-400 text-[10px] font-bold bg-green-900/30 px-1 rounded border border-green-500/20"
+            title="中毒：每回合结束损失 HP，无视护盾"
+          >
             <span>☠️</span> {props.player.poisonStacks}
+          </div>
+        </Show>
+        <Show when={props.player.nextAttackBonus > 0}>
+          <div
+            class="flex items-center gap-1 text-amber-400 text-[10px] font-bold bg-amber-900/30 px-1 rounded border border-amber-500/20"
+            title="愤怒：下一次进攻强度提升"
+          >
+            <span>🔥</span> {props.player.nextAttackBonus}
+          </div>
+        </Show>
+        <Show when={props.player.damageReduction > 0}>
+          <div
+            class="flex items-center gap-1 text-cyan-400 text-[10px] font-bold bg-cyan-900/30 px-1 rounded border border-cyan-500/20"
+            title="减伤：降低受到的常规伤害"
+          >
+            <span>🛡️</span> {Math.round(props.player.damageReduction * 100)}%
           </div>
         </Show>
         {/* <div class="flex items-center gap-3 ml-auto text-xs text-slate-500 font-bold">

@@ -1,13 +1,50 @@
-import { Component, createSignal } from "solid-js";
+import { Component, createSignal, Show, For } from "solid-js";
 import { startRun } from "../store";
 import { BackgroundEffect } from "../components/BackgroundEffect";
 import { Icon } from "../../../../../common/Icon";
-import { mdiSword, mdiBookOpenPageVariant, mdiBagPersonal } from "@mdi/js";
+import {
+  mdiSword,
+  mdiBookOpenPageVariant,
+  mdiBagPersonal,
+  mdiCheck,
+  mdiClose,
+} from "@mdi/js";
+import { Difficulty } from "../types";
 import clsx from "clsx";
 import { isMobileDevice } from "../utils";
 
 export const MainMenu: Component = () => {
   const [hoveredBtn, setHoveredBtn] = createSignal<string | null>(null);
+  const [showDifficultySelect, setShowDifficultySelect] = createSignal(false);
+
+  const difficulties: {
+    id: Difficulty;
+    label: string;
+    desc: string;
+    color: string;
+  }[] = [
+    {
+      id: "EASY",
+      label: "简单",
+      desc: "适合新手玩家练习。",
+      color:
+        "from-emerald-900/40 via-emerald-800/40 to-emerald-900/40 border-emerald-500/30",
+    },
+    {
+      id: "NORMAL",
+      label: "普通",
+      desc: "标准难度，适合大多数玩家。",
+      color:
+        "from-cyan-900/40 via-cyan-800/40 to-cyan-900/40 border-cyan-500/30",
+    },
+    {
+      id: "HARD",
+      label: "困难",
+      desc: "困难难度，适合高级玩家。",
+      color:
+        "from-rose-900/40 via-rose-800/40 to-rose-900/40 border-rose-500/30",
+    },
+  ];
 
   return (
     <div class="w-full h-full relative flex flex-col items-center justify-center overflow-hidden bg-[#050508] font-sans text-slate-200 select-none">
@@ -37,8 +74,9 @@ export const MainMenu: Component = () => {
 
       <div
         class={clsx(
-          "relative z-30 flex flex-col items-center w-full p-8",
-          isMobileDevice ? "gap-8 max-w-84" : "gap-16 max-w-md"
+          "relative z-30 flex flex-col items-center w-full p-8 transition-all duration-500",
+          isMobileDevice ? "gap-8 max-w-84" : "gap-16 max-w-md",
+          showDifficultySelect() ? "blur-md scale-95 opacity-50" : "opacity-100"
         )}
       >
         {/* Title Section */}
@@ -63,7 +101,7 @@ export const MainMenu: Component = () => {
         <div class="flex flex-col gap-5 w-full">
           {/* Start Game Button */}
           <button
-            onClick={() => startRun()}
+            onClick={() => setShowDifficultySelect(true)}
             onMouseEnter={() => setHoveredBtn("start")}
             onMouseLeave={() => setHoveredBtn(null)}
             class={clsx(
@@ -140,6 +178,62 @@ export const MainMenu: Component = () => {
           </div>
         </div>
       </div>
+
+      {/* Difficulty Selection Overlay */}
+      <Show when={showDifficultySelect()}>
+        <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-300">
+          <div class="w-full max-w-md flex flex-col gap-6 animate-in zoom-in-95 duration-300">
+            <div class="flex flex-col items-center gap-2">
+              <h2 class="text-3xl font-black italic tracking-widest text-amber-200 uppercase drop-shadow-[0_0_10px_rgba(251,191,36,0.5)]">
+                选择挑战等级
+              </h2>
+              <div class="h-[1px] w-full bg-gradient-to-r from-transparent via-amber-500/50 to-transparent"></div>
+            </div>
+
+            <div class="flex flex-col gap-4">
+              <For each={difficulties}>
+                {(diff) => (
+                  <button
+                    onClick={() => startRun(diff.id)}
+                    class={clsx(
+                      "group relative w-full clip-cut p-4 text-left transition-all duration-300 transform hover:scale-[1.02] border backdrop-blur-md bg-gradient-to-r",
+                      diff.color
+                    )}
+                  >
+                    <div class="relative z-10 flex flex-col gap-1">
+                      <div class="flex items-center justify-between">
+                        <span class="text-xl font-bold tracking-widest group-hover:text-white transition-colors">
+                          {diff.label}
+                        </span>
+                        <div class="opacity-0 group-hover:opacity-100 transition-opacity">
+                          <Icon
+                            path={mdiSword}
+                            size={20}
+                            class="text-white/50"
+                          />
+                        </div>
+                      </div>
+                      <p class="text-xs text-slate-400 group-hover:text-slate-200 transition-colors leading-relaxed">
+                        {diff.desc}
+                      </p>
+                    </div>
+                    {/* Hover glow line */}
+                    <div class="absolute bottom-0 left-0 w-0 h-[2px] bg-white/40 group-hover:w-full transition-all duration-500"></div>
+                  </button>
+                )}
+              </For>
+            </div>
+
+            <button
+              onClick={() => setShowDifficultySelect(false)}
+              class="flex items-center justify-center gap-2 py-3 text-slate-500 hover:text-slate-300 transition-colors uppercase tracking-widest font-mono text-sm"
+            >
+              <Icon path={mdiClose} size={18} />
+              <span>取消返回</span>
+            </button>
+          </div>
+        </div>
+      </Show>
     </div>
   );
 };

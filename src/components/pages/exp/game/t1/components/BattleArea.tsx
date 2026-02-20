@@ -23,12 +23,20 @@ export const BattleArea = (props: {
   const defender = () =>
     props.attackerId === "A" ? props.playerB : props.playerA;
 
-  const attackerPower = () => attacker().lastAction?.totalValue || 0;
+  const attackerPower = () => {
+    const base = attacker().lastAction?.totalValue || 0;
+    const rage = attacker().nextAttackBonus;
+    return base > 0 ? base + rage : 0;
+  };
   const defenderPower = () => defender().lastAction?.totalValue || 0;
   const attackerTrueDamage = () =>
     attacker().lastAction?.buffs?.trueDamage || 0;
-  const showdownDamage = () =>
-    Math.max(0, attackerPower() - defenderPower()) + attackerTrueDamage();
+  const showdownDamage = () => {
+    const raw = Math.max(0, attackerPower() - defenderPower());
+    const reduction = defender().damageReduction;
+    const reducedRaw = reduction > 0 ? raw - Math.floor(raw * reduction) : raw;
+    return reducedRaw + attackerTrueDamage();
+  };
 
   const isPlayerAttacking = () => props.attackerId === "A";
 

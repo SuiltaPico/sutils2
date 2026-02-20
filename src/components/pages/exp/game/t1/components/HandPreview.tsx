@@ -12,8 +12,11 @@ export const HandPreview = (props: HandPreviewProps) => {
   const patternInfo = createMemo(() => identifyPattern(props.selectedCards));
 
   const buffs = createMemo(() => {
-    if (!props.isAttackPhase) return null;
-    return analyzeBuffs(props.selectedCards, patternInfo().name);
+    return analyzeBuffs(
+      props.selectedCards,
+      patternInfo().name,
+      props.isAttackPhase ? "ATTACK" : "DEFEND"
+    );
   });
 
   const buffTags = createMemo(() => {
@@ -25,6 +28,12 @@ export const HandPreview = (props: HandPreviewProps) => {
         label: "真伤",
         val: b.trueDamage,
         color: "text-purple-400 border-purple-500/30 bg-purple-950/40",
+      });
+    if (b.damageReduction > 0)
+      tags.push({
+        label: "减伤",
+        val: `${Math.round(b.damageReduction * 100)}%`,
+        color: "text-blue-400 border-blue-500/30 bg-blue-950/40",
       });
     if (b.shield > 0)
       tags.push({
@@ -50,32 +59,40 @@ export const HandPreview = (props: HandPreviewProps) => {
         val: b.poison,
         color: "text-lime-400 border-lime-500/30 bg-lime-950/40",
       });
+    if (b.nextAttackBonus > 0)
+      tags.push({
+        label: "愤怒",
+        val: b.nextAttackBonus,
+        color: "text-rose-400 border-rose-500/30 bg-rose-950/40",
+      });
     return tags;
   });
+
+  const buffDescriptions = createMemo(() => buffs().descriptions ?? []);
 
   return (
     <Show when={props.selectedCards.length > 0}>
       <div
         class={clsx(
           "absolute bottom-[calc(100%+32px)] left-1/2 -translate-x-1/2 z-50 pointer-events-none flex flex-col items-center w-max animate-in fade-in slide-in-from-bottom-2 duration-200",
-          isMobileDevice
-            ? ""
-            : "gap-2"
+          isMobileDevice ? "" : "gap-2"
         )}
       >
         {/* Sub: Buff Tags */}
-        <Show when={buffTags().length > 0}>
-          <div class="flex items-center gap-1.5 flex-wrap justify-center">
-            <For each={buffTags()}>
-              {(tag) => (
-                <div
-                  class={`px-2 py-0.5 rounded-sm border text-xs font-bold font-mono tracking-tight shadow-sm flex items-center gap-1.5 ${tag.color}`}
-                >
-                  <span>{tag.label}</span>
-                  <span class="opacity-80">{tag.val}</span>
-                </div>
-              )}
-            </For>
+        <Show when={buffTags().length > 0 || buffDescriptions().length > 0}>
+          <div class="flex flex-col items-center gap-1.5">
+            <div class="flex items-center gap-1.5 flex-wrap justify-center">
+              <For each={buffTags()}>
+                {(tag) => (
+                  <div
+                    class={`px-2 py-0.5 rounded-sm border text-xs font-bold font-mono tracking-tight shadow-sm flex items-center gap-1.5 ${tag.color}`}
+                  >
+                    <span>{tag.label}</span>
+                    <span class="opacity-80">{tag.val}</span>
+                  </div>
+                )}
+              </For>
+            </div>
           </div>
         </Show>
 
@@ -83,22 +100,22 @@ export const HandPreview = (props: HandPreviewProps) => {
         <div class="px-5 py-0 flex items-center gap-3">
           <span
             class={`text-lg font-bold tracking-widest ${
-              patternInfo().name === "无效牌型"
+              patternInfo().name === "杂牌"
                 ? "text-slate-500"
                 : "text-slate-100"
             }`}
           >
             {patternInfo().name}
           </span>
-          <Show when={patternInfo().name !== "无效牌型"}>
+          <Show when={patternInfo().name !== "杂牌"}>
             <span class="text-xl font-black text-amber-400 font-mono tracking-tighter drop-shadow-md">
               <span class="text-sm opacity-60 mr-0.5">x</span>
               {patternInfo().multiplier}
             </span>
           </Show>
-          <Show when={patternInfo().name === "无效牌型"}>
-            <span class="text-xs text-red-400 font-mono bg-red-950/30 px-1.5 py-0.5 rounded border border-red-500/20">
-              无效
+          <Show when={patternInfo().name === "杂牌"}>
+            <span class="text-xs text-slate-400 font-mono bg-slate-900/50 px-1.5 py-0.5 rounded border border-slate-700/50">
+              杂牌
             </span>
           </Show>
         </div>

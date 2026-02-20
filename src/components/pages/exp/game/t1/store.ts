@@ -1,5 +1,5 @@
 import { createStore } from "solid-js/store";
-import { AppState, RunState, MapNode } from "./types";
+import { AppState, RunState, MapNode, Difficulty } from "./types";
 import { CardData, SUITS, RANKS } from "./core";
 
 export const [gameState, setGameState] = createStore<{
@@ -16,6 +16,7 @@ export const [gameState, setGameState] = createStore<{
     deck: [],
     gold: 0,
     relics: [],
+    difficulty: 'NORMAL',
   },
 });
 
@@ -70,7 +71,7 @@ export const generateMap = (floor: number): MapNode[] => {
   return nodes;
 };
 
-export const startRun = () => {
+export const startRun = (difficulty: Difficulty = 'NORMAL') => {
     const deck = createDeck();
     const map = generateMap(1);
     setGameState({
@@ -84,6 +85,7 @@ export const startRun = () => {
             deck,
             gold: 0,
             relics: [],
+            difficulty,
         }
     });
 };

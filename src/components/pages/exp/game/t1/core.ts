@@ -141,16 +141,20 @@ export interface BuffResult {
   heal: number;
   cleanse: number;
   poison: number;
+  damageReduction: number;
+  nextAttackBonus: number;
   descriptions: string[];
 }
 
-export const analyzeBuffs = (cards: CardData[], pattern: string): BuffResult => {
+export const analyzeBuffs = (cards: CardData[], pattern: string, phase: 'ATTACK' | 'DEFEND'): BuffResult => {
   const result: BuffResult = {
     shield: 0,
     trueDamage: 0,
     heal: 0,
     cleanse: 0,
     poison: 0,
+    damageReduction: 0,
+    nextAttackBonus: 0,
     descriptions: []
   };
 
@@ -167,17 +171,23 @@ export const analyzeBuffs = (cards: CardData[], pattern: string): BuffResult => 
     }
   }
   
-  // ♠ Spade: True Damage
+  // ♠ Spade
   if (suitCounts['♠'] >= 3) {
     const val = suitCounts['♠'] - 2;
     if (val > 0) {
-      const trueDamageGain = val * 2;
-      result.trueDamage += trueDamageGain;
-      result.descriptions.push(`黑桃: 真伤 +${trueDamageGain}`);
+      if (phase === 'ATTACK') {
+        const trueDamageGain = val * 2;
+        result.trueDamage += trueDamageGain;
+        result.descriptions.push(`黑桃: 真伤 +${trueDamageGain}`);
+      } else {
+        const reduction = val * 0.2;
+        result.damageReduction += reduction;
+        result.descriptions.push(`黑桃: 减伤 ${Math.round(reduction * 100)}%`);
+      }
     }
   }
 
-  // ♥ Heart: Heal + Cleanse
+  // ♥ Heart: Heal + Cleanse (Same for both)
   if (suitCounts['♥'] >= 3) {
     const val = suitCounts['♥'] - 2;
     if (val > 0) {
@@ -187,17 +197,23 @@ export const analyzeBuffs = (cards: CardData[], pattern: string): BuffResult => 
     }
   }
 
-  // ♣ Club: Poison
+  // ♣ Club
   if (suitCounts['♣'] >= 3) {
     const val = suitCounts['♣'] - 2;
     if (val > 0) {
-      const poisonGain = val;
-      result.poison += poisonGain;
-      result.descriptions.push(`梅花: 中毒 +${poisonGain}`);
+      if (phase === 'ATTACK') {
+        const poisonGain = val;
+        result.poison += poisonGain;
+        result.descriptions.push(`梅花: 中毒 +${poisonGain}`);
+      } else {
+        const bonus = val;
+        result.nextAttackBonus += bonus;
+        result.descriptions.push(`梅花: 愤怒 +${bonus}`);
+      }
     }
   }
 
-  // ♦ Diamond: Shield
+  // ♦ Diamond: Shield (Same for both)
   if (suitCounts['♦'] >= 3) {
     const val = suitCounts['♦'] - 2;
     if (val > 0) {

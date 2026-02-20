@@ -1,4 +1,5 @@
-import { CardData, identifyPattern, analyzeBuffs } from './core';
+import { CardData, identifyPattern, analyzeBuffs, HIGH_LEVEL_PATTERNS } from './core';
+import { Difficulty } from './types';
 
 // Helper to generate all subsets of the hand
 function getSubsets(cards: CardData[]): CardData[][] {
@@ -34,42 +35,74 @@ export function getBestMove(
   hand: CardData[], 
   isAttack: boolean, 
   isSecondAttack: boolean, 
+  difficulty: Difficulty = 'NORMAL',
   incomingDamage: number = 0,
-  currentHp: number = 50, // Default for compatibility
+  currentHp: number = 50,
   maxHp: number = 50
 ): CardData[] {
-  const subsets = getSubsets(hand);
+  let subsets = getSubsets(hand);
+  
+  // 1. Apply Difficulty-based Subset Reduction
+  if (difficulty === 'EASY') {
+    // Randomly pick only 10 subsets
+    subsets = subsets.sort(() => Math.random() - 0.5).slice(0, 10);
+  } else if (difficulty === 'NORMAL') {
+    // Randomly pick only 50 subsets
+    subsets = subsets.sort(() => Math.random() - 0.5).slice(0, 50);
+  }
+
   const options: MoveOption[] = [];
 
   for (const subset of subsets) {
     const pattern = identifyPattern(subset);
     
-    // Constraint: Second attack must be Basic Pattern (<= 3 cards)
-    // But wait, identifyPattern might return "Single" for a 5-card trash hand.
-    // The game rule says "Second attack must be Basic Pattern (<= 3 cards)".
-    // So we must strictly check subset length for Second Attack.
-    if (isSecondAttack && subset.length > 3) continue;
+    // Easy AI only recognizes basic patterns
+    if (difficulty === 'EASY') {
+      const basicPatterns = new Set(['单张', '对子', '两对', '三条']);
+      if (!basicPatterns.has(pattern.name)) {
+        // Degrade to single card or treat as trash
+        pattern.name = subset.length === 1 ? '单张' : '无效牌型';
+        pattern.multiplier = subset.length === 1 ? 1 : 0;
+      }
+    }
     
-    // Also Second Attack forbids Single card pattern (unless it has buffs? No, rule says "No Single Pattern").
-    // Let's stick to the rule: "No Single Pattern" for Second Attack.
+    // Constraint: Second attack must be Basic Pattern (<= 3 cards)
+    if (isSecondAttack && subset.length > 3) continue;
     if (isSecondAttack && pattern.name === '单张') continue;
 
     const baseValue = pattern.multiplier;
-    const buffs = analyzeBuffs(subset, pattern.name);
+    const buffs = analyzeBuffs(subset, pattern.name, isAttack ? "ATTACK" : "DEFEND");
     
     // Calculate Buff Value
     let buffValue = 0;
     
     if (isAttack) {
        // Attack Phase
-       buffValue += buffs.trueDamage * 2.0; // True damage is very strong
-       buffValue += buffs.poison * 1.0;
-       buffValue += buffs.shield * 0.8;     // Shield is okay for setup
-       buffValue += buffs.heal * (currentHp < maxHp * 0.4 ? 2.0 : 0.5); // Heal critical when low
-       buffValue += buffs.cleanse * 0.5;
+       // Difficulty influence on weighting
+       const w = (difficulty === 'HARD') ? 1.0 : (difficulty === 'NORMAL' ? 0.8 : 0);
+       
+       buffValue += buffs.trueDamage * 2.0 * w; 
+       buffValue += buffs.poison * 1.0 * w;
+       buffValue += buffs.shield * 0.8 * w;     
+       
+       const healW = (difficulty === 'HARD' && currentHp < maxHp * 0.4) ? 2.0 : 0.5;
+       buffValue += buffs.heal * healW * w; 
+       buffValue += buffs.cleanse * 0.5 * w;
     } else {
-       // Defend Phase - Buffs do not trigger on defense!
-       buffValue = 0;
+       // Defense Phase
+       const w = (difficulty === 'HARD' || difficulty === 'NORMAL') ? 1.0 : 0;
+       
+       buffValue += buffs.shield * 1.0 * w;
+       
+       if (incomingDamage > 0 && buffs.damageReduction > 0) {
+         const reduced = Math.min(incomingDamage, incomingDamage * buffs.damageReduction);
+         buffValue += reduced * 1.2 * w;
+       }
+       
+       const healW = (difficulty === 'HARD' && currentHp < maxHp * 0.4) ? 2.0 : 0.5;
+       buffValue += buffs.heal * healW * w;
+       buffValue += buffs.cleanse * 0.5 * w;
+       buffValue += buffs.nextAttackBonus * 0.8 * w; 
     }
 
     // If no value at all, skip
@@ -77,10 +110,14 @@ export function getBestMove(
 
     const isHighLevel = HIGH_LEVEL_PATTERNS.has(pattern.name);
     
-    // Total Score
-    // We weigh base damage/defense slightly higher than buffs generally, 
-    // but buffs can tip the scale.
-    const totalScore = baseValue + buffValue;
+    // Total Score with Random perturbation for Normal difficulty
+    let totalScore = baseValue + buffValue;
+    if (difficulty === 'NORMAL') {
+      totalScore *= (0.8 + Math.random() * 0.4); // ±20%
+    } else if (difficulty === 'EASY') {
+       // Easy AI might just pick random moves, but let's give it some score bias
+       totalScore *= (0.5 + Math.random() * 1.0);
+    }
 
     options.push({
       cards: subset,
@@ -97,48 +134,22 @@ export function getBestMove(
   // Sort options based on strategy
   if (isAttack) {
     if (!isSecondAttack) {
-      // Prioritize High Level patterns to trigger Second Attack
-      // Then maximize Total Score
+      // Prioritize High Level patterns to trigger Second Attack (Hard Only)
       options.sort((a, b) => {
-        if (a.isHighLevel !== b.isHighLevel) {
-          return a.isHighLevel ? -1 : 1; // High Level first
+        if (difficulty === 'HARD' && a.isHighLevel !== b.isHighLevel) {
+          return a.isHighLevel ? -1 : 1;
         }
         return b.totalScore - a.totalScore;
       });
     } else {
-      // Second Attack: Just highest score
       options.sort((a, b) => b.totalScore - a.totalScore);
     }
   } else {
-    // Defense Strategy:
-    // 1. Try to block fully (baseValue + shieldBuff >= incomingDamage) with minimal waste.
-    // Note: Shield buff counts as blocking power immediately in this game logic?
-    // In resolveCombat: 
-    //   rawDmg = max(0, attack - defenseVal)
-    //   blocked = min(shield, rawDmg)
-    // So defenseVal reduces damage first, then shield blocks the rest.
-    // Effectively, both contribute to survival.
-    
-    // Filter moves that can mitigate most/all damage
-    // We want: (baseValue + buff.shield) >= incomingDamage
-    // But we also want to save good cards if possible? 
-    // For now, let's just pick the best mitigation efficiency.
-    
-    // Sort by:
-    // 1. Can survive? (Effective Defense >= Incoming)
-    // 2. If both survive, pick lowest cost (lowest totalScore used)? Or highest counter-value (buffs)?
-    // Let's simplify: Just pick highest Total Score to be safe, 
-    // unless we can perfectly block with a lower score to save cards?
-    // AI is simple for now: Maximize Score.
-    
     options.sort((a, b) => b.totalScore - a.totalScore);
-    
-    // Optimization: If the best move is way overkill, maybe pick a weaker one?
-    // Not implementing for now to keep it robust.
   }
 
   return options[0].cards;
 }
 
 // Re-export constants needed
-import { HIGH_LEVEL_PATTERNS } from './core';
+// import { HIGH_LEVEL_PATTERNS } from './core'; // Removed as moved to top

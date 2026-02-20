@@ -43,9 +43,15 @@ export interface PlayerState {
   discardPile: CardData[];
   selectedIds: Set<string>;
   lastAction: CombatAction | null;
+  nextAttackBonus: number;
+  rageDuration: number;
+  damageReduction: number;
+  reductionDuration: number;
 }
 
 export type NodeType = 'BATTLE' | 'ELITE' | 'EVENT' | 'REST' | 'BOSS';
+
+export type Difficulty = 'EASY' | 'NORMAL' | 'HARD';
 
 export interface MapNode {
   id: string;
@@ -65,6 +71,7 @@ export interface RunState {
   deck: CardData[]; // Player's permanent deck
   gold: number; 
   relics: string[]; 
+  difficulty: Difficulty;
 }
 
 export const isAttackPhase = (p: GamePhase) => 

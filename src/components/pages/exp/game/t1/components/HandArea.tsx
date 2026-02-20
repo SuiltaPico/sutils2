@@ -25,7 +25,7 @@ export const HandArea = (props: {
 
   const suitBoostedCardIds = createMemo(() => {
     const result = new Set<string>();
-    if (!isAttacker() || !isAttackPhase(props.phase)) return result;
+    if (!isMyTurn()) return result;
 
     const selectedCards = props.player.hand.filter((c: CardData) =>
       props.player.selectedIds.has(c.id)
@@ -53,11 +53,23 @@ export const HandArea = (props: {
     );
     if (selectedCards.length === 0) return new Set<string>();
 
+    const suitCounts: Record<string, number> = {};
+    selectedCards.forEach((c) => {
+      suitCounts[c.suit] = (suitCounts[c.suit] || 0) + 1;
+    });
+    const boostedSuitSet = new Set(
+      Object.entries(suitCounts)
+        .filter(([, count]) => count >= 3)
+        .map(([suit]) => suit)
+    );
+
     const pattern = identifyPattern(selectedCards);
     const relevantIds = new Set(pattern.relevantCards.map((c) => c.id));
 
     const junk = new Set<string>();
     selectedCards.forEach((c) => {
+      // Cards that participate in suit buff are never treated as junk
+      if (boostedSuitSet.has(c.suit)) return;
       if (!relevantIds.has(c.id)) {
         junk.add(c.id);
       }
