@@ -270,6 +270,12 @@ export const routes = [
     component: lazy(() => import("./components/pages/exp/game/t0")),
   },
   {
+    path: "/exp/game/t1",
+    name: "长生塔",
+    description: "rougelike",
+    component: lazy(() => import("./components/pages/exp/game/t1")),
+  },
+  {
     path: "/exp/game/tower",
     name: "塔防游戏",
     description:
