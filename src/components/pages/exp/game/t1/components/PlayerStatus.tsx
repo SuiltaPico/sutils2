@@ -6,11 +6,12 @@ import { Icon } from "../../../../../common/Icon";
 
 export const PlayerStatus = (props: {
   player: PlayerState;
-  opponent: PlayerState;
-  phase: GamePhase;
-  attackerId: string;
+  opponent?: PlayerState;
+  phase?: GamePhase;
+  attackerId?: string;
 }) => {
-  const isAttacker = () => props.attackerId === props.player.id;
+  const isAttacker = () =>
+    props.attackerId && props.player.id === props.attackerId;
   const effectiveMax = () =>
     Math.max(props.player.maxHp, props.player.hp + props.player.shield);
 
@@ -29,6 +30,7 @@ export const PlayerStatus = (props: {
   });
 
   const pendingDamageInfo = createMemo(() => {
+    if (!props.phase || !props.opponent || !props.attackerId) return null;
     if (isAttacker() || !isDefendPhase(props.phase)) return null;
 
     const opponent = props.opponent;
@@ -69,18 +71,24 @@ export const PlayerStatus = (props: {
   });
 
   return (
-    <div class={"flex flex-col gap-1 max-lg:gap-0.5 min-w-50 max-lg:min-w-40 p-2 max-lg:p-1"}>
+    <div
+      class={
+        "flex flex-col gap-1 max-lg:gap-0.5 min-w-50 max-lg:min-w-40 p-2 max-lg:p-1"
+      }
+    >
       <div class="flex items-center gap-1">
         <span
           class={`px-0.5 py-0.5 text-xs ${
             isAttacker() ? "text-rose-400" : "text-sky-400"
           }`}
         >
-          <Show when={isAttacker()}>
-            <Icon path={mdiSwordCross} size={14} />
-          </Show>
-          <Show when={!isAttacker()}>
-            <Icon path={mdiShield} size={14} />
+          <Show when={props.phase && props.attackerId}>
+            <Show when={isAttacker()}>
+              <Icon path={mdiSwordCross} size={14} />
+            </Show>
+            <Show when={!isAttacker()}>
+              <Icon path={mdiShield} size={14} />
+            </Show>
           </Show>
         </span>
         <h2 class="text-xs font-bold tracking-widest text-slate-100 font-serif uppercase drop-shadow-md">

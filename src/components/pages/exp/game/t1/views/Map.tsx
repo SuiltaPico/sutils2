@@ -1,7 +1,8 @@
 import { Component, For, Show } from "solid-js";
 import { gameState, setGameState } from "../store";
-import { AppState, MapNode } from "../types";
+import { AppState, MapNode, PlayerState } from "../types";
 import { BackgroundEffect } from "../components/BackgroundEffect";
+import { PlayerStatus } from "../components/PlayerStatus";
 import { Icon } from "../../../../../common/Icon";
 import {
   mdiBagPersonal,
@@ -15,6 +16,8 @@ import {
   mdiCrown,
   mdiClose,
 } from "@mdi/js";
+import clsx from "clsx";
+import { isMobileDevice } from "../utils";
 
 export const MapView: Component = () => {
   const handleNodeClick = (node: MapNode) => {
@@ -56,9 +59,6 @@ export const MapView: Component = () => {
     return `M ${n1.x} ${n1.y} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${n2.x} ${n2.y}`;
   };
 
-  const hpPercent = () =>
-    (gameState.run.playerHp / gameState.run.playerMaxHp) * 100;
-
   return (
     <div class="w-full h-full relative flex flex-col overflow-hidden bg-[#050508] font-sans text-slate-200 select-none">
       <BackgroundEffect
@@ -70,9 +70,6 @@ export const MapView: Component = () => {
 
       {/* Reusing styles from Battle.tsx for consistency */}
       <style>{`
-        .clip-cut {
-          clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
-        }
         .scanline {
           background: linear-gradient(to bottom, transparent 50%, rgba(0, 0, 0, 0.3) 51%);
           background-size: 100% 4px;
@@ -83,50 +80,38 @@ export const MapView: Component = () => {
       `}</style>
 
       {/* Header Bar */}
-      <div class="flex items-start justify-between w-full p-3 z-20 relative">
+      <div class="flex items-center justify-between w-full p-3 py-1.5 z-20 relative">
         {/* Left: Player Info & Menu */}
-        <div class="flex flex-col gap-4 w-64">
+        <div class="flex flex-col gap-4 w-40">
           {/* Player Status Panel */}
-          <div class="bg-slate-900/80 border border-slate-700 p-3 rounded-sm clip-cut backdrop-blur-md relative group">
-            {/* Decor lines */}
-            <div class="absolute top-0 right-0 w-2 h-2 border-t border-r border-slate-500"></div>
-            <div class="absolute bottom-0 left-0 w-2 h-2 border-b border-l border-slate-500"></div>
-
-            <div class="flex items-center justify-between mb-2">
-              <span class="text-sm font-bold tracking-widest text-slate-100 font-serif">
-                玩家
-              </span>
-              <div class="text-xs font-mono text-slate-400">
-                HP {gameState.run.playerHp} / {gameState.run.playerMaxHp}
-              </div>
-            </div>
-
-            {/* HP Bar */}
-            <div class="w-full h-2 bg-slate-950 border border-slate-800 relative overflow-hidden rounded-sm">
-              <div
-                class={`absolute top-0 left-0 h-full transition-all duration-300 ease-out ${
-                  hpPercent() > 20
-                    ? "bg-emerald-600"
-                    : "bg-rose-600 animate-pulse"
-                }`}
-                style={{ width: `${hpPercent()}%` }}
-              >
-                <div class="absolute inset-0 bg-gradient-to-b from-white/20 to-transparent"></div>
-              </div>
-            </div>
-          </div>
+          <PlayerStatus
+            player={{
+              id: "player",
+              name: "玩家",
+              hp: gameState.run.playerHp,
+              maxHp: gameState.run.playerMaxHp,
+              shield: 0,
+              poisonStacks: 0,
+              hand: [],
+              deck: gameState.run.deck,
+              discardPile: [],
+              selectedIds: new Set(),
+              lastAction: null,
+            }}
+          />
         </div>
 
         {/* Center: Title */}
-        <div class="flex flex-col items-center mt-2 bg-slate-950/40 px-8 py-2 rounded-full border border-white/5 backdrop-blur-sm">
-          <h2 class="text-md font-black text-slate-200 tracking-[0.2em] uppercase drop-shadow-[0_0_10px_rgba(255,255,255,0.2)]">
-            第 {gameState.run.currentFloor} 层
-          </h2>
+        <div class="flex flex-col items-center rounded-full backdrop-blur-sm">
+          第 {gameState.run.currentFloor} 层
         </div>
 
         {/* Right: Exit */}
         <button
-          class="bg-slate-900/60 hover:bg-red-900/30 border border-slate-700 hover:border-red-500/50 text-slate-400 hover:text-red-400 px-4 py-2 rounded-sm flex items-center gap-2 transition-all backdrop-blur-sm"
+          class={clsx(
+            "bg-slate-900/60 hover:bg-red-900/30 border border-slate-700 hover:border-red-500/50 text-slate-400 hover:text-red-400 rounded-sm flex items-center gap-2 transition-all backdrop-blur-sm",
+            isMobileDevice ? "px-2 py-1.5" : "px-4 py-2"
+          )}
           onClick={() => {
             if (confirm("确定要离开吗？")) {
               setGameState("appState", AppState.MENU);
@@ -141,21 +126,32 @@ export const MapView: Component = () => {
       {/* Main Map Area */}
       <div class="flex-1 w-full relative">
         {/* Floating Action Buttons */}
-        <div class="absolute top-6 left-6 z-30 flex flex-col gap-3">
+        <div
+          class={clsx(
+            "absolute z-30 flex flex-col gap-3",
+            isMobileDevice ? "top-3 left-3" : "top-6 left-6"
+          )}
+        >
           <button
-            class="w-12 h-12 bg-slate-900/80 hover:bg-slate-800 border border-slate-700 hover:border-emerald-500/50 rounded-sm flex items-center justify-center transition-all group backdrop-blur-sm shadow-lg hover:scale-105"
+            class={clsx(
+              "bg-slate-900/80 hover:bg-slate-800 border border-slate-700 hover:border-emerald-500/50 rounded-sm flex items-center justify-center transition-all group backdrop-blur-sm shadow-lg hover:scale-105",
+              isMobileDevice ? "w-10 h-10" : "w-12 h-12"
+            )}
             title="背包"
           >
             <div class="text-slate-400 group-hover:text-emerald-400 transition-colors">
-              <Icon path={mdiBagPersonal} size={24} />
+              <Icon path={mdiBagPersonal} size={isMobileDevice ? 20 : 24} />
             </div>
           </button>
           <button
-            class="w-12 h-12 bg-slate-900/80 hover:bg-slate-800 border border-slate-700 hover:border-cyan-500/50 rounded-sm flex items-center justify-center transition-all group backdrop-blur-sm shadow-lg hover:scale-105"
+            class={clsx(
+              "bg-slate-900/80 hover:bg-slate-800 border border-slate-700 hover:border-cyan-500/50 rounded-sm flex items-center justify-center transition-all group backdrop-blur-sm shadow-lg hover:scale-105",
+              isMobileDevice ? "w-10 h-10" : "w-12 h-12"
+            )}
             title="牌组"
           >
             <div class="text-slate-400 group-hover:text-cyan-400 transition-colors">
-              <Icon path={mdiCards} size={24} />
+              <Icon path={mdiCards} size={isMobileDevice ? 20 : 24} />
             </div>
           </button>
         </div>
@@ -211,19 +207,17 @@ export const MapView: Component = () => {
                 <button
                   onClick={() => handleNodeClick(node)}
                   disabled={node.status === "LOCKED"}
-                  class={`absolute w-14 h-14 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center transition-all duration-300 transform
-                  ${
+                  class={clsx(
+                    `absolute -translate-x-1/2 -translate-y-1/2 flex items-center justify-center transition-all duration-300 transform`,
                     node.status === "LOCKED"
                       ? "grayscale cursor-not-allowed"
-                      : "node-hover cursor-pointer"
-                  }
-                  ${
+                      : "node-hover cursor-pointer",
                     node.status === "AVAILABLE"
                       ? "animate-pulse scale-105 z-10"
-                      : ""
-                  }
-                  ${node.status === "CURRENT" ? "scale-110 z-20" : ""}
-                `}
+                      : "",
+                    node.status === "CURRENT" ? "scale-110 z-20" : "",
+                    isMobileDevice ? "w-8 h-8" : "w-14 h-14"
+                  )}
                   style={{ left: `${node.x}%`, top: `${node.y}%` }}
                 >
                   {/* Node Box Styling */}
@@ -270,19 +264,25 @@ export const MapView: Component = () => {
                   `}
                     >
                       <Show when={node.type === "BATTLE"}>
-                        <Icon path={mdiSwordCross} size={24} />
+                        <Icon
+                          path={mdiSwordCross}
+                          size={isMobileDevice ? 16 : 24}
+                        />
                       </Show>
                       <Show when={node.type === "ELITE"}>
-                        <Icon path={mdiSkull} size={24} />
+                        <Icon path={mdiSkull} size={isMobileDevice ? 16 : 24} />
                       </Show>
                       <Show when={node.type === "BOSS"}>
-                        <Icon path={mdiCrown} size={28} />
+                        <Icon path={mdiCrown} size={isMobileDevice ? 16 : 24} />
                       </Show>
                       <Show when={node.type === "EVENT"}>
-                        <Icon path={mdiHelp} size={24} />
+                        <Icon path={mdiHelp} size={isMobileDevice ? 16 : 24} />
                       </Show>
                       <Show when={node.type === "REST"}>
-                        <Icon path={mdiCampfire} size={24} />
+                        <Icon
+                          path={mdiCampfire}
+                          size={isMobileDevice ? 16 : 24}
+                        />
                       </Show>
                     </div>
 
@@ -304,7 +304,12 @@ export const MapView: Component = () => {
                       node.status === "CURRENT" || node.status === "AVAILABLE"
                     }
                   >
-                    <div class="absolute top-16 whitespace-nowrap text-[10px] font-mono font-bold tracking-widest px-2 py-0.5 bg-black/80 rounded text-slate-300 pointer-events-none">
+                    <div
+                      class={clsx(
+                        "absolute text-[10px] whitespace-nowrap font-mono font-bold tracking-widest px-2 py-0.5 bg-black/80 rounded text-slate-300 pointer-events-none",
+                        isMobileDevice ? "top-11" : "top-16"
+                      )}
+                    >
                       {node.type}
                     </div>
                   </Show>

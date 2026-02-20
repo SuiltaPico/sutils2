@@ -120,7 +120,7 @@ const CardPips = (props: {
   small?: boolean;
 }) => {
   const positions = PIP_POSITIONS[props.rank];
-  const pipSize = isMobileDevice ? 10 : props.small ? 10 : 20;
+  const pipSize = isMobileDevice ? 11 : props.small ? 10 : 20;
 
   // For face cards (J, Q, K), we render a special center graphic
   if (!positions) {
@@ -211,9 +211,6 @@ export const Card = (props: {
       onClick={props.onClick}
       style={{ "animation-delay": `${(props.index || 0) * 0.1}s` }}
       class={clsx(
-        props.small
-          ? "w-[60px] h-[84px] text-xs"
-          : "w-[100px] h-[140px] text-lg",
         `bg-[#F9F7F2] rounded-md shadow-sm border border-[#DCD6C8] font-serif relative overflow-hidden select-none cursor-pointer transition-all duration-300`,
         props.noEntryAnimation ? "" : "animate-card-enter",
         props.suitBoosted
@@ -224,7 +221,14 @@ export const Card = (props: {
             : "-translate-y-4 z-50 shadow-[0_10px_20px_rgba(0,0,0,0.3)] ring-2 ring-yellow-400"
           : "",
         props.dimmed ? "grayscale opacity-60" : "",
-        isMobileDevice ? "w-[50px] h-[70px]" : "hover:-translate-y-4 hover:z-50 hover:shadow-xl"
+        isMobileDevice
+          ? "w-[54px] h-[75.6px]"
+          : clsx(
+              "hover:-translate-y-4 hover:z-50 hover:shadow-xl",
+              props.small
+                ? "w-[60px] h-[84px] text-xs"
+                : "w-[100px] h-[140px] text-lg"
+            )
       )}
     >
       {/* Top Left Corner */}
@@ -281,7 +285,10 @@ export const Card = (props: {
         >
           {props.card.rank}
         </div>
-        <Icon size={isMobileDevice ? 8 : props.small ? 10 : 14} path={suitMap[props.card.suit]} />
+        <Icon
+          size={isMobileDevice ? 8 : props.small ? 10 : 14}
+          path={suitMap[props.card.suit]}
+        />
       </div>
     </div>
   );

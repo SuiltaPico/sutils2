@@ -37,13 +37,18 @@ export const MainMenu: Component = () => {
 
       <div
         class={clsx(
-          "relative z-30 flex flex-col items-center w-full max-w-md p-8",
-          isMobileDevice ? "gap-8" : "gap-16"
+          "relative z-30 flex flex-col items-center w-full p-8",
+          isMobileDevice ? "gap-8 max-w-84" : "gap-16 max-w-md"
         )}
       >
         {/* Title Section */}
         <div class="flex flex-col items-center gap-4 animate-in fade-in slide-in-from-top-8 duration-1000">
-          <h1 class="text-7xl font-black tracking-widest text-transparent bg-clip-text bg-gradient-to-b from-amber-100 via-amber-300 to-yellow-600 title-glow relative">
+          <h1
+            class={clsx(
+              "font-black tracking-widest text-transparent bg-clip-text bg-gradient-to-b from-amber-100 via-amber-300 to-yellow-600 title-glow relative",
+              isMobileDevice ? "text-4xl" : "text-7xl"
+            )}
+          >
             长生塔
             <div class="absolute -inset-1 blur-2xl bg-amber-500/20 rounded-full z-[-1]"></div>
           </h1>
@@ -61,7 +66,10 @@ export const MainMenu: Component = () => {
             onClick={() => startRun()}
             onMouseEnter={() => setHoveredBtn("start")}
             onMouseLeave={() => setHoveredBtn(null)}
-            class="group relative h-16 w-full clip-cut transition-all duration-300 transform hover:scale-[1.02] active:scale-[0.98]"
+            class={clsx(
+              "group relative w-full clip-cut transition-all duration-300 transform hover:scale-[1.02] active:scale-[0.98]",
+              isMobileDevice ? "h-14" : "h-16"
+            )}
           >
             <div
               class={`absolute inset-0 bg-gradient-to-r transition-all duration-300 ${
