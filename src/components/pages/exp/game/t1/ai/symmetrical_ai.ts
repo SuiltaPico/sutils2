@@ -1,5 +1,5 @@
-import { CardData, identifyPattern, analyzeBuffs, HIGH_LEVEL_PATTERNS } from './core';
-import { Difficulty } from './types';
+import { CardData, identifyPattern, analyzeBuffs, HIGH_LEVEL_PATTERNS } from '../core';
+import { Difficulty } from '../types';
 
 // Helper to generate all subsets of the hand
 function getSubsets(cards: CardData[]): CardData[][] {

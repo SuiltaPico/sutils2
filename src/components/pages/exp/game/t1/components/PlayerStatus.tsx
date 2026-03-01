@@ -1,8 +1,10 @@
-import { Show, createMemo, createEffect, createSignal } from "solid-js";
+import { Show, createMemo, createEffect, createSignal, For } from "solid-js";
 import { PlayerState, GamePhase, isAttackPhase, isDefendPhase } from "../types";
 import { identifyPattern, CardData } from "../core";
 import { mdiShield, mdiSwordCross } from "@mdi/js";
 import { Icon } from "../../../../../common/Icon";
+import { gameState } from "../store";
+import { RELIC_LIBRARY } from "../items";
 
 export const PlayerStatus = (props: {
   player: PlayerState;
@@ -175,6 +177,27 @@ export const PlayerStatus = (props: {
            <span class="opacity-50">已弃</span> {props.player.discardPile.length}
         </div> */}
       </div>
+
+      {/* Relic display for Player A */}
+      <Show when={props.player.id === "A" && gameState.run.relics.length > 0}>
+        <div class="flex flex-wrap gap-1 mt-1.5 pt-1.5 border-t border-white/5">
+          <For each={gameState.run.relics}>
+            {(id) => {
+              const relic = RELIC_LIBRARY[id];
+              return (
+                <div
+                  class="w-6 h-6 flex items-center justify-center bg-slate-900/80 rounded border border-slate-700/50 text-sm cursor-help hover:border-cyan-500/50 hover:bg-slate-800 transition-all group relative"
+                  title={`${relic?.name}: ${relic?.description}`}
+                >
+                  <span class="group-hover:scale-110 transition-transform">
+                    {relic?.icon}
+                  </span>
+                </div>
+              );
+            }}
+          </For>
+        </div>
+      </Show>
     </div>
   );
 };

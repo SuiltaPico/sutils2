@@ -1,4 +1,4 @@
-import { Component, For, Show } from "solid-js";
+import { Component, For, Show, createSignal, onMount, onCleanup } from "solid-js";
 import { gameState, setGameState } from "../store";
 import { AppState, MapNode, PlayerState } from "../types";
 import { BackgroundEffect } from "../components/BackgroundEffect";
@@ -20,6 +20,34 @@ import clsx from "clsx";
 import { isMobileDevice } from "../utils";
 
 export const MapView: Component = () => {
+  const [showIntro, setShowIntro] = createSignal(!gameState.run.floorIntroPlayed);
+  const [introPhase, setIntroPhase] = createSignal(0);
+
+  onMount(() => {
+    if (!gameState.run.floorIntroPlayed) {
+      const timers = [
+        setTimeout(() => setIntroPhase(1), 100),
+        setTimeout(() => setIntroPhase(2), 400),
+        setTimeout(() => setIntroPhase(3), 800),
+        setTimeout(() => setIntroPhase(4), 1200),
+        setTimeout(() => {
+          setShowIntro(false);
+          setGameState("run", "floorIntroPlayed", true);
+        }, 2000)
+      ];
+      onCleanup(() => timers.forEach(clearTimeout));
+    }
+  });
+
+  const FLOOR_NAMES = [
+    "未知领域",
+    "迷雾边界",
+    "寂静回廊",
+    "深渊幽谷",
+    "混沌核心"
+  ];
+  const floorName = FLOOR_NAMES[gameState.run.currentFloor] || "深渊深处";
+
   const handleNodeClick = (node: MapNode) => {
     if (node.status === "LOCKED") return;
 
@@ -61,6 +89,83 @@ export const MapView: Component = () => {
 
   return (
     <div class="w-full h-full relative flex flex-col overflow-hidden bg-[#050508] font-sans text-slate-200 select-none">
+      <Show when={showIntro()}>
+        <div class="absolute inset-0 z-50 flex flex-col items-center justify-center pointer-events-none overflow-hidden select-none">
+          {/* Background Solid Black Fade */}
+          <div 
+            class={clsx(
+              "absolute inset-0 transition-colors duration-[1000ms] ease-in-out",
+              introPhase() >= 3 ? "bg-black/0" : "bg-black/100"
+            )}
+          />
+
+          {/* Cinematic Letterbox Bars */}
+          <div 
+            class={clsx(
+              "absolute top-0 left-0 w-full bg-black transition-all duration-[800ms] ease-in-out z-10",
+              introPhase() >= 4 ? "h-0" : "h-[12%]"
+            )}
+          />
+          <div 
+            class={clsx(
+              "absolute bottom-0 left-0 w-full bg-black transition-all duration-[800ms] ease-in-out z-10",
+              introPhase() >= 4 ? "h-0" : "h-[12%]"
+            )}
+          />
+
+          {/* Central Container */}
+          <div class="relative w-full max-w-4xl h-64 flex flex-col items-center justify-center z-20">
+            {/* The Slice Line */}
+            <div 
+              class={clsx(
+                "absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-[1px] bg-cyan-200 transition-all duration-[300ms] ease-out",
+                "shadow-[0_0_20px_2px_rgba(34,211,238,0.8)]",
+                introPhase() === 0 ? "w-0 opacity-0" : "",
+                introPhase() >= 1 && introPhase() < 4 ? "w-[80%] opacity-100" : "",
+                introPhase() >= 4 ? "w-[120%] opacity-0 duration-[400ms]" : ""
+              )}
+            />
+
+            {/* Top Text (Floor Number) */}
+            <div class="absolute bottom-1/2 left-0 w-full overflow-hidden flex justify-center pb-2">
+              <h1 
+                class={clsx(
+                  "text-5xl md:text-7xl font-bold text-white tracking-[0.3em] transition-all duration-[400ms] ease-out",
+                  introPhase() === 0 || introPhase() === 1 ? "translate-y-[100%] opacity-0" : "",
+                  introPhase() >= 2 && introPhase() < 4 ? "translate-y-0 opacity-100" : "",
+                  introPhase() >= 4 ? "-translate-y-[50%] opacity-0 scale-105 duration-[400ms]" : ""
+                )}
+                style={{ "text-shadow": "0 10px 30px rgba(0,0,0,0.8)" }}
+              >
+                第 {gameState.run.currentFloor} 层
+              </h1>
+            </div>
+
+            {/* Bottom Text (Floor Name) */}
+            <div class="absolute top-1/2 left-0 w-full overflow-hidden flex justify-center pt-3">
+              <h2 
+                class={clsx(
+                  "text-xl md:text-2xl font-light text-cyan-100 tracking-[0.8em] pl-[0.8em] transition-all duration-[400ms] ease-out",
+                  introPhase() === 0 || introPhase() === 1 ? "-translate-y-[100%] opacity-0" : "",
+                  introPhase() >= 2 && introPhase() < 4 ? "translate-y-0 opacity-100" : "",
+                  introPhase() >= 4 ? "translate-y-[50%] opacity-0 scale-105 duration-[400ms]" : ""
+                )}
+              >
+                {floorName}
+              </h2>
+            </div>
+          </div>
+
+          {/* Flash Effect */}
+          <div 
+            class={clsx(
+              "absolute inset-0 bg-cyan-100 mix-blend-overlay transition-opacity duration-[300ms]",
+              introPhase() === 1 ? "opacity-30" : "opacity-0"
+            )}
+          />
+        </div>
+      </Show>
+
       <BackgroundEffect
         theme="default"
         speed={0.2}
@@ -97,6 +202,10 @@ export const MapView: Component = () => {
               discardPile: [],
               selectedIds: new Set(),
               lastAction: null,
+              nextAttackBonus: 0,
+              rageDuration: 0,
+              damageReduction: 0,
+              reductionDuration: 0,
             }}
           />
         </div>

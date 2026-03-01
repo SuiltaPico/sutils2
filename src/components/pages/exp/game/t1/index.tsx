@@ -4,6 +4,9 @@ import { AppState } from "./types";
 import { MainMenu } from "./views/MainMenu";
 import { MapView } from "./views/Map";
 import BattleView from "./views/Battle";
+import { RewardView } from "./views/Reward";
+import { PreparationView } from "./views/Preparation";
+import { CompendiumView } from "./views/Compendium";
 import { isMobileDevice } from "./utils";
 
 const handleFirstMobileTap = () => {
@@ -42,20 +45,13 @@ export const GameT1: Component = () => {
           <BattleView />
         </Match>
         <Match when={gameState.appState === AppState.REWARD}>
-          <div class="flex flex-col items-center justify-center h-full gap-8">
-            <h2 class="text-4xl font-bold text-amber-400">胜利!</h2>
-            <div class="flex gap-4">
-              <button
-                onClick={() => {
-                  setGameState("appState", AppState.MAP);
-                  // Mark node completed logic should be here or in Battle end
-                }}
-                class="px-8 py-3 bg-slate-800 hover:bg-slate-700 rounded-lg border border-slate-600"
-              >
-                返回地图
-              </button>
-            </div>
-          </div>
+          <RewardView />
+        </Match>
+        <Match when={gameState.appState === AppState.PREPARATION}>
+          <PreparationView />
+        </Match>
+        <Match when={gameState.appState === AppState.COMPENDIUM}>
+          <CompendiumView />
         </Match>
         <Match when={gameState.appState === AppState.GAME_OVER}>
           <div class="flex flex-col items-center justify-center h-full gap-8">

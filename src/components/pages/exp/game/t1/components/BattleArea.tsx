@@ -1,4 +1,5 @@
 import { For, Show } from "solid-js";
+import { CardData, calculateReductionPercentage } from "../core";
 import { PlayerState, GamePhase } from "../types";
 import { Card } from "./Card";
 import clsx from "clsx";
@@ -33,7 +34,8 @@ export const BattleArea = (props: {
     attacker().lastAction?.buffs?.trueDamage || 0;
   const showdownDamage = () => {
     const raw = Math.max(0, attackerPower() - defenderPower());
-    const reduction = defender().damageReduction;
+    const reductionPoints = defender().damageReduction;
+    const reduction = calculateReductionPercentage(reductionPoints);
     const reducedRaw = reduction > 0 ? raw - Math.floor(raw * reduction) : raw;
     return reducedRaw + attackerTrueDamage();
   };

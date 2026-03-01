@@ -146,7 +146,13 @@ export interface BuffResult {
   descriptions: string[];
 }
 
-export const analyzeBuffs = (cards: CardData[], pattern: string, phase: 'ATTACK' | 'DEFEND'): BuffResult => {
+export const analyzeBuffs = (
+  cards: CardData[],
+  pattern: string,
+  phase: 'ATTACK' | 'DEFEND',
+  effectManager: any, // Using any for now to avoid circular dependency or complex typing in core
+  ctx: any
+): BuffResult => {
   const result: BuffResult = {
     shield: 0,
     trueDamage: 0,
@@ -158,73 +164,20 @@ export const analyzeBuffs = (cards: CardData[], pattern: string, phase: 'ATTACK'
     descriptions: []
   };
 
-  if (pattern === '') return result;
-  
-  // Initialize counts using SUITS constant to avoid typo/encoding issues
-  const suitCounts: Record<string, number> = {};
-  SUITS.forEach(s => suitCounts[s] = 0);
+  if (pattern === '' || !effectManager) return result;
 
-  // Count suits
-  for (const card of cards) {
-    if (card && card.suit) {
-      suitCounts[card.suit] = (suitCounts[card.suit] || 0) + 1;
-    }
-  }
-  
-  // ♠ Spade
-  if (suitCounts['♠'] >= 3) {
-    const val = suitCounts['♠'] - 2;
-    if (val > 0) {
-      if (phase === 'ATTACK') {
-        const trueDamageGain = val * 2;
-        result.trueDamage += trueDamageGain;
-        result.descriptions.push(`黑桃: 真伤 +${trueDamageGain}`);
-      } else {
-        const reduction = val * 0.2;
-        result.damageReduction += reduction;
-        result.descriptions.push(`黑桃: 减伤 ${Math.round(reduction * 100)}%`);
-      }
-    }
-  }
+  effectManager.emit('onAnalyzeAction', { ...ctx, cards, pattern, phase }, result);
 
-  // ♥ Heart: Heal + Cleanse (Same for both)
-  if (suitCounts['♥'] >= 3) {
-    const val = suitCounts['♥'] - 2;
-    if (val > 0) {
-      result.heal += val;
-      result.cleanse += val;
-      result.descriptions.push(`红桃: 回复/净化 +${val}`);
-    }
-  }
-
-  // ♣ Club
-  if (suitCounts['♣'] >= 3) {
-    const val = suitCounts['♣'] - 2;
-    if (val > 0) {
-      if (phase === 'ATTACK') {
-        const poisonGain = val;
-        result.poison += poisonGain;
-        result.descriptions.push(`梅花: 中毒 +${poisonGain}`);
-      } else {
-        const bonus = val;
-        result.nextAttackBonus += bonus;
-        result.descriptions.push(`梅花: 愤怒 +${bonus}`);
-      }
-    }
-  }
-
-  // ♦ Diamond: Shield (Same for both)
-  if (suitCounts['♦'] >= 3) {
-    const val = suitCounts['♦'] - 2;
-    if (val > 0) {
-      result.shield += val;
-      result.descriptions.push(`方片: 护盾 +${val}`);
-    }
-  }
-  
   return result;
 };
 
+
+export const calculateReductionPercentage = (points: number): number => {
+  if (points <= 0) return 0;
+  // Formula: reduction = points / (points + 4)
+  // 1 pt -> 20%, 2 pts -> 33%, 4 pts -> 50%, 8 pts -> 66%, etc.
+  return points / (points + 4);
+};
 
 export function calculateMultiplier(cards: CardData[], pattern: string): number {
   const result = identifyPattern(cards);

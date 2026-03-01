@@ -10,6 +10,8 @@ export enum GamePhase {
   ROUND_END = "ROUND_END",
   GAME_OVER = "GAME_OVER",
   VICTORY = "VICTORY",
+  PREPARATION = "PREPARATION",
+  COMPENDIUM = "COMPENDIUM",
 }
 
 export enum AppState {
@@ -20,6 +22,8 @@ export enum AppState {
   REWARD = "REWARD",
   GAME_OVER = "GAME_OVER",
   VICTORY = "VICTORY",
+  PREPARATION = "PREPARATION",
+  COMPENDIUM = "COMPENDIUM",
 }
 
 export interface CombatAction {
@@ -51,7 +55,7 @@ export interface PlayerState {
 
 export type NodeType = 'BATTLE' | 'ELITE' | 'EVENT' | 'REST' | 'BOSS';
 
-export type Difficulty = 'EASY' | 'NORMAL' | 'HARD';
+export type Difficulty = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 
 export interface MapNode {
   id: string;
@@ -64,14 +68,26 @@ export interface MapNode {
 
 export interface RunState {
   currentFloor: number;
+  floorIntroPlayed?: boolean;
   map: MapNode[];
   currentNodeId: string | null;
   playerHp: number;
   playerMaxHp: number;
   deck: CardData[]; // Player's permanent deck
   gold: number; 
-  relics: string[]; 
+  relics: string[]; // Store relic IDs
   difficulty: Difficulty;
+}
+
+export interface PlayerData {
+  merits: number; // 觉醒点 (Merits)
+  unlockedArtifacts: string[]; // Unlocked artifact IDs
+  selectedArtifactId: string | null; // Currently equipped artifact
+  artifactLevels: Record<string, number>; // Level for each artifact (id -> level)
+  unlockedTalents: string[]; // Unlocked talent IDs
+  discoveredRelics: string[]; // IDs of discovered relics
+  discoveredClues: string[]; // IDs of discovered clues
+  maxUnlockedDifficulty: Difficulty; // Highest unlocked difficulty level
 }
 
 export const isAttackPhase = (p: GamePhase) => 

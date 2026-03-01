@@ -1,7 +1,8 @@
-import { createEffect, createMemo } from "solid-js";
+import { createEffect, createMemo, createSignal } from "solid-js";
 import { BackgroundEffect } from "../components/BackgroundEffect";
 import { BattleArea } from "../components/BattleArea";
 import { LogModal } from "../components/LogModal";
+import { HelpModal } from "../components/HelpModal";
 import { BattleTopBar } from "../components/BattleTopBar";
 import { BattleControls } from "../components/BattleControls";
 import { BattleFeedback } from "../components/BattleFeedback";
@@ -12,6 +13,7 @@ import { useBattle } from "../hooks/useBattle";
 import clsx from "clsx";
 
 export default function BattleView() {
+  const [showHelp, setShowHelp] = createSignal(false);
   const {
     playerA,
     playerB,
@@ -30,6 +32,7 @@ export default function BattleView() {
     phaseInfo,
     getSelectedCards,
     getDamageSourceWithTotal,
+    winBattle,
   } = useBattle();
 
   let logsEndRef: HTMLDivElement | undefined;
@@ -101,6 +104,8 @@ export default function BattleView() {
         attackerId={attackerId()}
         phaseInfoColor={phaseInfo().color}
         onShowLogs={() => setShowLogs(true)}
+        onShowHelp={() => setShowHelp(true)}
+        onWinBattle={winBattle}
       />
 
       {/* MIDDLE: Battle Area */}
@@ -139,6 +144,8 @@ export default function BattleView() {
         onClose={() => setShowLogs(false)}
         endRef={(el) => (logsEndRef = el)}
       />
+
+      <HelpModal show={showHelp()} onClose={() => setShowHelp(false)} />
     </div>
   );
 }

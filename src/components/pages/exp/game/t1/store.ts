@@ -1,14 +1,29 @@
 import { createStore } from "solid-js/store";
-import { AppState, RunState, MapNode, Difficulty } from "./types";
+import { AppState, RunState, MapNode, Difficulty, PlayerData } from "./types";
 import { CardData, SUITS, RANKS } from "./core";
+import { RELIC_LIBRARY, getRandomRelic } from "./items";
+
+export interface RewardItem {
+  id: string;
+  type: 'GOLD' | 'CARD' | 'RELIC';
+  name: string;
+  description: string;
+  icon: string;
+  amount?: number;
+  cardData?: CardData;
+  relicId?: string;
+}
 
 export const [gameState, setGameState] = createStore<{
   appState: AppState;
   run: RunState;
+  pendingRewards: RewardItem[];
+  playerData: PlayerData;
 }>({
   appState: AppState.MENU,
   run: {
     currentFloor: 1,
+    floorIntroPlayed: true,
     map: [],
     currentNodeId: null,
     playerHp: 30,
@@ -16,7 +31,17 @@ export const [gameState, setGameState] = createStore<{
     deck: [],
     gold: 0,
     relics: [],
-    difficulty: 'NORMAL',
+    difficulty: 0,
+  },
+  pendingRewards: [],
+  playerData: {
+    merits: 100, // Starting merits for testing
+    unlockedArtifacts: ["001"],
+    selectedArtifactId: "001",
+    unlockedTalents: [],
+    discoveredRelics: [],
+    discoveredClues: [],
+    maxUnlockedDifficulty: 0,
   },
 });
 
@@ -71,13 +96,14 @@ export const generateMap = (floor: number): MapNode[] => {
   return nodes;
 };
 
-export const startRun = (difficulty: Difficulty = 'NORMAL') => {
+export const startRun = (difficulty: Difficulty = 0) => {
     const deck = createDeck();
     const map = generateMap(1);
     setGameState({
         appState: AppState.MAP,
         run: {
             currentFloor: 1,
+            floorIntroPlayed: false,
             map,
             currentNodeId: null,
             playerHp: 30,
@@ -104,4 +130,38 @@ export const completeCurrentNode = () => {
   }));
   
   setGameState('run', 'currentNodeId', null);
+};
+
+export const generateRewards = (nodeType: string) => {
+    const rewards: RewardItem[] = [
+        { id: 'gold-' + Math.random().toString(36).substr(2, 4), type: 'GOLD', name: '髓玉', description: '获得 25 枚髓玉', icon: '💰', amount: 25 },
+    ];
+
+    // Add 3 random cards
+    const fullDeck = createDeck();
+    const cardRewards = fullDeck.slice(0, 3).map((c, i) => ({
+        id: 'card-' + c.id,
+        type: 'CARD' as const,
+        name: `${c.suit} ${c.rank}`,
+        description: '一张新牌，将其加入您的牌组',
+        icon: c.suit,
+        cardData: c
+    }));
+
+    // Add a random relic if it's an Elite or Boss node, or a 20% chance on a regular battle
+    const shouldAddRelic = nodeType === 'ELITE' || nodeType === 'BOSS' || Math.random() < 0.2;
+    const relicRewards: RewardItem[] = [];
+    if (shouldAddRelic) {
+        const relic = getRandomRelic();
+        relicRewards.push({
+            id: 'relic-' + relic.id,
+            type: 'RELIC',
+            name: relic.name,
+            description: relic.description,
+            icon: relic.icon,
+            relicId: relic.id
+        });
+    }
+    
+    setGameState('pendingRewards', [...rewards, ...cardRewards, ...relicRewards]);
 };

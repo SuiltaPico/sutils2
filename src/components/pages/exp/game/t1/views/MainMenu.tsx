@@ -1,50 +1,133 @@
 import { Component, createSignal, Show, For } from "solid-js";
-import { startRun } from "../store";
+import { gameState, setGameState } from "../store";
 import { BackgroundEffect } from "../components/BackgroundEffect";
 import { Icon } from "../../../../../common/Icon";
-import {
-  mdiSword,
-  mdiBookOpenPageVariant,
-  mdiBagPersonal,
-  mdiCheck,
-  mdiClose,
-} from "@mdi/js";
-import { Difficulty } from "../types";
+import { mdiSword, mdiBookOpenPageVariant, mdiBagPersonal, mdiDatabase } from "@mdi/js";
+import { AppState } from "../types";
+import { DifficultySelection } from "../components/DifficultySelection";
+import { ARTIFACTS } from "../artifacts";
 import clsx from "clsx";
 import { isMobileDevice } from "../utils";
 
-export const MainMenu: Component = () => {
-  const [hoveredBtn, setHoveredBtn] = createSignal<string | null>(null);
-  const [showDifficultySelect, setShowDifficultySelect] = createSignal(false);
+interface MenuButtonProps {
+  label: string;
+  icon: string;
+  onClick: () => void;
+  variant?: "primary" | "secondary";
+  class?: string;
+  iconClass?: string;
+}
 
-  const difficulties: {
-    id: Difficulty;
-    label: string;
-    desc: string;
-    color: string;
-  }[] = [
-    {
-      id: "EASY",
-      label: "简单",
-      desc: "适合新手玩家练习。",
-      color:
-        "from-emerald-900/40 via-emerald-800/40 to-emerald-900/40 border-emerald-500/30",
-    },
-    {
-      id: "NORMAL",
-      label: "普通",
-      desc: "标准难度，适合大多数玩家。",
-      color:
-        "from-cyan-900/40 via-cyan-800/40 to-cyan-900/40 border-cyan-500/30",
-    },
-    {
-      id: "HARD",
-      label: "困难",
-      desc: "困难难度，适合高级玩家。",
-      color:
-        "from-rose-900/40 via-rose-800/40 to-rose-900/40 border-rose-500/30",
-    },
-  ];
+const MenuButton: Component<MenuButtonProps> = (props) => {
+  const [hovered, setHovered] = createSignal(false);
+
+  return (
+    <button
+      onClick={props.onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      class={clsx(
+        "group relative w-full transition-all duration-300 transform hover:scale-[1.02] active:scale-[0.98]",
+        props.variant === "primary"
+          ? isMobileDevice
+            ? "h-16"
+            : "h-20"
+          : "h-16",
+        props.class
+      )}
+    >
+      {/* Button Background & Border */}
+      <div
+        class={clsx(
+          "absolute inset-0 clip-cut transition-all duration-300 border backdrop-blur-md",
+          props.variant === "primary"
+            ? hovered()
+              ? "bg-gradient-to-r from-amber-950/90 via-amber-900/80 to-amber-950/90 border-amber-500/80 shadow-[0_0_20px_rgba(245,158,11,0.3)]"
+              : "bg-gradient-to-r from-slate-950/80 via-slate-900/80 to-slate-950/80 border-amber-900/50"
+            : hovered()
+            ? "bg-gradient-to-r from-slate-800/80 via-slate-700/80 to-slate-800/80 border-cyan-500/50 shadow-[0_0_15px_rgba(6,182,212,0.2)]"
+            : "bg-gradient-to-r from-slate-900/60 via-slate-900/60 to-slate-900/60 border-slate-700/50"
+        )}
+      >
+        {/* Interior Scanline/Texture */}
+        <div class="absolute inset-0 bg-[linear-gradient(45deg,transparent_25%,rgba(255,255,255,0.02)_50%,transparent_75%,transparent_100%)] bg-[length:4px_4px]"></div>
+      </div>
+
+      {/* Hover Glow Lines */}
+      <Show when={hovered()}>
+        <div class="absolute inset-0 pointer-events-none">
+          <div
+            class={clsx(
+              "absolute top-0 left-1/4 right-1/4 h-[1px] bg-gradient-to-r from-transparent via-white/50 to-transparent",
+              props.variant === "primary" ? "via-amber-300" : "via-cyan-300"
+            )}
+          ></div>
+          <div
+            class={clsx(
+              "absolute bottom-0 left-1/4 right-1/4 h-[1px] bg-gradient-to-r from-transparent via-white/50 to-transparent",
+              props.variant === "primary" ? "via-amber-300" : "via-cyan-300"
+            )}
+          ></div>
+        </div>
+      </Show>
+
+      {/* Content */}
+      <div class="relative flex items-center justify-center gap-4 h-full px-8 z-10">
+        <Icon
+          path={props.icon}
+          class={clsx(
+            "transition-all duration-300 filter drop-shadow-lg",
+            props.variant === "primary"
+              ? hovered()
+                ? "text-amber-300 scale-110"
+                : "text-amber-700/70"
+              : hovered()
+              ? "text-cyan-300 scale-110"
+              : "text-slate-600",
+            props.iconClass
+          )}
+          size={props.variant === "primary" ? 28 : 24}
+        />
+        <div class="flex flex-col items-start">
+          <span
+            class={clsx(
+              "font-black tracking-[0.2em] transition-all duration-300 uppercase",
+              props.variant === "primary" ? "text-2xl" : "text-base",
+              hovered()
+                ? props.variant === "primary"
+                  ? "text-transparent bg-clip-text bg-gradient-to-r from-amber-100 via-amber-200 to-amber-100 drop-shadow-[0_0_8px_rgba(251,191,36,0.5)]"
+                  : "text-cyan-100 drop-shadow-[0_0_5px_rgba(34,211,238,0.5)]"
+                : "text-slate-400"
+            )}
+          >
+            {props.label}
+          </span>
+          <Show when={props.variant === "primary"}>
+             <span class={clsx(
+               "text-[10px] tracking-[0.3em] font-mono transition-colors duration-300",
+               hovered() ? "text-amber-400/60" : "text-slate-600"
+             )}>
+               START JOURNEY
+             </span>
+          </Show>
+        </div>
+      </div>
+      
+      {/* Corner Accents */}
+      <div class={clsx("absolute top-0 left-0 w-2 h-2 border-t-2 border-l-2 transition-colors duration-300", 
+        hovered() ? (props.variant === 'primary' ? 'border-amber-400' : 'border-cyan-400') : 'border-transparent')}></div>
+      <div class={clsx("absolute top-0 right-0 w-2 h-2 border-t-2 border-r-2 transition-colors duration-300", 
+        hovered() ? (props.variant === 'primary' ? 'border-amber-400' : 'border-cyan-400') : 'border-transparent')}></div>
+      <div class={clsx("absolute bottom-0 left-0 w-2 h-2 border-b-2 border-l-2 transition-colors duration-300", 
+        hovered() ? (props.variant === 'primary' ? 'border-amber-400' : 'border-cyan-400') : 'border-transparent')}></div>
+      <div class={clsx("absolute bottom-0 right-0 w-2 h-2 border-b-2 border-r-2 transition-colors duration-300", 
+        hovered() ? (props.variant === 'primary' ? 'border-amber-400' : 'border-cyan-400') : 'border-transparent')}></div>
+    </button>
+  );
+};
+
+export const MainMenu: Component = () => {
+  const [showDifficultySelect, setShowDifficultySelect] = createSignal(false);
 
   return (
     <div class="w-full h-full relative flex flex-col items-center justify-center overflow-hidden bg-[#050508] font-sans text-slate-200 select-none">
@@ -57,7 +140,7 @@ export const MainMenu: Component = () => {
 
       <style>{`
         .clip-cut {
-          clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+          clip-path: polygon(15px 0, 100% 0, 100% calc(100% - 15px), calc(100% - 15px) 100%, 0 100%, 0 15px);
         }
         .scanline {
           background: linear-gradient(to bottom, transparent 50%, rgba(0, 0, 0, 0.3) 51%);
@@ -65,174 +148,128 @@ export const MainMenu: Component = () => {
           pointer-events: none;
         }
         .title-glow {
-          text-shadow: 0 0 20px rgba(251, 191, 36, 0.3), 0 0 40px rgba(251, 191, 36, 0.1);
+          text-shadow: 0 0 30px rgba(251, 191, 36, 0.4), 0 0 60px rgba(251, 191, 36, 0.2);
+        }
+        .bg-grid-pattern {
+           background-image: linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+           linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+           background-size: 40px 40px;
         }
       `}</style>
 
-      {/* Decorative scanline overlay */}
-      <div class="absolute inset-0 scanline z-20"></div>
+      {/* Decorative scanline & grid overlay */}
+      <div class="absolute inset-0 scanline z-20 opacity-20"></div>
+      <div class="absolute inset-0 bg-grid-pattern z-10 pointer-events-none"></div>
+      <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/80 z-10 pointer-events-none"></div>
+
+      {/* Top Status Bar */}
+      <div 
+        class={clsx(
+          "absolute top-0 inset-x-0 z-40 flex justify-end p-8 transition-all duration-700 delay-100 animate-in fade-in slide-in-from-top-4 duration-1000",
+          showDifficultySelect() ? "blur-xl opacity-0 pointer-events-none translate-y-[-20px]" : "opacity-100"
+        )}
+      >
+        <div class="flex items-start gap-4">
+          {/* Awakening Points */}
+          <div class="group relative">
+            <div class="absolute inset-0 bg-amber-500/20 blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+            <div class="relative flex items-center gap-3 bg-slate-950/80 backdrop-blur-md border border-slate-800 px-4 py-2 clip-cut hover:border-amber-500/50 transition-colors duration-300">
+              <Icon path={mdiDatabase} class="text-amber-500/80 w-5 h-5" />
+              <span class="font-mono text-xl font-black text-amber-400 leading-none drop-shadow-[0_0_5px_rgba(251,191,36,0.5)]">
+                {gameState.playerData.merits}
+              </span>
+            </div>
+            {/* Decoration */}
+            <div class="absolute top-0 right-0 w-2 h-2 border-t border-r border-amber-500/30"></div>
+            <div class="absolute bottom-0 left-0 w-2 h-2 border-b border-l border-amber-500/30"></div>
+          </div>
+
+          {/* Current Weapon */}
+          <div class="group relative">
+             <div class="absolute inset-0 bg-cyan-500/20 blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+             <div class="relative flex items-center gap-3 bg-slate-950/80 backdrop-blur-md border border-slate-800 px-4 py-2 clip-cut hover:border-cyan-500/50 transition-colors duration-300">
+                <Icon path={mdiSword} class="text-cyan-500/80 w-5 h-5" />
+                <span class="font-bold text-lg text-cyan-300 tracking-widest leading-none drop-shadow-[0_0_5px_rgba(34,211,238,0.5)]">
+                  {ARTIFACTS[gameState.playerData.selectedArtifactId]?.name || "未选择"}
+                </span>
+             </div>
+             {/* Decoration */}
+             <div class="absolute top-0 right-0 w-2 h-2 border-t border-r border-cyan-500/30"></div>
+             <div class="absolute bottom-0 left-0 w-2 h-2 border-b border-l border-cyan-500/30"></div>
+          </div>
+        </div>
+      </div>
 
       <div
         class={clsx(
-          "relative z-30 flex flex-col items-center w-full p-8 transition-all duration-500",
-          isMobileDevice ? "gap-8 max-w-84" : "gap-16 max-w-md",
-          showDifficultySelect() ? "blur-md scale-95 opacity-50" : "opacity-100"
+          "relative z-30 flex flex-col items-center w-full p-8 transition-all duration-700",
+          isMobileDevice ? "gap-12 max-w-84" : "gap-20 max-w-[500px]",
+          showDifficultySelect()
+            ? "blur-xl scale-95 opacity-0 pointer-events-none translate-y-10"
+            : "opacity-100 translate-y-0"
         )}
       >
         {/* Title Section */}
-        <div class="flex flex-col items-center gap-4 animate-in fade-in slide-in-from-top-8 duration-1000">
-          <h1
-            class={clsx(
-              "font-black tracking-widest text-transparent bg-clip-text bg-gradient-to-b from-amber-100 via-amber-300 to-yellow-600 title-glow relative",
-              isMobileDevice ? "text-4xl" : "text-7xl"
-            )}
-          >
-            长生塔
-            <div class="absolute -inset-1 blur-2xl bg-amber-500/20 rounded-full z-[-1]"></div>
-          </h1>
-          <div class="flex items-center gap-4 text-cyan-500/60 font-mono text-sm tracking-[0.5em] uppercase">
-            <div class="h-[1px] w-12 bg-gradient-to-r from-transparent to-cyan-500/60"></div>
-            <span>Longevity Tower</span>
-            <div class="h-[1px] w-12 bg-gradient-to-l from-transparent to-cyan-500/60"></div>
+        <div class="flex flex-col items-center gap-6 animate-in fade-in slide-in-from-top-12 duration-1000">
+          <div class="relative">
+            <h1
+              class={clsx(
+                "font-black tracking-[0.3em] text-transparent bg-clip-text bg-gradient-to-b from-amber-100 via-amber-300 to-yellow-600 title-glow relative z-10",
+                isMobileDevice ? "text-6xl" : "text-9xl"
+              )}
+            >
+              长生塔
+            </h1>
+            <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[120%] h-[120%] bg-amber-500/10 blur-[80px] rounded-full z-0 pointer-events-none"></div>
+          </div>
+          
+          <div class="flex items-center gap-6 text-cyan-500/40 font-mono text-xs tracking-[0.8em] uppercase">
+            <div class="h-px w-12 bg-gradient-to-r from-transparent via-cyan-500/40 to-transparent"></div>
+            <span class="drop-shadow-[0_0_5px_rgba(6,182,212,0.3)]">Longevity Tower</span>
+            <div class="h-px w-12 bg-gradient-to-r from-transparent via-cyan-500/40 to-transparent"></div>
           </div>
         </div>
 
         {/* Menu Buttons */}
-        <div class="flex flex-col gap-5 w-full">
-          {/* Start Game Button */}
-          <button
+        <div class="flex flex-col gap-6 w-full animate-in fade-in slide-in-from-bottom-8 duration-1000 delay-300">
+          <MenuButton
+            label="开始游戏"
+            icon={mdiSword}
+            variant="primary"
             onClick={() => setShowDifficultySelect(true)}
-            onMouseEnter={() => setHoveredBtn("start")}
-            onMouseLeave={() => setHoveredBtn(null)}
-            class={clsx(
-              "group relative w-full clip-cut transition-all duration-300 transform hover:scale-[1.02] active:scale-[0.98]",
-              isMobileDevice ? "h-14" : "h-16"
-            )}
-          >
-            <div
-              class={`absolute inset-0 bg-gradient-to-r transition-all duration-300 ${
-                hoveredBtn() === "start"
-                  ? "from-amber-900/80 via-amber-800/80 to-amber-900/80 border-amber-500/50"
-                  : "from-slate-900/80 via-slate-800/80 to-slate-900/80 border-slate-700/50"
-              } border backdrop-blur-sm`}
-            ></div>
+          />
 
-            {/* Animated border glow */}
-            <div
-              class={`absolute inset-0 transition-opacity duration-300 ${
-                hoveredBtn() === "start" ? "opacity-100" : "opacity-0"
-              }`}
-            >
-              <div class="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-amber-400 to-transparent"></div>
-              <div class="absolute bottom-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-amber-400 to-transparent"></div>
-            </div>
-
-            <div class="relative flex items-center justify-center gap-3 h-full px-8">
-              <Icon
-                path={mdiSword}
-                class={`w-6 h-6 transition-colors duration-300 ${
-                  hoveredBtn() === "start" ? "text-amber-300" : "text-slate-500"
-                }`}
-              />
-              <span
-                class={`text-xl font-bold tracking-widest transition-colors duration-300 ${
-                  hoveredBtn() === "start"
-                    ? "text-amber-100 drop-shadow-[0_0_8px_rgba(251,191,36,0.5)]"
-                    : "text-slate-400"
-                }`}
-              >
-                开始游戏
-              </span>
-            </div>
-          </button>
-
-          {/* Secondary Buttons */}
-          <div class="grid grid-cols-2 gap-4">
-            {/* Compendium */}
-            <button class="group relative h-14 clip-cut bg-slate-900/40 border border-slate-800 text-slate-600 cursor-not-allowed hover:bg-slate-800/40 transition-colors">
-              <div class="flex items-center justify-center gap-2 h-full">
-                <Icon
-                  path={mdiBookOpenPageVariant}
-                  class="w-5 h-5 opacity-50"
-                />
-                <span class="font-bold tracking-wider text-sm">秘闻录</span>
-              </div>
-            </button>
-
-            {/* Preparation */}
-            <button class="group relative h-14 clip-cut bg-slate-900/40 border border-slate-800 text-slate-600 cursor-not-allowed hover:bg-slate-800/40 transition-colors">
-              <div class="flex items-center justify-center gap-2 h-full">
-                <Icon path={mdiBagPersonal} class="w-5 h-5 opacity-50" />
-                <span class="font-bold tracking-wider text-sm">战前整备</span>
-              </div>
-            </button>
+          <div class="grid grid-cols-2 gap-6">
+            <MenuButton
+              label="秘闻录"
+              icon={mdiBookOpenPageVariant}
+              onClick={() => setGameState("appState", AppState.COMPENDIUM)}
+              iconClass="text-cyan-500/70"
+            />
+            <MenuButton
+              label="战前整备"
+              icon={mdiBagPersonal}
+              onClick={() => setGameState("appState", AppState.PREPARATION)}
+              iconClass="text-amber-500/70"
+            />
           </div>
         </div>
 
         {/* Footer */}
-        <div class="absolute bottom-8 flex flex-col items-center gap-2 text-slate-600 text-xs font-mono">
-          <div class="flex items-center gap-2 opacity-50">
-            <span>v0.1.0</span>
-            <span>•</span>
-            <span>ROGUELIKE CARD GAME</span>
+        <div class="fixed bottom-8 flex flex-col items-center gap-2 text-slate-600 text-[10px] font-mono tracking-widest opacity-30 hover:opacity-60 transition-opacity">
+          <div class="flex items-center gap-3">
+            <span>VER 0.1.0</span>
+            <span class="w-1 h-1 rounded-full bg-slate-700"></span>
+            <span>STRATEGY ROGUELIKE</span>
+            <span class="w-1 h-1 rounded-full bg-slate-700"></span>
+            <span>EARLY ACCESS</span>
           </div>
         </div>
       </div>
 
       {/* Difficulty Selection Overlay */}
       <Show when={showDifficultySelect()}>
-        <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-300">
-          <div class="w-full max-w-md flex flex-col gap-6 animate-in zoom-in-95 duration-300">
-            <div class="flex flex-col items-center gap-2">
-              <h2 class="text-3xl font-black italic tracking-widest text-amber-200 uppercase drop-shadow-[0_0_10px_rgba(251,191,36,0.5)]">
-                选择挑战等级
-              </h2>
-              <div class="h-[1px] w-full bg-gradient-to-r from-transparent via-amber-500/50 to-transparent"></div>
-            </div>
-
-            <div class="flex flex-col gap-4">
-              <For each={difficulties}>
-                {(diff) => (
-                  <button
-                    onClick={() => startRun(diff.id)}
-                    class={clsx(
-                      "group relative w-full clip-cut p-4 text-left transition-all duration-300 transform hover:scale-[1.02] border backdrop-blur-md bg-gradient-to-r",
-                      diff.color
-                    )}
-                  >
-                    <div class="relative z-10 flex flex-col gap-1">
-                      <div class="flex items-center justify-between">
-                        <span class="text-xl font-bold tracking-widest group-hover:text-white transition-colors">
-                          {diff.label}
-                        </span>
-                        <div class="opacity-0 group-hover:opacity-100 transition-opacity">
-                          <Icon
-                            path={mdiSword}
-                            size={20}
-                            class="text-white/50"
-                          />
-                        </div>
-                      </div>
-                      <p class="text-xs text-slate-400 group-hover:text-slate-200 transition-colors leading-relaxed">
-                        {diff.desc}
-                      </p>
-                    </div>
-                    {/* Hover glow line */}
-                    <div class="absolute bottom-0 left-0 w-0 h-[2px] bg-white/40 group-hover:w-full transition-all duration-500"></div>
-                  </button>
-                )}
-              </For>
-            </div>
-
-            <button
-              onClick={() => setShowDifficultySelect(false)}
-              class="flex items-center justify-center gap-2 py-3 text-slate-500 hover:text-slate-300 transition-colors uppercase tracking-widest font-mono text-sm"
-            >
-              <Icon path={mdiClose} size={18} />
-              <span>取消返回</span>
-            </button>
-          </div>
-        </div>
+        <DifficultySelection onClose={() => setShowDifficultySelect(false)} />
       </Show>
     </div>
   );
